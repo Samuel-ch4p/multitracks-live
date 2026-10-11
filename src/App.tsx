@@ -3,6 +3,7 @@ import "./App.css";
 import MegaBrowser from "./MegaBrowser";
 import LocalImport from "./LocalImport";
 import Fader from "./Fader";
+import Pan from "./Pan";
 import Waveform from "./Waveform";
 import { computePeaks } from "./archive";
 
@@ -110,11 +111,6 @@ function trackDisplayNames(names: string[]): string[] {
   if (cut.replace(/[\s\-_–.]+$/, "").length < 3) return names;
   const stripped = names.map((name) => name.slice(cut.length));
   return stripped.every((name) => name.length > 0) ? stripped : names;
-}
-
-function panLabel(pan: number) {
-  if (pan === 0) return "C";
-  return pan < 0 ? `${Math.round(Math.abs(pan) * 100)}L` : `${Math.round(pan * 100)}R`;
 }
 
 function bpmFromName(name: string): number | null {
@@ -643,19 +639,7 @@ export default function App() {
                     <button className={`chip mute ${track.muted ? "active" : ""}`} onClick={() => changeTrack(track.id, { muted: !track.muted })} aria-pressed={track.muted} aria-label={`Silenciar ${track.name}`}>M</button>
                     <button className={`chip solo ${track.solo ? "active" : ""}`} onClick={() => changeTrack(track.id, { solo: !track.solo })} aria-pressed={track.solo} aria-label={`Solo ${track.name}`}>S</button>
                   </div>
-                  <label className="pan">
-                    <span>PAN <b>{panLabel(track.pan)}</b></span>
-                    <input
-                      type="range"
-                      min="-1"
-                      max="1"
-                      step="0.01"
-                      value={track.pan}
-                      aria-label={`Paneo de ${track.name}`}
-                      onChange={(event) => changeTrack(track.id, { pan: Number(event.target.value) })}
-                      onDoubleClick={() => changeTrack(track.id, { pan: 0 })}
-                    />
-                  </label>
+                  <Pan value={track.pan} label={`Paneo de ${track.name}`} onChange={(pan) => changeTrack(track.id, { pan })} />
                   <div className="fader-wrap">
                     <Fader value={track.volume} onChange={(volume) => changeTrack(track.id, { volume })} label={`Volumen de ${track.name}`} dimmed={dimmed} />
                   </div>

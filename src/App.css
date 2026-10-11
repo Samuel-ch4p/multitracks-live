@@ -249,10 +249,15 @@
 .chip.mute.active { border-color: #b9b9c2; background: #3a3a40; color: #fff; }
 .chip.solo.active { border-color: var(--amber); background: #3d3015; color: #ffd98a; }
 
-.pan { display: flex; flex-direction: column; gap: 4px; color: var(--muted); font-size: 9px; font-weight: 700; letter-spacing: .8px; }
-.pan span { display: flex; justify-content: space-between; }
-.pan b { color: var(--text); font-weight: 600; }
-.pan input { width: 100%; height: 16px; margin: 0; accent-color: var(--accent-2); cursor: pointer; }
+.pan { display: flex; flex-direction: column; gap: 3px; color: var(--muted); }
+.pan-readout { display: flex; width: 100%; min-height: 20px; align-items: center; justify-content: space-between; padding: 0 1px; border: 0; background: none; font-size: 9px; font-weight: 700; letter-spacing: .8px; }
+.pan-readout b { color: var(--text); font-weight: 600; }
+.pan-bar { position: relative; height: 24px; cursor: pointer; touch-action: none; }
+.pan-track { position: absolute; top: 50%; right: 0; left: 0; height: 4px; border-radius: 2px; background: #050506; box-shadow: inset 0 0 0 1px #2a2b30; transform: translateY(-50%); }
+.pan-center { position: absolute; top: 5px; bottom: 5px; left: 50%; width: 1px; background: #5b5d66; }
+.pan-fill { position: absolute; top: 50%; height: 4px; border-radius: 2px; background: var(--accent-2); transform: translateY(-50%); }
+.pan-thumb { position: absolute; top: 50%; width: 14px; height: 14px; border: 2px solid #0a0a0c; border-radius: 50%; background: #f2f2f5; box-shadow: 0 1px 4px #000a; transform: translate(-50%, -50%); }
+.pan-bar:focus-visible { border-radius: 6px; outline-offset: 0; }
 
 .fader-wrap { display: flex; flex: 1; min-height: 90px; justify-content: center; }
 .channel.master .fader-wrap { margin-top: 46px; }
@@ -407,7 +412,9 @@
   .channel-top { flex-direction: column; align-items: center; min-height: 0; gap: 4px; }
   .chip { width: 32px; height: 24px; font-size: 10px; }
   .master-readout { font-size: 11px; }
-  .pan, .fader-scale, .channel-name .tag { display: none; }
+  .fader-scale, .channel-name .tag, .pan-word { display: none; }
+  .pan { gap: 1px; }
+  .pan-readout { justify-content: center; }
   .fader { padding: 12px 0; }
   .fader-wrap { min-height: 0; }
   .channel.master .fader-wrap { margin-top: 0; }
@@ -438,7 +445,10 @@
   .channel.master { flex: 0 0 72px; }
   .channel-top { min-height: 0; }
   .chip { width: 30px; height: 24px; font-size: 10px; }
-  .pan, .fader-scale, .channel-name .tag { display: none; }
+  .fader-scale, .channel-name .tag, .pan-word { display: none; }
+  .pan { flex-direction: row; align-items: center; gap: 2px; }
+  .pan-readout { width: 26px; flex: 0 0 26px; min-height: 24px; justify-content: center; padding: 0; }
+  .pan-bar { flex: 1; min-width: 0; }
   .fader { padding: 10px 0; }
   .fader-wrap, .channel.master .fader-wrap { min-height: 0; margin-top: 0; }
   .fader-cap { width: 40px; height: 20px; }
