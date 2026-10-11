@@ -98,6 +98,20 @@ function trackLabel(name: string) {
   return "AUDIO";
 }
 
+/** Quita de los nombres de pista el prefijo que comparten todas ("Jubilo - Bajo" → "Bajo"). */
+function trackDisplayNames(names: string[]): string[] {
+  if (names.length < 2) return names;
+  let prefix = names[0];
+  for (const name of names.slice(1)) {
+    while (prefix && !name.startsWith(prefix)) prefix = prefix.slice(0, -1);
+  }
+  const boundary = prefix.search(/[\s\-_–.]+[^\s\-_–.]*$/);
+  const cut = boundary >= 0 ? prefix.slice(0, boundary) + (prefix.slice(boundary).match(/^[\s\-_–.]+/)?.[0] ?? "") : "";
+  if (cut.replace(/[\s\-_–.]+$/, "").length < 3) return names;
+  const stripped = names.map((name) => name.slice(cut.length));
+  return stripped.every((name) => name.length > 0) ? stripped : names;
+}
+
 function panLabel(pan: number) {
   if (pan === 0) return "C";
   return pan < 0 ? `${Math.round(Math.abs(pan) * 100)}L` : `${Math.round(pan * 100)}R`;
@@ -519,6 +533,7 @@ export default function App() {
   const bpm = bpmFromName(songName);
   const activeIndex = playlist.findIndex((song) => song.id === activeSongId);
   const hasSolo = tracks.some((track) => track.solo);
+  const displayNames = trackDisplayNames(tracks.map((track) => track.name));
 
   return (
     <main className="app">
@@ -646,7 +661,7 @@ export default function App() {
                   </div>
                   <div className="channel-name">
                     <span className={`tag tag-${index % 6}`}>{trackLabel(track.name)}</span>
-                    <strong title={track.name}>{track.name}</strong>
+                    <strong title={track.name}>{displayNames[index]}</strong>
                   </div>
                   <button className="channel-remove" onClick={() => removeTrack(track.id)} aria-label={`Eliminar pista ${track.name}`}>×</button>
                 </article>
