@@ -1,0 +1,9 @@
+{
+  "appId": "com.redline.multitracks",
+  "appName": "Redline MultiTracks",
+  "webDir": "dist",
+  "backgroundColor": "#050506",
+  "android": {
+    "allowMixedContent": false
+  }
+}
