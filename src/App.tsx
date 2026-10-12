@@ -5,6 +5,7 @@ import LocalImport from "./LocalImport";
 import Fader from "./Fader";
 import Pan from "./Pan";
 import Waveform from "./Waveform";
+import logoUrl from "./assets/logo.png";
 import Click from "./Click";
 import { Metronome } from "./metronome";
 import { computePeaks } from "./archive";
@@ -523,9 +524,7 @@ export default function App() {
     <main className="app">
       <header className="topbar">
         <div className="brand">
-          <div className="brand-logo" aria-hidden="true">
-            <svg viewBox="0 0 24 24"><path d="M4 7h14M4 12h10M4 17h6" /></svg>
-          </div>
+          <img className="brand-logo" src={logoUrl} alt="" />
           <div className="brand-text">
             <strong>CRESCENDO</strong>
             <span>LIVE PERFORMANCE</span>

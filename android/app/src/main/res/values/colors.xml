@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="redline_bg">#050506</color>
-    <color name="redline_red">#E11D2E</color>
-    <color name="colorPrimary">#E11D2E</color>
-    <color name="colorPrimaryDark">#050506</color>
-    <color name="colorAccent">#E11D2E</color>
+    <color name="redline_bg">#050C16</color>
+    <color name="redline_red">#4D9EFF</color>
+    <color name="colorPrimary">#4D9EFF</color>
+    <color name="colorPrimaryDark">#050C16</color>
+    <color name="colorAccent">#4D9EFF</color>
 </resources>

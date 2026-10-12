@@ -44,14 +44,14 @@ export default function Waveform({ peaks, progress, loading, onSeek, disabled }:
         amp = Math.max(0.03, max);
       }
       const h = Math.max(2, amp * (height - 14));
-      ctx.fillStyle = x < playedX ? "#e8212f" : i % 2 ? "#3d3d43" : "#4f2a2f";
+      ctx.fillStyle = x < playedX ? "#4d9eff" : i % 2 ? "#3a5a86" : "#2a4468";
       ctx.fillRect(x, mid - h / 2, barWidth, h);
     }
 
     // línea de reproducción
     if (peaks || progress > 0) {
       const x = Math.min(width - 2, Math.max(0, playedX - 1));
-      ctx.fillStyle = "#ff3a48";
+      ctx.fillStyle = "#cfe4ff";
       ctx.fillRect(x, 0, 2, height);
       ctx.beginPath();
       ctx.moveTo(x - 5, 0);

@@ -16,7 +16,7 @@ html, body, #root {
 }
 
 body {
-  background: #050506 url("/bg-nebula.jpg") center / cover no-repeat fixed;
+  background: radial-gradient(120% 90% at 50% 0%, #0f2a52 0%, #081a33 45%, #050c16 100%) fixed;
 }
 
 button, input { font: inherit; }
