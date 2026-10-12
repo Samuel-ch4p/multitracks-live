@@ -1,10 +1,12 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import "./App.css";
 import MegaBrowser from "./MegaBrowser";
 import LocalImport from "./LocalImport";
 import Fader from "./Fader";
 import Pan from "./Pan";
 import Waveform from "./Waveform";
+import Click from "./Click";
+import { Metronome } from "./metronome";
 import { computePeaks } from "./archive";
 
 type Track = {
@@ -138,6 +140,34 @@ function createTrack(file: File): Track {
 
 const PEAK_BUCKETS = 1500;
 
+/** Mantiene la pantalla encendida mientras `active` (en vivo el celular no debe dormirse). */
+function useWakeLock(active: boolean) {
+  useEffect(() => {
+    if (!active || !("wakeLock" in navigator)) return;
+    let lock: WakeLockSentinel | null = null;
+    let cancelled = false;
+    const request = async () => {
+      try {
+        const next = await navigator.wakeLock.request("screen");
+        if (cancelled) void next.release();
+        else lock = next;
+      } catch {
+        // Sin permiso o sin soporte: no es crítico.
+      }
+    };
+    const onVisible = () => {
+      if (document.visibilityState === "visible" && (!lock || lock.released)) void request();
+    };
+    void request();
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      cancelled = true;
+      document.removeEventListener("visibilitychange", onVisible);
+      void lock?.release();
+    };
+  }, [active]);
+}
+
 export default function App() {
   const [tracks, setTracks] = useState<Track[]>([]);
   const [playlist, setPlaylist] = useState<Song[]>([]);
@@ -152,6 +182,9 @@ export default function App() {
   const [masterVolume, setMasterVolume] = useState(85);
   const [showLibrary, setShowLibrary] = useState(false);
   const [source, setSource] = useState<"local" | "mega">("local");
+  const [showClick, setShowClick] = useState(false);
+  const [metronome] = useState(() => new Metronome());
+  const click = useSyncExternalStore(metronome.subscribe, metronome.getState);
   const [peaks, setPeaks] = useState<Float32Array | null>(null);
   const [peaksLoading, setPeaksLoading] = useState(false);
 
@@ -445,28 +478,9 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Mantiene la pantalla encendida mientras suena (en vivo no debe apagarse).
-  useEffect(() => {
-    if (!playing || !("wakeLock" in navigator)) return;
-    let lock: WakeLockSentinel | null = null;
-    let cancelled = false;
-    const request = async () => {
-      try {
-        lock = await navigator.wakeLock.request("screen");
-        if (cancelled) void lock.release();
-      } catch {
-        // Sin permiso o batería baja: no es crítico.
-      }
-    };
-    void request();
-    const onVisible = () => { if (document.visibilityState === "visible") void request(); };
-    document.addEventListener("visibilitychange", onVisible);
-    return () => {
-      cancelled = true;
-      document.removeEventListener("visibilitychange", onVisible);
-      void lock?.release();
-    };
-  }, [playing]);
+  useWakeLock(playing || click.running);
+
+  useEffect(() => () => metronome.dispose(), [metronome]);
 
   useEffect(() => {
     applyMix(tracks);
@@ -487,32 +501,6 @@ export default function App() {
       .finally(() => { if (!cancelled) setPeaksLoading(false); });
     return () => { cancelled = true; };
   }, [activeSongId]);
-
-  // Mantiene la pantalla encendida mientras suena (en vivo no queremos que el celular se duerma).
-  useEffect(() => {
-    if (!playing || !("wakeLock" in navigator)) return;
-    let lock: WakeLockSentinel | null = null;
-    let cancelled = false;
-    const request = async () => {
-      try {
-        const next = await navigator.wakeLock.request("screen");
-        if (cancelled) void next.release();
-        else lock = next;
-      } catch {
-        // Sin permiso o sin soporte: la reproducción sigue igual.
-      }
-    };
-    const onVisible = () => {
-      if (document.visibilityState === "visible" && (!lock || lock.released)) void request();
-    };
-    void request();
-    document.addEventListener("visibilitychange", onVisible);
-    return () => {
-      cancelled = true;
-      document.removeEventListener("visibilitychange", onVisible);
-      void lock?.release();
-    };
-  }, [playing]);
 
   useEffect(() => {
     return () => {
@@ -576,7 +564,10 @@ export default function App() {
 
         <div className="top-actions">
           <button className="pill-btn" onClick={() => void playAll()} disabled={resetting || tracks.length === 0}>REINICIAR</button>
-          <button className="pill-btn primary" onClick={() => setShowLibrary((value) => !value)}>
+          <button className={`pill-btn click-btn ${click.running ? "is-running" : ""}`} onClick={() => { setShowLibrary(false); setShowClick((value) => !value); }} aria-pressed={showClick}>
+            <i className="click-led" aria-hidden="true" />CLICK
+          </button>
+          <button className="pill-btn primary" onClick={() => { setShowClick(false); setShowLibrary((value) => !value); }}>
             {showLibrary ? "CERRAR" : "BIBLIOTECA"}
           </button>
         </div>
@@ -589,7 +580,7 @@ export default function App() {
         </div>
         <div className="strip-scroll">
           {playlist.length === 0 && (
-            <button className="strip-empty" onClick={() => setShowLibrary(true)}>
+            <button className="strip-empty" onClick={() => { setShowClick(false); setShowLibrary(true); }}>
               Tu repertorio está vacío · abre la biblioteca para añadir canciones
             </button>
           )}
@@ -606,7 +597,7 @@ export default function App() {
             </article>
           ))}
         </div>
-        <button className="add-song" onClick={() => setShowLibrary(true)} aria-label="Añadir canciones">＋</button>
+        <button className="add-song" onClick={() => { setShowClick(false); setShowLibrary(true); }} aria-label="Añadir canciones">＋</button>
       </section>
 
       <section className="wave-panel" aria-label="Forma de onda">
@@ -692,6 +683,8 @@ export default function App() {
           </aside>
         </div>
       )}
+
+      {showClick && <Click metronome={metronome} onClose={() => setShowClick(false)} />}
     </main>
   );
 }

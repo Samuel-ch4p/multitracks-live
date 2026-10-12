@@ -472,3 +472,39 @@
 .hint { margin: 0; color: #6c6f78; font-size: 11px; line-height: 1.45; }
 .link-input { width: 100%; min-height: 38px; margin-bottom: 10px; padding: 0 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); color: var(--text); font-size: 12px; user-select: text; -webkit-user-select: text; }
 .link-input:focus { border-color: var(--accent); outline: none; }
+
+/* ---------- Click ---------- */
+.click-btn { display: inline-flex; align-items: center; gap: 7px; }
+.click-led { width: 7px; height: 7px; flex: 0 0 7px; border-radius: 50%; background: #55555c; }
+.click-btn.is-running { border-color: var(--accent-line); color: var(--accent-2); }
+.click-btn.is-running .click-led { background: var(--accent-2); box-shadow: 0 0 8px var(--accent-2); }
+
+.click-drawer { gap: 16px; }
+.bpm-box { display: flex; flex-direction: column; gap: 12px; padding: 14px 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); }
+.bpm-row { display: flex; align-items: center; justify-content: center; gap: 6px; }
+.step-btn { flex: 0 0 auto; width: 44px; height: 44px; padding: 0; border: 1px solid var(--line-2); border-radius: 10px; background: var(--panel-2); font-size: 14px; font-weight: 700; touch-action: manipulation; }
+.bpm-field { display: flex; min-width: 0; flex: 1; flex-direction: column; align-items: center; gap: 2px; }
+.bpm-field input { width: 100%; max-width: 120px; padding: 0; border: 0; background: none; color: var(--text); font-size: 44px; font-weight: 600; line-height: 1.1; text-align: center; font-variant-numeric: tabular-nums; outline: none; -moz-appearance: textfield; appearance: textfield; user-select: text; -webkit-user-select: text; }
+.bpm-field input::-webkit-outer-spin-button, .bpm-field input::-webkit-inner-spin-button { margin: 0; -webkit-appearance: none; }
+.bpm-field span { color: var(--muted); font-size: 10px; letter-spacing: 2px; }
+.bpm-slider { width: 100%; height: 28px; margin: 0; accent-color: var(--accent-2); }
+.beat-dots { display: flex; min-height: 20px; align-items: center; justify-content: center; gap: 9px; }
+.beat-dot { width: 12px; height: 12px; border-radius: 50%; background: #2a2a2e; transition: background .05s, transform .05s, box-shadow .05s; }
+.beat-dot.first { width: 15px; height: 15px; box-shadow: inset 0 0 0 2px var(--accent-line); }
+.beat-dot.on { background: var(--accent-2); box-shadow: 0 0 12px var(--accent-2); transform: scale(1.2); }
+.click-actions { display: grid; grid-template-columns: 1fr 2fr; gap: 8px; }
+.click-actions button { min-height: 52px; border-radius: 10px; font-size: 13px; font-weight: 700; letter-spacing: .8px; touch-action: manipulation; }
+.tap-btn { border: 1px solid var(--line-2); background: var(--panel-2); }
+.click-start { border: 1px solid var(--accent); background: var(--accent); color: #fff !important; }
+.click-start.is-running { background: var(--accent-bg); color: var(--accent-2) !important; }
+.setting { display: flex; flex-direction: column; gap: 8px; }
+.setting-label { color: var(--muted); font-size: 10px; font-weight: 700; letter-spacing: 1.2px; text-transform: uppercase; }
+.setting .hint { margin: 0; }
+.seg { display: flex; flex-wrap: wrap; gap: 6px; }
+.seg button { min-width: 44px; min-height: 40px; flex: 1 1 0; padding: 0 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); color: var(--muted) !important; font-size: 12px; font-weight: 600; touch-action: manipulation; }
+.seg button[aria-pressed="true"] { border-color: var(--accent-line); background: var(--accent-bg); color: var(--accent-2) !important; }
+
+@media (max-width: 820px), (max-height: 500px) {
+  .top-actions { gap: 6px; }
+  .top-actions .pill-btn { padding: 0 11px; letter-spacing: .3px; }
+}
