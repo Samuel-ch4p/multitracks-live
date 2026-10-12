@@ -539,7 +539,7 @@ export default function App() {
             <svg viewBox="0 0 24 24"><path d="M4 7h14M4 12h10M4 17h6" /></svg>
           </div>
           <div className="brand-text">
-            <strong>REDLINE</strong>
+            <strong>CRESCENDO</strong>
             <span>LIVE PERFORMANCE</span>
           </div>
         </div>
@@ -665,7 +665,7 @@ export default function App() {
 
       <footer className="statusbar">
         <span className="sys"><i className={playing ? "on" : ""} />{statusMessage || "SISTEMA LISTO"}</span>
-        <span className="brandline">Redline MultiTracks <b>LIVE</b></span>
+        <span className="brandline">Crescendo <b>LIVE</b></span>
         <span className="right">{tracks.length} PISTAS</span>
       </footer>
 

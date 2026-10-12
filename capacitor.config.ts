@@ -2,7 +2,7 @@ import type { CapacitorConfig } from "@capacitor/cli";
 
 const config: CapacitorConfig = {
   appId: "com.redline.multitracks",
-  appName: "Redline MultiTracks",
+  appName: "Crescendo Live",
   webDir: "dist",
   backgroundColor: "#050506",
   android: {
