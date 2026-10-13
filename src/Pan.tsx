@@ -30,10 +30,13 @@ export default function Pan({ value, onChange, label }: Props) {
 
   return (
     <div className="pan">
-      <button className="pan-readout" onClick={() => onChange(0)} aria-label={`${label}: centrar`} title="Tocar para centrar">
-        <span className="pan-word">PAN</span>
-        <b>{panText(value)}</b>
-      </button>
+      <div className="pan-labels">
+        <span>L</span>
+        <button className="pan-readout" onClick={() => onChange(0)} aria-label={`${label}: centrar`} title="Tocar para centrar">
+          {panText(value)}
+        </button>
+        <span>R</span>
+      </div>
       <div
         className="pan-bar"
         ref={barRef}

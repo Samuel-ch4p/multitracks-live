@@ -28,8 +28,8 @@ export default function Waveform({ peaks, progress, loading, onSeek, disabled }:
     ctx.clearRect(0, 0, width, height);
 
     const mid = height / 2;
-    const barWidth = 3;
-    const gap = 2;
+    const barWidth = 6;
+    const gap = 4;
     const bars = Math.floor(width / (barWidth + gap));
     const playedX = progress * width;
 
@@ -44,15 +44,25 @@ export default function Waveform({ peaks, progress, loading, onSeek, disabled }:
         amp = Math.max(0.03, max);
       }
       const h = Math.max(2, amp * (height - 14));
-      ctx.fillStyle = x < playedX ? "#4d9eff" : i % 2 ? "#3a5a86" : "#2a4468";
-      ctx.fillRect(x, mid - h / 2, barWidth, h);
+      const grad = ctx.createLinearGradient(0, mid - h / 2, 0, mid + h / 2);
+      if (x < playedX) { grad.addColorStop(0, "#bfeafb"); grad.addColorStop(1, "#4d9dff"); }
+      else { grad.addColorStop(0, "#c4dfeb"); grad.addColorStop(1, "#4a778f"); }
+      ctx.globalAlpha = x < playedX ? 1 : 0.72;
+      ctx.fillStyle = grad;
+      ctx.beginPath();
+      ctx.roundRect(x, mid - h / 2, barWidth, h, 2);
+      ctx.fill();
+      ctx.globalAlpha = 1;
     }
 
     // línea de reproducción
     if (peaks || progress > 0) {
       const x = Math.min(width - 2, Math.max(0, playedX - 1));
-      ctx.fillStyle = "#cfe4ff";
+      ctx.fillStyle = "#eaf3ff";
+      ctx.shadowColor = "#69d9f5";
+      ctx.shadowBlur = 8;
       ctx.fillRect(x, 0, 2, height);
+      ctx.shadowBlur = 0;
       ctx.beginPath();
       ctx.moveTo(x - 5, 0);
       ctx.lineTo(x + 7, 0);

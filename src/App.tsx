@@ -91,17 +91,6 @@ function shortTime(seconds: number) {
   return `${Math.floor(seconds / 60)}:${String(Math.floor(seconds % 60)).padStart(2, "0")}`;
 }
 
-function trackLabel(name: string) {
-  const value = name.toLowerCase();
-  if (/drum|bater|perc|kick|snare|tom|cymbal/.test(value)) return "DRUMS";
-  if (/bass|bajo/.test(value)) return "BASS";
-  if (/guitar|guitarra|gtr|gu[ií]a?\b/.test(value)) return "GUITAR";
-  if (/key|piano|synth|tecla|pad/.test(value)) return "KEYS";
-  if (/vocal|voz|choir|coros/.test(value)) return "VOX";
-  if (/loop|click|guide|cue/.test(value)) return "GUIDE";
-  return "AUDIO";
-}
-
 /** Quita de los nombres de pista el prefijo que comparten todas ("Jubilo - Bajo" → "Bajo"). */
 function trackDisplayNames(names: string[]): string[] {
   if (names.length < 2) return names;
@@ -114,11 +103,6 @@ function trackDisplayNames(names: string[]): string[] {
   if (cut.replace(/[\s\-_–.]+$/, "").length < 3) return names;
   const stripped = names.map((name) => name.slice(cut.length));
   return stripped.every((name) => name.length > 0) ? stripped : names;
-}
-
-function bpmFromName(name: string): number | null {
-  const match = name.match(/(\d{2,3})\s*bpm/i);
-  return match ? Number(match[1]) : null;
 }
 
 function createTrack(file: File): Track {
@@ -169,6 +153,29 @@ function useWakeLock(active: boolean) {
   }, [active]);
 }
 
+type IconName = "metronome" | "restart" | "mixer" | "library" | "play";
+
+function Icon({ name }: { name: IconName }) {
+  const paths: Record<IconName, React.ReactNode> = {
+    metronome: <><path d="M8 20h8l-1.8-16h-4.4L8 20Z" /><path d="m12 7 4 7M10 16h4" /></>,
+    restart: <><path d="M4 12a8 8 0 1 0 2.6-5.9" /><path d="M4 4v4.5h4.5" /></>,
+    mixer: <><path d="M5 4v16M12 4v16M19 4v16" /><circle cx="5" cy="9" r="2" /><circle cx="12" cy="15" r="2" /><circle cx="19" cy="8" r="2" /></>,
+    library: <><path d="M4 4v16M9 4v16" /><path d="m14 5 4-1 3 15-4 1-3-15Z" /></>,
+    play: <path d="m8 5 11 7-11 7V5Z" />,
+  };
+  return <svg aria-hidden="true" viewBox="0 0 24 24">{paths[name]}</svg>;
+}
+
+function Artwork({ index }: { index: number }) {
+  return (
+    <div className={`artwork a${index % 5}`} aria-hidden="true">
+      <div className="art-orbit one" />
+      <div className="art-orbit two" />
+      <span>CRESCENDO</span>
+    </div>
+  );
+}
+
 export default function App() {
   const [tracks, setTracks] = useState<Track[]>([]);
   const [playlist, setPlaylist] = useState<Song[]>([]);
@@ -183,6 +190,7 @@ export default function App() {
   const [masterVolume, setMasterVolume] = useState(85);
   const [showLibrary, setShowLibrary] = useState(false);
   const [source, setSource] = useState<"local" | "mega">("local");
+  const [tab, setTab] = useState<"library" | "live" | "mixer">("live");
   const [showClick, setShowClick] = useState(false);
   const [metronome] = useState(() => new Metronome());
   const click = useSyncExternalStore(metronome.subscribe, metronome.getState);
@@ -515,10 +523,71 @@ export default function App() {
   }, []);
 
   const progress = duration > 0 ? Math.min(1, currentTime / duration) : 0;
-  const bpm = bpmFromName(songName);
   const activeIndex = playlist.findIndex((song) => song.id === activeSongId);
   const hasSolo = tracks.some((track) => track.solo);
   const displayNames = trackDisplayNames(tracks.map((track) => track.name));
+  const ready = tracks.length > 0 && !resetting;
+  const syncLabel = resetting ? "Sincronizando…" : playing ? "En vivo" : ready ? "Pistas sincronizadas" : "Sin canción";
+
+  const openLibrary = () => { setShowClick(false); setShowLibrary(true); };
+  const openClick = () => { setShowLibrary(false); setShowClick(true); };
+
+  const songDeck = (
+    <div className="song-deck" aria-label="Repertorio">
+      {playlist.length === 0 && (
+        <button className="deck-empty" onClick={openLibrary}>Tu repertorio está vacío · toca aquí para añadir canciones</button>
+      )}
+      {playlist.map((song, index) => (
+        <article className={`deck-card ${song.id === activeSongId ? "active" : ""}`} key={song.id}>
+          <button className="deck-main" onClick={() => selectSong(song)} title={song.name} aria-label={`Seleccionar ${song.name}`}>
+            <Artwork index={index} />
+            <span><strong>{song.name}</strong><small>{song.files.length} pistas</small></span>
+          </button>
+          <button className="deck-remove" onClick={() => removeSong(song.id)} aria-label={`Quitar ${song.name}`}>×</button>
+        </article>
+      ))}
+      {playlist.length > 0 && <button className="deck-add" onClick={openLibrary} aria-label="Añadir canciones">＋</button>}
+    </div>
+  );
+
+  const mixer = (
+    <div className="channels-box">
+      {tracks.length === 0 && <div className="mixer-empty">Selecciona una canción del repertorio para cargar sus pistas.</div>}
+      <div className="channels" hidden={tracks.length === 0}>
+        {tracks.map((track, index) => {
+          const dimmed = track.muted || (hasSolo && !track.solo);
+          return (
+            <article className={`channel ${dimmed ? "is-dimmed" : ""}`} key={track.id}>
+              <div className="channel-head">
+                <span>{String(index + 1).padStart(2, "0")}</span>
+                <div className="chip-row">
+                  <button className={`chip mute ${track.muted ? "active" : ""}`} onClick={() => changeTrack(track.id, { muted: !track.muted })} aria-pressed={track.muted} aria-label={`Silenciar ${track.name}`}>M</button>
+                  <button className={`chip solo ${track.solo ? "active" : ""}`} onClick={() => changeTrack(track.id, { solo: !track.solo })} aria-pressed={track.solo} aria-label={`Solo ${track.name}`}>S</button>
+                </div>
+              </div>
+              <div className="fader-wrap">
+                <Fader value={track.volume} onChange={(volume) => changeTrack(track.id, { volume })} label={`Volumen de ${track.name}`} dimmed={dimmed} />
+              </div>
+              <Pan value={track.pan} label={`Paneo de ${track.name}`} onChange={(pan) => changeTrack(track.id, { pan })} />
+              <div className="channel-name">
+                <strong title={track.name}>{displayNames[index]}</strong>
+                <small>{track.volume}</small>
+              </div>
+              <button className="channel-remove" onClick={() => removeTrack(track.id)} aria-label={`Eliminar pista ${track.name}`}>×</button>
+            </article>
+          );
+        })}
+        <article className="channel master">
+          <div className="channel-head">MASTER</div>
+          <div className="fader-wrap">
+            <Fader value={masterVolume} onChange={setMasterVolume} label="Volumen master" />
+          </div>
+          <div className="master-readout">{masterVolume}%</div>
+          <div className="channel-name"><strong>Salida</strong></div>
+        </article>
+      </div>
+    </div>
+  );
 
   return (
     <main className="app">
@@ -527,16 +596,28 @@ export default function App() {
           <img className="brand-logo" src={logoUrl} alt="" />
           <div className="brand-text">
             <strong>CRESCENDO</strong>
-            <span>LIVE PERFORMANCE</span>
+            <span>Live Multitracks</span>
           </div>
         </div>
-        <div className="tempo">
-          <strong>{bpm ?? "--"}</strong>
-          <span>4/4</span>
-        </div>
-        <div className="clock">
-          <strong>{formatTime(currentTime)}</strong>
-          <span>{shortTime(currentTime)} / {shortTime(duration)}</span>
+
+        <div className="hud">
+          <button className="tempo" onClick={openClick} aria-label="Ajustar tempo del click">
+            <small>BPM</small>
+            <small>{click.beats}/4</small>
+            <strong>{click.bpm}</strong>
+          </button>
+          <button
+            className={`glass-btn click-btn ${click.running ? "is-running" : ""}`}
+            onClick={() => (click.running ? metronome.stop() : void metronome.start())}
+            aria-pressed={click.running}
+            aria-label="Activar o detener el click"
+          >
+            <Icon name="metronome" />CLICK
+          </button>
+          <div className="clock">
+            <strong>{formatTime(currentTime)}</strong>
+            <span>{shortTime(currentTime)} / {shortTime(duration)}</span>
+          </div>
         </div>
 
         <div className="transport">
@@ -561,103 +642,80 @@ export default function App() {
           </button>
         </div>
 
-        <div className="top-actions">
-          <button className="pill-btn" onClick={() => void playAll()} disabled={resetting || tracks.length === 0}>REINICIAR</button>
-          <button className={`pill-btn click-btn ${click.running ? "is-running" : ""}`} onClick={() => { setShowLibrary(false); setShowClick((value) => !value); }} aria-pressed={showClick}>
-            <i className="click-led" aria-hidden="true" />CLICK
-          </button>
-          <button className="pill-btn primary" onClick={() => { setShowClick(false); setShowLibrary((value) => !value); }}>
-            {showLibrary ? "CERRAR" : "BIBLIOTECA"}
+        <div className="top-tools">
+          <span className={`sync-chip ${playing ? "playing" : ready ? "ready" : ""}`}><i />{syncLabel}</span>
+          <button className="glass-btn restart-btn" onClick={() => void playAll()} disabled={resetting || tracks.length === 0} aria-label="Reiniciar desde el principio">
+            <Icon name="restart" /><span>REINICIAR</span>
           </button>
         </div>
       </header>
 
-      <section className="songstrip" aria-label="Repertorio">
-        <div className="strip-label">
-          <span>REPERTORIO</span>
-          <b>{String(playlist.length).padStart(2, "0")} CANCIONES</b>
-        </div>
-        <div className="strip-scroll">
-          {playlist.length === 0 && (
-            <button className="strip-empty" onClick={() => { setShowClick(false); setShowLibrary(true); }}>
-              Tu repertorio está vacío · abre la biblioteca para añadir canciones
-            </button>
-          )}
-          {playlist.map((song, index) => (
-            <article className={`song-card ${song.id === activeSongId ? "is-active" : ""}`} key={song.id}>
-              <button className="song-art" onClick={() => selectSong(song)} aria-label={`Seleccionar ${song.name}`}>
-                <b>{String(index + 1).padStart(2, "0")}</b>
-              </button>
-              <button className="song-title" onClick={() => selectSong(song)} title={song.name}>
-                <strong>{song.name}</strong>
-                <span>{song.files.length} pistas</span>
-              </button>
-              <button className="song-remove" onClick={() => removeSong(song.id)} aria-label={`Quitar ${song.name}`}>×</button>
-            </article>
-          ))}
-        </div>
-        <button className="add-song" onClick={() => { setShowClick(false); setShowLibrary(true); }} aria-label="Añadir canciones">＋</button>
-      </section>
-
-      <section className="wave-panel" aria-label="Forma de onda">
-        <Waveform
-          peaks={peaks}
-          progress={progress}
-          loading={peaksLoading && !peaks}
-          disabled={tracks.length === 0 || duration <= 0}
-          onSeek={(fraction) => void seekTo(fraction)}
-        />
-        <div className="wave-meta">
-          <span className={`state-dot ${playing ? "is-playing" : ""}`} />
-          <span>{playing ? "REPRODUCIENDO" : paused ? "EN PAUSA" : "DETENIDO"}</span>
-          <em title={songName}>{songName}</em>
-          <span className="spacer" />
-          <span>{tracks.length} PISTAS</span>
-        </div>
-      </section>
-
-      <section className="mixer" aria-label="Mezclador">
-        {tracks.length === 0 ? (
-          <div className="mixer-empty">Selecciona una canción del repertorio para cargar sus pistas.</div>
-        ) : (
-          <div className="channels">
-            {tracks.map((track, index) => {
-              const dimmed = track.muted || (hasSolo && !track.solo);
-              return (
-                <article className={`channel ${dimmed ? "is-dimmed" : ""}`} key={track.id}>
-                  <div className="channel-top">
-                    <button className={`chip mute ${track.muted ? "active" : ""}`} onClick={() => changeTrack(track.id, { muted: !track.muted })} aria-pressed={track.muted} aria-label={`Silenciar ${track.name}`}>M</button>
-                    <button className={`chip solo ${track.solo ? "active" : ""}`} onClick={() => changeTrack(track.id, { solo: !track.solo })} aria-pressed={track.solo} aria-label={`Solo ${track.name}`}>S</button>
-                  </div>
-                  <Pan value={track.pan} label={`Paneo de ${track.name}`} onChange={(pan) => changeTrack(track.id, { pan })} />
-                  <div className="fader-wrap">
-                    <Fader value={track.volume} onChange={(volume) => changeTrack(track.id, { volume })} label={`Volumen de ${track.name}`} dimmed={dimmed} />
-                  </div>
-                  <div className="channel-name">
-                    <span className={`tag tag-${index % 6}`}>{trackLabel(track.name)}</span>
-                    <strong title={track.name}>{displayNames[index]}</strong>
-                  </div>
-                  <button className="channel-remove" onClick={() => removeTrack(track.id)} aria-label={`Eliminar pista ${track.name}`}>×</button>
-                </article>
-              );
-            })}
+      {tab === "library" && (
+        <section className="screen" aria-label="Biblioteca">
+          <div className="lib-head">
+            <div><span className="eyebrow">TU MÚSICA</span><h1>Biblioteca</h1></div>
+            <button className="glass-btn lib-add" onClick={openLibrary}>AÑADIR CANCIONES</button>
           </div>
-        )}
-
-        <article className="channel master">
-          <div className="channel-top"><span className="master-readout">{masterVolume}%</span></div>
-          <div className="fader-wrap">
-            <Fader value={masterVolume} onChange={setMasterVolume} label="Volumen master" />
+          <div className="lib-rows">
+            {playlist.length === 0 && <button className="deck-empty" onClick={openLibrary}>Tu repertorio está vacío · toca aquí para añadir canciones</button>}
+            {playlist.map((song, index) => (
+              <article className={`song-row ${song.id === activeSongId ? "selected" : ""}`} key={song.id}>
+                <button className="row-main" onClick={() => { selectSong(song); setTab("live"); }} aria-label={`Abrir ${song.name}`}>
+                  <Artwork index={index} />
+                  <span><strong>{song.name}</strong><small>{song.id === activeSongId && playing ? "Reproduciendo" : `${song.files.length} pistas`}</small></span>
+                </button>
+                <button className="deck-remove" onClick={() => removeSong(song.id)} aria-label={`Quitar ${song.name}`}>×</button>
+              </article>
+            ))}
           </div>
-          <div className="channel-name"><span className="tag tag-master">MASTER</span><strong>Salida</strong></div>
-        </article>
-      </section>
+        </section>
+      )}
 
-      <footer className="statusbar">
-        <span className="sys"><i className={playing ? "on" : ""} />{statusMessage || "SISTEMA LISTO"}</span>
-        <span className="brandline">Crescendo <b>LIVE</b></span>
-        <span className="right">{tracks.length} PISTAS</span>
-      </footer>
+      {tab === "live" && (
+        <section className="screen" aria-label="En vivo">
+          <div className="live-status">
+            <div className="session-pill"><i className={playing ? "active" : ""} />SESIÓN EN VIVO<b>{click.beats}/4</b></div>
+            <div className="loaded-song">
+              <Artwork index={Math.max(0, activeIndex)} />
+              <span><small>CANCIÓN CARGADA</small><strong>{songName || "Ninguna"}</strong></span>
+            </div>
+            <button className="glass-btn mixer-link" onClick={() => setTab("mixer")}><Icon name="mixer" />MEZCLADOR</button>
+          </div>
+          {songDeck}
+          <div className="wave-panel" aria-label="Forma de onda">
+            <Waveform
+              peaks={peaks}
+              progress={progress}
+              loading={peaksLoading && !peaks}
+              disabled={tracks.length === 0 || duration <= 0}
+              onSeek={(fraction) => void seekTo(fraction)}
+            />
+            <div className="wave-meta">
+              <span>{shortTime(currentTime)}</span>
+              <strong><i className={`state-dot ${playing ? "is-playing" : ""}`} />{playing ? "REPRODUCIENDO" : paused ? "EN PAUSA" : "DETENIDO"}</strong>
+              <span>-{shortTime(Math.max(0, duration - currentTime))}</span>
+            </div>
+          </div>
+          {mixer}
+        </section>
+      )}
+
+      {tab === "mixer" && (
+        <section className="screen" aria-label="Mezclador">
+          <div className="lib-head">
+            <div><span className="eyebrow">{tracks.length} PISTAS CARGADAS</span><h1>Mezclador</h1></div>
+          </div>
+          {mixer}
+        </section>
+      )}
+
+      {statusMessage && <div className="statusline" role="status">{statusMessage}</div>}
+
+      <nav className="tab-bar" aria-label="Navegación principal">
+        <button className={tab === "library" ? "active" : ""} onClick={() => setTab("library")}><Icon name="library" /><span>Biblioteca</span></button>
+        <button className={tab === "live" ? "active" : ""} onClick={() => setTab("live")}><Icon name="play" /><span>Live</span></button>
+        <button className={tab === "mixer" ? "active" : ""} onClick={() => setTab("mixer")}><Icon name="mixer" /><span>Mezcla</span></button>
+      </nav>
 
       {showLibrary && (
         <div className="drawer-backdrop" onClick={() => setShowLibrary(false)}>
