@@ -14,9 +14,12 @@ export type PadState = PadSettings & { playing: boolean };
 const STORAGE_KEY = "crescendo-pad-v1";
 const DEFAULTS: PadSettings = { note: "C", sharp: false, minor: false, volume: 60 };
 
-const ATTACK = 0.9; // constante de tiempo de entrada (s): ~3 s hasta llegar a pleno
-const RELEASE = 1.3; // constante de tiempo de salida (s): ~4 s hasta apagarse
-const CLEANUP_AFTER = 8; // s después de soltar un acorde se liberan sus osciladores
+// Los fundidos son rampas con inicio y fin exactos: el acorde llega a cero antes de
+// detener sus osciladores, así no queda ningún corte audible.
+const FADE_IN = 2.2; // s para entrar desde silencio
+const FADE_CHANGE = 1.3; // s del cruce entre un acorde y el siguiente (potencia pareja)
+const FADE_OUT_STOP = 0.8; // s para apagar con APAGAR o al tocar la misma nota
+const TAIL_STOP = 1.6; // s en que la reverberación también se apaga al detener
 
 export function chordName(note: PadNote, sharp: boolean, minor: boolean) {
   return `${note}${sharp ? "♯" : ""}${minor ? "m" : ""}`;
@@ -24,12 +27,12 @@ export function chordName(note: PadNote, sharp: boolean, minor: boolean) {
 
 const midiToFreq = (midi: number) => 440 * Math.pow(2, (midi - 69) / 12);
 
-type Layer = { freq: number; level: number; wave: "saw" | "sine" };
+type Layer = { freq: number; level: number; wave: "tri" | "sine" };
 
 /**
  * Voicing abierto, típico de pad de adoración: fundamental grave, quinta, octava,
- * tercera arriba y un brillo suave de quinta alta. Las capas saw dan calor y las
- * sine dan cuerpo.
+ * tercera arriba y un brillo suave de quinta alta. Las capas triangulares dan calor suave
+ * y las sine dan cuerpo.
  */
 export function chordLayers(note: PadNote, sharp: boolean, minor: boolean): Layer[] {
   const root = 36 + SEMITONE[note] + (sharp ? 1 : 0); // C2 como base
@@ -37,13 +40,13 @@ export function chordLayers(note: PadNote, sharp: boolean, minor: boolean): Laye
   const m = (offset: number) => midiToFreq(root + offset);
   return [
     { freq: m(0), level: 0.9, wave: "sine" },
-    { freq: m(12), level: 0.8, wave: "saw" },
-    { freq: m(12 + 7), level: 0.6, wave: "saw" },
-    { freq: m(24), level: 0.5, wave: "saw" },
-    { freq: m(24 + third), level: 0.55, wave: "saw" },
-    { freq: m(24 + 7), level: 0.45, wave: "sine" },
-    { freq: m(36), level: 0.18, wave: "sine" },
-    { freq: m(36 + 7), level: 0.1, wave: "sine" },
+    { freq: m(12), level: 0.7, wave: "sine" },
+    { freq: m(12 + 7), level: 0.5, wave: "tri" },
+    { freq: m(24), level: 0.42, wave: "tri" },
+    { freq: m(24 + third), level: 0.48, wave: "tri" },
+    { freq: m(24 + 7), level: 0.4, wave: "sine" },
+    { freq: m(36), level: 0.12, wave: "sine" },
+    { freq: m(36 + 7), level: 0.06, wave: "sine" },
   ];
 }
 
@@ -77,6 +80,7 @@ export class PadEngine {
   private ctx: AudioContext | null = null;
   private out: GainNode | null = null;
   private bus: GainNode | null = null;
+  private wet: GainNode | null = null;
   private voice: Voice | null = null;
   private suspendTimer: number | null = null;
 
@@ -129,8 +133,10 @@ export class PadEngine {
       if (this.suspendTimer !== null) { window.clearTimeout(this.suspendTimer); this.suspendTimer = null; }
       await ctx.resume();
       const now = ctx.currentTime;
-      this.releaseVoice(now);
-      this.voice = this.createVoice(ctx, now);
+      const crossing = this.voice !== null;
+      this.releaseVoice(now, FADE_CHANGE);
+      this.restoreTail(now);
+      this.voice = this.createVoice(ctx, now, crossing ? FADE_CHANGE : FADE_IN);
       this.commit(true);
     } catch (error) {
       console.error("No se pudo iniciar el pad:", error);
@@ -140,13 +146,18 @@ export class PadEngine {
 
   stop() {
     const ctx = this.ctx;
-    if (ctx) this.releaseVoice(ctx.currentTime);
+    if (ctx) {
+      const now = ctx.currentTime;
+      this.releaseVoice(now, FADE_OUT_STOP);
+      this.cutTail(now);
+    }
     if (this.state.playing) this.commit(false);
     if (ctx) {
+      // El audio se suspende solo cuando ya no queda nada sonando (voz y reverb en cero).
       if (this.suspendTimer !== null) window.clearTimeout(this.suspendTimer);
       this.suspendTimer = window.setTimeout(() => {
         if (!this.state.playing && ctx.state === "running") void ctx.suspend();
-      }, (CLEANUP_AFTER + 1) * 1000);
+      }, (TAIL_STOP + 0.6) * 1000);
     }
   }
 
@@ -158,6 +169,7 @@ export class PadEngine {
     this.ctx = null;
     this.out = null;
     this.bus = null;
+    this.wet = null;
     if (ctx && ctx.state !== "closed") void ctx.close();
   }
 
@@ -172,9 +184,9 @@ export class PadEngine {
 
     const out = ctx.createGain();
     const limiter = ctx.createDynamicsCompressor();
-    limiter.threshold.value = -10;
-    limiter.knee.value = 12;
-    limiter.ratio.value = 6;
+    limiter.threshold.value = -8;
+    limiter.knee.value = 14;
+    limiter.ratio.value = 3;
     limiter.attack.value = 0.02;
     limiter.release.value = 0.4;
     out.connect(limiter);
@@ -182,11 +194,11 @@ export class PadEngine {
 
     const bus = ctx.createGain();
     const dry = ctx.createGain();
-    dry.gain.value = 0.6;
+    dry.gain.value = 0.5;
     const reverb = ctx.createConvolver();
-    reverb.buffer = this.impulse(ctx, 5.5);
+    reverb.buffer = this.impulse(ctx, 6.5);
     const wet = ctx.createGain();
-    wet.gain.value = 0.75;
+    wet.gain.value = 1;
     bus.connect(dry);
     dry.connect(out);
     bus.connect(reverb);
@@ -195,6 +207,7 @@ export class PadEngine {
 
     this.out = out;
     this.bus = bus;
+    this.wet = wet;
     this.applyVolume(true);
     return ctx;
   }
@@ -210,7 +223,7 @@ export class PadEngine {
         const t = i / length;
         const noise = Math.random() * 2 - 1;
         last += (noise - last) * (0.55 - 0.45 * t); // se oscurece con el tiempo
-        data[i] = last * Math.pow(1 - t, 2.6);
+        data[i] = last * Math.pow(1 - t, 2.2);
       }
     }
     return buffer;
@@ -224,18 +237,21 @@ export class PadEngine {
     else this.out.gain.setTargetAtTime(gain, ctx.currentTime, 0.05);
   }
 
-  private createVoice(ctx: AudioContext, time: number): Voice {
+  private createVoice(ctx: AudioContext, time: number, fadeIn: number): Voice {
     const { note, sharp, minor } = this.settings;
     const layers = chordLayers(note, sharp, minor);
 
+    // Entrada con curva de seno (potencia pareja): se mezcla sin hueco ni pico con el acorde que sale.
     const gain = ctx.createGain();
+    const curve = new Float32Array(64);
+    for (let i = 0; i < curve.length; i++) curve[i] = Math.sin((i / (curve.length - 1)) * Math.PI / 2);
     gain.gain.setValueAtTime(0, time);
-    gain.gain.setTargetAtTime(1, time, ATTACK);
+    gain.gain.setValueCurveAtTime(curve, time, fadeIn);
 
     const filter = ctx.createBiquadFilter();
     filter.type = "lowpass";
-    filter.frequency.value = 1150;
-    filter.Q.value = 0.4;
+    filter.frequency.value = 760;
+    filter.Q.value = 0.3;
     filter.connect(gain);
     gain.connect(this.bus as GainNode);
 
@@ -243,45 +259,74 @@ export class PadEngine {
 
     // Movimiento lento del filtro: el pad "respira".
     const lfo = ctx.createOscillator();
-    lfo.frequency.value = 0.11;
+    lfo.frequency.value = 0.09;
     const lfoDepth = ctx.createGain();
-    lfoDepth.gain.value = 320;
+    lfoDepth.gain.value = 180;
     lfo.connect(lfoDepth);
     lfoDepth.connect(filter.frequency);
     lfo.start(time);
     nodes.push(lfo);
 
-    const perLayer = 0.16;
+    const perLayer = 0.15;
     for (const layer of layers) {
-      const detunes = layer.wave === "saw" ? [-7, 0, 7] : [0];
-      for (const cents of detunes) {
-        const osc = ctx.createOscillator();
-        osc.type = layer.wave === "saw" ? "sawtooth" : "sine";
-        osc.frequency.value = layer.freq;
-        osc.detune.value = cents;
-        const level = ctx.createGain();
-        level.gain.value = (perLayer * layer.level) / (layer.wave === "saw" ? detunes.length : 1);
-        osc.connect(level);
-        level.connect(filter);
-        osc.start(time);
-        nodes.push(osc);
-      }
+      // Un solo oscilador por nota (sin desafinar): evita batidos al mezclar un acorde con el siguiente.
+      const osc = ctx.createOscillator();
+      osc.type = layer.wave === "tri" ? "triangle" : "sine";
+      osc.frequency.value = layer.freq;
+      const level = ctx.createGain();
+      level.gain.value = perLayer * layer.level;
+      osc.connect(level);
+      level.connect(filter);
+      osc.start(time);
+      nodes.push(osc);
     }
     return { gain, nodes, filter };
   }
 
-  private releaseVoice(time: number) {
+  /** La reverberación se baja rápido al detener, para que el apagado no arrastre una cola larga. */
+  private cutTail(time: number) {
+    const wet = this.wet?.gain;
+    if (!wet) return;
+    this.holdParam(wet, time);
+    wet.linearRampToValueAtTime(0, time + TAIL_STOP);
+  }
+
+  private restoreTail(time: number) {
+    const wet = this.wet?.gain;
+    if (!wet) return;
+    this.holdParam(wet, time);
+    wet.setTargetAtTime(1, time, 0.05);
+  }
+
+  private holdParam(param: AudioParam, time: number) {
+    // Primero se borra lo que empieza en este instante (dos cambios seguidos en el mismo tick) y luego se congela lo que ya venía en curso.
+    param.cancelScheduledValues(time);
+    if (typeof param.cancelAndHoldAtTime === "function") {
+      param.cancelAndHoldAtTime(time);
+    } else {
+      const held = param.value;
+      param.cancelScheduledValues(time);
+      param.setValueAtTime(held, time);
+    }
+  }
+
+  /** Baja el acorde a cero con curva de coseno (cruza con la entrada en seno sin hueco) y luego detiene sus osciladores. */
+  private releaseVoice(time: number, seconds: number) {
     const voice = this.voice;
     this.voice = null;
     if (!voice) return;
-    voice.gain.gain.cancelScheduledValues(time);
-    voice.gain.gain.setTargetAtTime(0, time, RELEASE);
-    const stopAt = time + CLEANUP_AFTER;
+    const param = voice.gain.gain;
+    const held = clamp(param.value, 0, 1);
+    this.holdParam(param, time);
+    const curve = new Float32Array(64);
+    for (let i = 0; i < curve.length; i++) curve[i] = held * Math.cos((i / (curve.length - 1)) * Math.PI / 2);
+    param.setValueCurveAtTime(curve, time, seconds);
+    const stopAt = time + seconds + 0.05;
     for (const node of voice.nodes) {
       try { node.stop(stopAt); } catch { /* ya estaba detenido */ }
     }
     window.setTimeout(() => {
       try { voice.gain.disconnect(); voice.filter.disconnect(); } catch { /* ya desconectado */ }
-    }, (CLEANUP_AFTER + 0.5) * 1000);
+    }, (seconds + 0.5) * 1000);
   }
 }
