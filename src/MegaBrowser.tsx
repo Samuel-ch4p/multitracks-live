@@ -19,18 +19,8 @@ type Props = {
   onSongLoaded: (name: string, files: File[]) => void;
 };
 
-const DEFAULT_LINK =
-  "https://mega.nz/folder/Cv51TJoT#aV2WHbuadO2B4OSisot_JA";
-
-const LINK_KEY = "multitracks-mega-link";
-
-function savedLink(): string {
-  try {
-    return localStorage.getItem(LINK_KEY) || DEFAULT_LINK;
-  } catch {
-    return DEFAULT_LINK;
-  }
-}
+// Carpeta de MEGA de la app. No se muestra ni se puede editar en la pantalla.
+const MEGA_LINK = "https://mega.nz/folder/Cv51TJoT#aV2WHbuadO2B4OSisot_JA";
 
 export default function MegaBrowser({ onSongLoaded }: Props) {
   const [root, setRoot] = useState<MegaFolder | null>(null);
@@ -39,7 +29,6 @@ export default function MegaBrowser({ onSongLoaded }: Props) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [status, setStatus] = useState("");
-  const [link, setLink] = useState(savedLink);
 
   async function connect() {
     setLoading(true);
@@ -47,11 +36,7 @@ export default function MegaBrowser({ onSongLoaded }: Props) {
     setStatus("Conectando con MEGA...");
 
     try {
-      const url = link.trim();
-      if (!/^https:\/\/mega\.(nz|io)\/folder\//i.test(url)) {
-        throw new Error("Pega un enlace de carpeta de MEGA (https://mega.nz/folder/…).");
-      }
-
+      const url = MEGA_LINK;
       const folder = MEGAFile.fromURL(url) as unknown as MegaFolder;
 
       await folder.loadAttributes();
@@ -62,7 +47,6 @@ export default function MegaBrowser({ onSongLoaded }: Props) {
         );
       }
 
-      try { localStorage.setItem(LINK_KEY, url); } catch { /* sin almacenamiento */ }
       setRoot(folder);
       setItems(folder.children);
       setPath([]);
@@ -204,16 +188,9 @@ export default function MegaBrowser({ onSongLoaded }: Props) {
         </button>
       </div>
 
-      <input
-        className="link-input"
-        type="url"
-        inputMode="url"
-        value={link}
-        onChange={(event) => setLink(event.target.value)}
-        placeholder="Enlace de carpeta de MEGA"
-        aria-label="Enlace de la carpeta de MEGA"
-        spellCheck={false}
-      />
+      {!root && !loading && !error && (
+        <p className="hint">Toca CONECTAR para ver las canciones de la biblioteca.</p>
+      )}
 
       {path.length > 0 && (
         <div className="folder-navigation">

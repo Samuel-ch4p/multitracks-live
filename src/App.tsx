@@ -7,6 +7,7 @@ import Pan from "./Pan";
 import Waveform from "./Waveform";
 import logoUrl from "./assets/logo.png";
 import Click from "./Click";
+import Splash from "./Splash";
 import { Metronome } from "./metronome";
 import { computePeaks } from "./archive";
 
@@ -190,6 +191,8 @@ export default function App() {
   const [masterVolume, setMasterVolume] = useState(85);
   const [showLibrary, setShowLibrary] = useState(false);
   const [source, setSource] = useState<"local" | "mega">("local");
+  // Las pruebas automáticas (navegador sin cabeza) se saltan la pantalla de inicio.
+  const [showSplash, setShowSplash] = useState(() => !navigator.webdriver);
   const [tab, setTab] = useState<"library" | "live" | "mixer">("live");
   const [showClick, setShowClick] = useState(false);
   const [metronome] = useState(() => new Metronome());
@@ -591,6 +594,7 @@ export default function App() {
 
   return (
     <main className="app">
+      {showSplash && <Splash onDone={() => setShowSplash(false)} />}
       <header className="topbar">
         <div className="brand">
           <img className="brand-logo" src={logoUrl} alt="" />
