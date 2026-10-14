@@ -8,6 +8,8 @@ import Waveform from "./Waveform";
 import logoUrl from "./assets/logo.png";
 import Click from "./Click";
 import Splash from "./Splash";
+import Pads from "./Pads";
+import { PadEngine } from "./pads";
 import { Metronome } from "./metronome";
 import { computePeaks } from "./archive";
 
@@ -127,6 +129,17 @@ function createTrack(file: File): Track {
 const PEAK_BUCKETS = 1500;
 
 /** Mantiene la pantalla encendida mientras `active` (en vivo el celular no debe dormirse). */
+function useMediaQuery(query: string) {
+  return useSyncExternalStore(
+    (notify) => {
+      const list = window.matchMedia(query);
+      list.addEventListener("change", notify);
+      return () => list.removeEventListener("change", notify);
+    },
+    () => window.matchMedia(query).matches,
+  );
+}
+
 function useWakeLock(active: boolean) {
   useEffect(() => {
     if (!active || !("wakeLock" in navigator)) return;
@@ -196,6 +209,10 @@ export default function App() {
   const [tab, setTab] = useState<"library" | "live" | "mixer">("live");
   const [showClick, setShowClick] = useState(false);
   const [metronome] = useState(() => new Metronome());
+  const [pad] = useState(() => new PadEngine());
+  const padState = useSyncExternalStore(pad.subscribe, pad.getState);
+  const wide = useMediaQuery("(min-width: 900px) and (min-height: 521px)");
+  const [padOpen, setPadOpen] = useState(false);
   const click = useSyncExternalStore(metronome.subscribe, metronome.getState);
   const [peaks, setPeaks] = useState<Float32Array | null>(null);
   const [peaksLoading, setPeaksLoading] = useState(false);
@@ -490,9 +507,10 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  useWakeLock(playing || click.running);
+  useWakeLock(playing || click.running || padState.playing);
 
   useEffect(() => () => metronome.dispose(), [metronome]);
+  useEffect(() => () => pad.dispose(), [pad]);
 
   useEffect(() => {
     applyMix(tracks);
@@ -532,8 +550,11 @@ export default function App() {
   const ready = tracks.length > 0 && !resetting;
   const syncLabel = resetting ? "Sincronizando…" : playing ? "En vivo" : ready ? "Pistas sincronizadas" : "Sin canción";
 
-  const openLibrary = () => { setShowClick(false); setShowLibrary(true); };
-  const openClick = () => { setShowLibrary(false); setShowClick(true); };
+  const openLibrary = () => { setShowClick(false); setPadOpen(false); setShowLibrary(true); };
+  const openClick = () => { setShowLibrary(false); setPadOpen(false); setShowClick(true); };
+  // En pantalla ancha el panel va junto al mezclador; en celular se abre como cajón.
+  const padInline = wide && padOpen;
+  const padDrawer = !wide && padOpen;
 
   const songDeck = (
     <div className="song-deck" aria-label="Repertorio">
@@ -616,7 +637,15 @@ export default function App() {
             aria-pressed={click.running}
             aria-label="Activar o detener el click"
           >
-            <Icon name="metronome" />CLICK
+            <Icon name="metronome" /><span className="btn-label">CLICK</span>
+          </button>
+          <button
+            className={`glass-btn pad-btn ${padState.playing ? "is-running" : ""} ${padOpen ? "is-open" : ""}`}
+            onClick={() => { setShowClick(false); setShowLibrary(false); setPadOpen((value) => !value); }}
+            aria-pressed={padOpen}
+            aria-label="Abrir el panel de pads"
+          >
+            PAD
           </button>
           <div className="clock">
             <strong>{formatTime(currentTime)}</strong>
@@ -700,7 +729,10 @@ export default function App() {
               <span>-{shortTime(Math.max(0, duration - currentTime))}</span>
             </div>
           </div>
-          {mixer}
+          <div className="mixer-row">
+            {mixer}
+            {padInline && <aside className="pad-side" aria-label="Pads"><Pads engine={pad} /></aside>}
+          </div>
         </section>
       )}
 
@@ -746,6 +778,18 @@ export default function App() {
       )}
 
       {showClick && <Click metronome={metronome} onClose={() => setShowClick(false)} />}
+
+      {padDrawer && (
+        <div className="drawer-backdrop" onClick={() => setPadOpen(false)}>
+          <aside className="drawer pad-drawer" onClick={(event) => event.stopPropagation()} aria-label="Pads">
+            <div className="drawer-head">
+              <h2>Pads</h2>
+              <button className="pill-btn" onClick={() => setPadOpen(false)}>CERRAR</button>
+            </div>
+            <Pads engine={pad} />
+          </aside>
+        </div>
+      )}
     </main>
   );
 }

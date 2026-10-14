@@ -444,3 +444,39 @@
 @media (prefers-reduced-motion: reduce) {
   .splash *, .splash { animation-duration: .01ms !important; animation-delay: 0s !important; }
 }
+
+/* ---------- Pads ---------- */
+.mixer-row { display: flex; min-height: 0; flex: 1; gap: 9px; }
+.mixer-row .channels-box { min-width: 0; }
+.pad-side { display: flex; width: 244px; flex: 0 0 244px; min-height: 0; overflow-y: auto; border: 1px solid var(--line); border-radius: 17px; background: linear-gradient(145deg, rgba(201, 228, 241, .07), rgba(63, 108, 132, .02)); box-shadow: inset 0 1px rgba(255, 255, 255, .12); }
+.pad-panel { display: flex; width: 100%; flex-direction: column; gap: 12px; padding: 14px; }
+.pad-title { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
+.pad-title h2 { margin: 4px 0 0; font-size: 14px; }
+.pad-chip { display: flex; align-items: center; gap: 6px; padding: 5px 9px; border: 1px solid var(--line); border-radius: 999px; color: var(--faint); font-size: 9px; font-weight: 700; letter-spacing: .1em; }
+.pad-chip i { width: 6px; height: 6px; border-radius: 50%; background: var(--faint); }
+.pad-chip.on { border-color: var(--accent-line); color: var(--accent-2); }
+.pad-chip.on i { background: var(--accent-2); box-shadow: 0 0 8px var(--accent-2); animation: pad-breathe 3s ease-in-out infinite; }
+@keyframes pad-breathe { 50% { opacity: .35; } }
+.pad-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 7px; }
+.pad-key { min-height: 50px; border: 1px solid var(--line); border-radius: 13px; background: rgba(210, 234, 244, .045); box-shadow: inset 0 1px rgba(255, 255, 255, .08); color: #b9cbd6; font-size: 13px; font-weight: 700; touch-action: manipulation; transition: background .2s, border-color .2s, box-shadow .2s; }
+.pad-key:active:not(:disabled) { transform: scale(.96); }
+.pad-key.active { border-color: var(--accent-line); background: linear-gradient(145deg, rgba(77, 157, 255, .38), rgba(18, 42, 67, .3)); box-shadow: inset 0 1px rgba(255, 255, 255, .28), 0 0 22px rgba(77, 157, 255, .28); color: #fff; }
+.pad-off { color: var(--faint); font-size: 9px; letter-spacing: .08em; }
+.pad-mods { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; }
+.pad-mod { min-height: 42px; border: 1px solid var(--line); border-radius: 12px; background: var(--glass); color: var(--muted); font-size: 10px; font-weight: 700; letter-spacing: .06em; touch-action: manipulation; }
+.pad-mod.active { border-color: var(--accent-line); background: var(--accent-bg); color: var(--accent-2); }
+.pad-volume { display: flex; flex-direction: column; gap: 6px; }
+.pad-btn { min-width: 52px; padding: 0 12px; color: var(--muted); }
+.pad-btn.is-open { border-color: var(--line-2); color: #fff; }
+.pad-btn.is-running { border-color: var(--accent-line); background: rgba(77, 157, 255, .14); color: var(--accent-2); box-shadow: inset 0 1px rgba(255, 255, 255, .2), 0 0 18px rgba(77, 157, 255, .14); }
+.pad-drawer .pad-panel { padding: 0; }
+
+@media (max-width: 400px) and (orientation: portrait) {
+  .btn-label { display: none; }
+  .click-btn { min-width: 40px; padding: 0 10px; }
+  .pad-btn { min-width: 0; padding: 0 9px; }
+  .hud { gap: 5px; }
+}
+@media (max-height: 520px) and (orientation: landscape) {
+  .pad-btn { min-width: 0; min-height: 36px; padding: 0 10px; }
+}

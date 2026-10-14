@@ -17,6 +17,7 @@ Fuentes de canciones: carpeta de MEGA (fija en la app) y archivos del celular (a
 - `Fader.tsx`, `Pan.tsx`, `Waveform.tsx`: controles táctiles propios.
 - `LocalImport.tsx`, `MegaBrowser.tsx`, `archive.ts`: importación (RAR con libarchive.js; ZIP con fflate; MEGA con megajs).
 - `App.css`: diseño de vidrio azul marino basado en el Figma del usuario. Hay modos: escritorio, celular vertical, celular horizontal (barra de pestañas lateral).
+- `pads.ts` / `Pads.tsx`: motor y panel del pad (capas saw con desafine + sine, filtro con LFO lento, reverb larga generada, fundido cruzado al cambiar de acorde; tocar la misma nota o APAGAR lo apaga con fundido).
 - `Splash.tsx`: pantalla de inicio (se salta sola en navegadores de prueba con `navigator.webdriver`).
 - `assets/` y `public/`: logo (ícono marino con "C" plateada). `assets/` en la raíz alimenta `@capacitor/assets`.
 
@@ -27,10 +28,10 @@ Fuentes de canciones: carpeta de MEGA (fija en la app) y archivos del celular (a
 - El usuario trabaja paso a paso: un cambio pequeño a la vez, sin saltar adelante.
 
 ## Hecho
-Mezclador (volumen, paneo, mute, solo), forma de onda con búsqueda, repertorio, click/metrónomo, importación MEGA + local, logo, rediseño Figma, link de MEGA oculto, pantalla de inicio (`Splash.tsx`: emblema plateado, CRESCENDO LIVE, "Preparando tu experiencia musical…", ~4 s, un toque la salta; copia el video de referencia del usuario, sin el sonido).
+Mezclador (volumen, paneo, mute, solo), forma de onda con búsqueda, repertorio, click/metrónomo, importación MEGA + local, logo, rediseño Figma, link de MEGA oculto, pads (`pads.ts` + `Pads.tsx`: notas C–B, botón ♯ y botón m, pad ambiental sostenido estilo adoración con fundidos, volumen propio; el botón PAD de la cabecera abre el panel: junto al mezclador en pantalla ancha, como cajón en celular), pantalla de inicio (`Splash.tsx`: emblema plateado, CRESCENDO LIVE, "Preparando tu experiencia musical…", ~4 s, un toque la salta; copia el video de referencia del usuario, sin el sonido).
 
 ## Pendiente (en este orden)
-1. Pads: botón PAD y panel "Ambient Pad" (acordes D♭ E♭ G♭ A♭ B♭ C, sostenidos). Falta confirmar si son pads ambientales sostenidos o teclas de piano mientras se mantienen pulsadas.
+1. Afinar el sonido del pad al oído en el celular real (timbre, brillo, reverb, tiempos de entrada/salida en `pads.ts`).
 2. Ideas: tonalidad de cada canción, secciones (Intro/Verso/Coro) en la forma de onda, sincronizar click con la canción, APK firmado de release.
 
 ## Sin verificar en dispositivo real
