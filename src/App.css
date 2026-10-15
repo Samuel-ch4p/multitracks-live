@@ -480,3 +480,4 @@
 @media (max-height: 520px) and (orientation: landscape) {
   .pad-btn { min-width: 0; min-height: 36px; padding: 0 10px; }
 }
+.pad-mod:disabled, .pad-key:disabled { opacity: .45; cursor: default; }

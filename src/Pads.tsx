@@ -1,5 +1,5 @@
-import { useSyncExternalStore } from "react";
-import { PAD_NOTES, chordName, type PadEngine } from "./pads";
+import { useEffect, useSyncExternalStore } from "react";
+import { PAD_NOTES, chordName, hasChord, hasVariant, type PadEngine } from "./pads";
 
 type Props = { engine: PadEngine };
 
@@ -7,6 +7,10 @@ type Props = { engine: PadEngine };
 export default function Pads({ engine }: Props) {
   const state = useSyncExternalStore(engine.subscribe, engine.getState);
   const current = chordName(state.note, state.sharp, state.minor);
+  const canSharp = hasVariant("sharp");
+  const canMinor = hasVariant("minor");
+
+  useEffect(() => { engine.preload(); }, [engine]);
 
   return (
     <div className={`pad-panel ${state.playing ? "is-playing" : ""}`}>
@@ -15,7 +19,7 @@ export default function Pads({ engine }: Props) {
           <span className="eyebrow">AMBIENT PAD</span>
           <h2>Atmosphere</h2>
         </div>
-        <span className={`pad-chip ${state.playing ? "on" : ""}`}><i />{state.playing ? current : "APAGADO"}</span>
+        <span className={`pad-chip ${state.playing ? "on" : ""}`}><i />{state.loading ? "CARGANDO…" : state.playing ? current : "APAGADO"}</span>
       </div>
 
       <div className="pad-grid" role="group" aria-label="Nota del pad">
@@ -26,6 +30,7 @@ export default function Pads({ engine }: Props) {
               key={note}
               className={`pad-key ${active ? "active" : ""}`}
               aria-pressed={active}
+              disabled={!hasChord(note, state.sharp, state.minor)}
               onClick={() => engine.toggleNote(note)}
             >
               {chordName(note, state.sharp, state.minor)}
@@ -38,11 +43,11 @@ export default function Pads({ engine }: Props) {
       </div>
 
       <div className="pad-mods" role="group" aria-label="Variación del acorde">
-        <button className={`pad-mod ${state.sharp ? "active" : ""}`} aria-pressed={state.sharp} onClick={() => engine.set({ sharp: !state.sharp })}>
-          ♯ SOSTENIDO
+        <button className={`pad-mod ${state.sharp ? "active" : ""}`} aria-pressed={state.sharp} disabled={!canSharp} title={canSharp ? undefined : "Próximamente"} onClick={() => engine.set({ sharp: !state.sharp })}>
+          ♯ SOSTENIDO{canSharp ? "" : " · PRONTO"}
         </button>
-        <button className={`pad-mod ${state.minor ? "active" : ""}`} aria-pressed={state.minor} onClick={() => engine.set({ minor: !state.minor })}>
-          m MENOR
+        <button className={`pad-mod ${state.minor ? "active" : ""}`} aria-pressed={state.minor} disabled={!canMinor} title={canMinor ? undefined : "Próximamente"} onClick={() => engine.set({ minor: !state.minor })}>
+          m MENOR{canMinor ? "" : " · PRONTO"}
         </button>
       </div>
 

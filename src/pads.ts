@@ -1,63 +1,59 @@
 export type PadNote = "C" | "D" | "E" | "F" | "G" | "A" | "B";
 export const PAD_NOTES: PadNote[] = ["C", "D", "E", "F", "G", "A", "B"];
 
-const SEMITONE: Record<PadNote, number> = { C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11 };
-
 export type PadSettings = {
   note: PadNote;
   sharp: boolean;
   minor: boolean;
   volume: number; // 0..100
 };
-export type PadState = PadSettings & { playing: boolean };
-
-const STORAGE_KEY = "crescendo-pad-v1";
-const DEFAULTS: PadSettings = { note: "C", sharp: false, minor: false, volume: 60 };
-
-// Los fundidos son rampas con inicio y fin exactos: el acorde llega a cero antes de
-// detener sus osciladores, así no queda ningún corte audible.
-const FADE_IN = 2.2; // s para entrar desde silencio
-const FADE_CHANGE = 1.3; // s del cruce entre un acorde y el siguiente (potencia pareja)
-const FADE_OUT_STOP = 0.8; // s para apagar con APAGAR o al tocar la misma nota
-const TAIL_STOP = 1.6; // s en que la reverberación también se apaga al detener
+export type PadState = PadSettings & { playing: boolean; loading: boolean };
 
 export function chordName(note: PadNote, sharp: boolean, minor: boolean) {
   return `${note}${sharp ? "♯" : ""}${minor ? "m" : ""}`;
 }
 
-const midiToFreq = (midi: number) => 440 * Math.pow(2, (midi - 69) / 12);
-
-type Layer = { freq: number; level: number; wave: "tri" | "sine" };
-
 /**
- * Voicing abierto, típico de pad de adoración: fundamental grave, quinta, octava,
- * tercera arriba y un brillo suave de quinta alta. Las capas triangulares dan calor suave
- * y las sine dan cuerpo.
+ * Audios de los pads (ciclos cortos sin corte, en public/pads/).
+ * Para añadir más (menores, sostenidos) basta con poner el archivo y una línea aquí:
+ *   "Cm": "Cm.ogg", "C♯": "Cs.ogg", "C♯m": "Csm.ogg"
  */
-export function chordLayers(note: PadNote, sharp: boolean, minor: boolean): Layer[] {
-  const root = 36 + SEMITONE[note] + (sharp ? 1 : 0); // C2 como base
-  const third = minor ? 3 : 4;
-  const m = (offset: number) => midiToFreq(root + offset);
-  return [
-    { freq: m(0), level: 0.9, wave: "sine" },
-    { freq: m(12), level: 0.7, wave: "sine" },
-    { freq: m(12 + 7), level: 0.5, wave: "tri" },
-    { freq: m(24), level: 0.42, wave: "tri" },
-    { freq: m(24 + third), level: 0.48, wave: "tri" },
-    { freq: m(24 + 7), level: 0.4, wave: "sine" },
-    { freq: m(36), level: 0.12, wave: "sine" },
-    { freq: m(36 + 7), level: 0.06, wave: "sine" },
-  ];
-}
+const SAMPLES: Record<string, string> = {
+  C: "C.ogg",
+  D: "D.ogg",
+  E: "E.ogg",
+  F: "F.ogg",
+  G: "G.ogg",
+  A: "A.ogg",
+  B: "B.ogg",
+};
+
+export const hasChord = (note: PadNote, sharp: boolean, minor: boolean) => chordName(note, sharp, minor) in SAMPLES;
+/** ¿Hay algún audio con ese tipo de variación? Sirve para habilitar los botones ♯ y m. */
+export const hasVariant = (variant: "sharp" | "minor") =>
+  PAD_NOTES.some((note) => (variant === "sharp" ? hasChord(note, true, false) : hasChord(note, false, true)));
+
+const STORAGE_KEY = "crescendo-pad-v2";
+const DEFAULTS: PadSettings = { note: "C", sharp: false, minor: false, volume: 60 };
+
+// Fundidos con rampas de inicio y fin exactos: el acorde llega a cero antes de detener su audio.
+const FADE_IN = 2.0; // s para entrar desde silencio
+const FADE_CHANGE = 1.4; // s del cruce entre un acorde y el siguiente (potencia pareja)
+const FADE_OUT_STOP = 0.8; // s para apagar con APAGAR o al tocar la misma nota
 
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
 
+/** Ajusta cualquier combinación a una que tenga audio disponible. */
 function sanitize(input: Partial<PadSettings>, base: PadSettings): PadSettings {
   const next = { ...base };
   if (input.note && PAD_NOTES.includes(input.note)) next.note = input.note;
   if (typeof input.sharp === "boolean") next.sharp = input.sharp;
   if (typeof input.minor === "boolean") next.minor = input.minor;
   if (typeof input.volume === "number" && Number.isFinite(input.volume)) next.volume = Math.round(clamp(input.volume, 0, 100));
+  if (!hasChord(next.note, next.sharp, next.minor)) {
+    next.sharp = false;
+    next.minor = false;
+  }
   return next;
 }
 
@@ -70,25 +66,27 @@ function loadSaved(): Partial<PadSettings> {
   }
 }
 
-type Voice = { gain: GainNode; nodes: AudioScheduledSourceNode[]; filter: BiquadFilterNode };
+type Voice = { gain: GainNode; source: AudioBufferSourceNode };
 
-/** Pad ambiental sostenido: cada acorde entra y sale con fundido cruzado. */
+/** Pad sostenido con tus audios: cada acorde se repite en ciclo y se cruza con el siguiente. */
 export class PadEngine {
   private settings: PadSettings;
   private state: PadState;
 
   private ctx: AudioContext | null = null;
   private out: GainNode | null = null;
-  private bus: GainNode | null = null;
-  private wet: GainNode | null = null;
   private voice: Voice | null = null;
   private suspendTimer: number | null = null;
+  private runId = 0;
+
+  private buffers = new Map<string, AudioBuffer>();
+  private loads = new Map<string, Promise<AudioBuffer>>();
 
   private listeners = new Set<() => void>();
 
   constructor() {
     this.settings = sanitize(loadSaved(), DEFAULTS);
-    this.state = { ...this.settings, playing: false };
+    this.state = { ...this.settings, playing: false, loading: false };
   }
 
   subscribe = (listener: () => void) => {
@@ -97,8 +95,8 @@ export class PadEngine {
   };
   getState = () => this.state;
 
-  private commit(playing = this.state.playing) {
-    this.state = { ...this.settings, playing };
+  private commit(changes: { playing?: boolean; loading?: boolean } = {}) {
+    this.state = { ...this.settings, playing: changes.playing ?? this.state.playing, loading: changes.loading ?? this.state.loading };
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(this.settings));
     } catch {
@@ -107,17 +105,20 @@ export class PadEngine {
     this.listeners.forEach((listener) => listener());
   }
 
-  /** Cambia tercera/sostenido/volumen. Si está sonando, el acorde se transforma con fundido. */
+  /** Cambia nota, sostenido, menor o volumen. Si está sonando, el acorde cambia con cruce suave. */
   set(changes: Partial<PadSettings>) {
+    const before = chordName(this.settings.note, this.settings.sharp, this.settings.minor);
     this.settings = sanitize(changes, this.settings);
     this.applyVolume();
-    const retune = this.state.playing && (changes.note !== undefined || changes.sharp !== undefined || changes.minor !== undefined);
+    const after = chordName(this.settings.note, this.settings.sharp, this.settings.minor);
     this.commit();
-    if (retune) void this.start();
+    if (this.state.playing && after !== before) void this.start();
   }
 
   /** Toca una nota: si ya suena ese mismo acorde, lo apaga. */
   toggleNote(note: PadNote) {
+    const { sharp, minor } = this.settings;
+    if (!hasChord(note, sharp, minor)) return;
     if (this.state.playing && this.settings.note === note) {
       this.stop();
       return;
@@ -127,49 +128,69 @@ export class PadEngine {
     void this.start();
   }
 
+  /** Decodifica los audios con calma para que el primer toque no se retrase. */
+  preload() {
+    try {
+      this.ensureContext();
+    } catch {
+      return;
+    }
+    void (async () => {
+      for (const key of Object.keys(SAMPLES)) {
+        try { await this.load(key); } catch { /* se reintenta al tocar */ }
+      }
+    })();
+  }
+
   async start() {
+    const id = ++this.runId;
+    const key = chordName(this.settings.note, this.settings.sharp, this.settings.minor);
     try {
       const ctx = this.ensureContext();
       if (this.suspendTimer !== null) { window.clearTimeout(this.suspendTimer); this.suspendTimer = null; }
-      await ctx.resume();
+      const resumed = ctx.resume();
+      if (!this.buffers.has(key)) this.commit({ loading: true });
+      const buffer = await this.load(key);
+      await resumed;
+      if (id !== this.runId) return; // llegó otro toque mientras cargaba
       const now = ctx.currentTime;
       const crossing = this.voice !== null;
       this.releaseVoice(now, FADE_CHANGE);
-      this.restoreTail(now);
-      this.voice = this.createVoice(ctx, now, crossing ? FADE_CHANGE : FADE_IN);
-      this.commit(true);
+      this.voice = this.createVoice(ctx, buffer, now, crossing ? FADE_CHANGE : FADE_IN);
+      this.commit({ playing: true, loading: false });
     } catch (error) {
       console.error("No se pudo iniciar el pad:", error);
-      this.stop();
+      if (id === this.runId) {
+        this.stop();
+        this.commit({ loading: false });
+      }
     }
   }
 
   stop() {
+    this.runId++;
     const ctx = this.ctx;
+    if (ctx) this.releaseVoice(ctx.currentTime, FADE_OUT_STOP);
+    this.commit({ playing: false, loading: false });
     if (ctx) {
-      const now = ctx.currentTime;
-      this.releaseVoice(now, FADE_OUT_STOP);
-      this.cutTail(now);
-    }
-    if (this.state.playing) this.commit(false);
-    if (ctx) {
-      // El audio se suspende solo cuando ya no queda nada sonando (voz y reverb en cero).
+      // El audio se suspende solo cuando el fundido ya terminó.
       if (this.suspendTimer !== null) window.clearTimeout(this.suspendTimer);
       this.suspendTimer = window.setTimeout(() => {
         if (!this.state.playing && ctx.state === "running") void ctx.suspend();
-      }, (TAIL_STOP + 0.6) * 1000);
+      }, (FADE_OUT_STOP + 0.5) * 1000);
     }
   }
 
   dispose() {
+    this.runId++;
     if (this.suspendTimer !== null) window.clearTimeout(this.suspendTimer);
     this.suspendTimer = null;
     this.voice = null;
     const ctx = this.ctx;
     this.ctx = null;
     this.out = null;
-    this.bus = null;
-    this.wet = null;
+    this.buffers.clear();
+    this.loads.clear();
     if (ctx && ctx.state !== "closed") void ctx.close();
   }
 
@@ -181,52 +202,33 @@ export class PadEngine {
     if (!Ctor) throw new Error("Este navegador no admite Web Audio API.");
     const ctx = new Ctor({ latencyHint: "playback" });
     this.ctx = ctx;
-
+    this.buffers.clear();
+    this.loads.clear();
     const out = ctx.createGain();
-    const limiter = ctx.createDynamicsCompressor();
-    limiter.threshold.value = -8;
-    limiter.knee.value = 14;
-    limiter.ratio.value = 3;
-    limiter.attack.value = 0.02;
-    limiter.release.value = 0.4;
-    out.connect(limiter);
-    limiter.connect(ctx.destination);
-
-    const bus = ctx.createGain();
-    const dry = ctx.createGain();
-    dry.gain.value = 0.5;
-    const reverb = ctx.createConvolver();
-    reverb.buffer = this.impulse(ctx, 6.5);
-    const wet = ctx.createGain();
-    wet.gain.value = 1;
-    bus.connect(dry);
-    dry.connect(out);
-    bus.connect(reverb);
-    reverb.connect(wet);
-    wet.connect(out);
-
+    out.connect(ctx.destination);
     this.out = out;
-    this.bus = bus;
-    this.wet = wet;
     this.applyVolume(true);
     return ctx;
   }
 
-  /** Reverberación larga y oscura generada con ruido que se apaga: da el aire de "atmósfera". */
-  private impulse(ctx: AudioContext, seconds: number): AudioBuffer {
-    const length = Math.floor(ctx.sampleRate * seconds);
-    const buffer = ctx.createBuffer(2, length, ctx.sampleRate);
-    for (let channel = 0; channel < 2; channel++) {
-      const data = buffer.getChannelData(channel);
-      let last = 0;
-      for (let i = 0; i < length; i++) {
-        const t = i / length;
-        const noise = Math.random() * 2 - 1;
-        last += (noise - last) * (0.55 - 0.45 * t); // se oscurece con el tiempo
-        data[i] = last * Math.pow(1 - t, 2.2);
-      }
-    }
-    return buffer;
+  private load(key: string): Promise<AudioBuffer> {
+    const cached = this.buffers.get(key);
+    if (cached) return Promise.resolve(cached);
+    const pending = this.loads.get(key);
+    if (pending) return pending;
+    const ctx = this.ensureContext();
+    const file = SAMPLES[key];
+    if (!file) return Promise.reject(new Error(`No hay audio para ${key}.`));
+    const task = (async () => {
+      const response = await fetch(`${import.meta.env.BASE_URL}pads/${file}`);
+      if (!response.ok) throw new Error(`No se pudo leer pads/${file}.`);
+      const buffer = await ctx.decodeAudioData(await response.arrayBuffer());
+      if (this.ctx === ctx) this.buffers.set(key, buffer);
+      return buffer;
+    })();
+    this.loads.set(key, task);
+    task.catch(() => { this.loads.delete(key); });
+    return task;
   }
 
   private applyVolume(immediate = false) {
@@ -237,65 +239,21 @@ export class PadEngine {
     else this.out.gain.setTargetAtTime(gain, ctx.currentTime, 0.05);
   }
 
-  private createVoice(ctx: AudioContext, time: number, fadeIn: number): Voice {
-    const { note, sharp, minor } = this.settings;
-    const layers = chordLayers(note, sharp, minor);
-
-    // Entrada con curva de seno (potencia pareja): se mezcla sin hueco ni pico con el acorde que sale.
+  private createVoice(ctx: AudioContext, buffer: AudioBuffer, time: number, fadeIn: number): Voice {
+    // Entrada con curva de seno: con la salida en coseno del acorde anterior, el volumen total queda parejo.
     const gain = ctx.createGain();
     const curve = new Float32Array(64);
     for (let i = 0; i < curve.length; i++) curve[i] = Math.sin((i / (curve.length - 1)) * Math.PI / 2);
     gain.gain.setValueAtTime(0, time);
     gain.gain.setValueCurveAtTime(curve, time, fadeIn);
+    gain.connect(this.out as GainNode);
 
-    const filter = ctx.createBiquadFilter();
-    filter.type = "lowpass";
-    filter.frequency.value = 760;
-    filter.Q.value = 0.3;
-    filter.connect(gain);
-    gain.connect(this.bus as GainNode);
-
-    const nodes: AudioScheduledSourceNode[] = [];
-
-    // Movimiento lento del filtro: el pad "respira".
-    const lfo = ctx.createOscillator();
-    lfo.frequency.value = 0.09;
-    const lfoDepth = ctx.createGain();
-    lfoDepth.gain.value = 180;
-    lfo.connect(lfoDepth);
-    lfoDepth.connect(filter.frequency);
-    lfo.start(time);
-    nodes.push(lfo);
-
-    const perLayer = 0.15;
-    for (const layer of layers) {
-      // Un solo oscilador por nota (sin desafinar): evita batidos al mezclar un acorde con el siguiente.
-      const osc = ctx.createOscillator();
-      osc.type = layer.wave === "tri" ? "triangle" : "sine";
-      osc.frequency.value = layer.freq;
-      const level = ctx.createGain();
-      level.gain.value = perLayer * layer.level;
-      osc.connect(level);
-      level.connect(filter);
-      osc.start(time);
-      nodes.push(osc);
-    }
-    return { gain, nodes, filter };
-  }
-
-  /** La reverberación se baja rápido al detener, para que el apagado no arrastre una cola larga. */
-  private cutTail(time: number) {
-    const wet = this.wet?.gain;
-    if (!wet) return;
-    this.holdParam(wet, time);
-    wet.linearRampToValueAtTime(0, time + TAIL_STOP);
-  }
-
-  private restoreTail(time: number) {
-    const wet = this.wet?.gain;
-    if (!wet) return;
-    this.holdParam(wet, time);
-    wet.setTargetAtTime(1, time, 0.05);
+    const source = ctx.createBufferSource();
+    source.buffer = buffer;
+    source.loop = true;
+    source.connect(gain);
+    source.start(time);
+    return { gain, source };
   }
 
   private holdParam(param: AudioParam, time: number) {
@@ -310,7 +268,7 @@ export class PadEngine {
     }
   }
 
-  /** Baja el acorde a cero con curva de coseno (cruza con la entrada en seno sin hueco) y luego detiene sus osciladores. */
+  /** Baja el acorde a cero con curva de coseno y luego detiene su audio. */
   private releaseVoice(time: number, seconds: number) {
     const voice = this.voice;
     this.voice = null;
@@ -321,12 +279,9 @@ export class PadEngine {
     const curve = new Float32Array(64);
     for (let i = 0; i < curve.length; i++) curve[i] = held * Math.cos((i / (curve.length - 1)) * Math.PI / 2);
     param.setValueCurveAtTime(curve, time, seconds);
-    const stopAt = time + seconds + 0.05;
-    for (const node of voice.nodes) {
-      try { node.stop(stopAt); } catch { /* ya estaba detenido */ }
-    }
+    try { voice.source.stop(time + seconds + 0.05); } catch { /* ya estaba detenido */ }
     window.setTimeout(() => {
-      try { voice.gain.disconnect(); voice.filter.disconnect(); } catch { /* ya desconectado */ }
+      try { voice.source.disconnect(); voice.gain.disconnect(); } catch { /* ya desconectado */ }
     }, (seconds + 0.5) * 1000);
   }
 }
