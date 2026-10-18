@@ -1,4 +1,4 @@
-import { unzipSync } from "fflate";
+import { unzip, unzipSync } from "fflate";
 import { Archive } from "libarchive.js";
 
 export const audioExtensions = /\.(wav|mp3|ogg|m4a|aac|flac|aiff|aif)$/i;
@@ -22,6 +22,30 @@ export function sortFiles(files: File[]): File[] {
   return [...files].sort((a, b) =>
     a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: "base" })
   );
+}
+
+const isHiddenPath = (path: string) => path.split("/").some((part) => part.startsWith(".") || part === "__MACOSX");
+
+/** Igual que zipToFiles, pero en segundo plano (varios hilos) y sin copias de más; si no hay hilos disponibles usa la versión normal. */
+export function zipToFilesAsync(bytes: Uint8Array): Promise<File[]> {
+  return new Promise((resolve) => {
+    const fallback = () => {
+      try { resolve(zipToFiles(bytes)); } catch { resolve([]); }
+    };
+    try {
+      unzip(bytes, { filter: (entry) => audioExtensions.test(entry.name) && !isHiddenPath(entry.name) }, (error, contents) => {
+        if (error || !contents) { fallback(); return; }
+        const files: File[] = [];
+        for (const [archivePath, data] of Object.entries(contents)) {
+          const name = archivePath.split("/").pop();
+          if (name) files.push(new File([data as BlobPart], name, { type: audioType(name) }));
+        }
+        resolve(files);
+      });
+    } catch {
+      fallback();
+    }
+  });
 }
 
 /** Extrae solo las pistas de audio de un ZIP, ignorando archivos ocultos y __MACOSX. */
@@ -170,7 +194,8 @@ export async function rarToFiles(file: File): Promise<File[]> {
     throw new Error("Este archivo RAR está protegido con contraseña.");
   }
   const extracted = await archive.extractFiles();
-  return collectArchiveFiles(extracted);
+  // Igual que en ZIP: ignora archivos ocultos (._foo, .DS_Store) y __MACOSX.
+  return collectArchiveFiles(extracted).filter((file) => !file.name.startsWith(".") && !isHiddenPath(file.name));
 }
 
 /** Convierte lo que el usuario eligió (audios sueltos, ZIP o RAR) en canciones. */

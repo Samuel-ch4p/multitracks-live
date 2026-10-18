@@ -7,6 +7,9 @@ import "@fontsource/inter/latin-700.css";
 import "./index.css";
 import App from "./App.tsx";
 
+// Limpieza: borra cualquier copia de canciones que una versión de prueba anterior haya dejado en el teléfono.
+try { indexedDB.deleteDatabase("crescendo-songs"); } catch { /* sin almacenamiento */ }
+
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <App />

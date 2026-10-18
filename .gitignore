@@ -6,3 +6,12 @@ dist-ssr
 !.vscode/extensions.json
 .DS_Store
 *.tsbuildinfo
+
+# Generado por `cap sync` / Gradle: no se sube (el flujo de GitHub Actions lo vuelve a generar)
+android/app/src/main/assets/public
+android/app/src/main/assets/capacitor.config.json
+android/app/src/main/assets/capacitor.plugins.json
+android/app/build
+android/build
+android/.gradle
+android/local.properties

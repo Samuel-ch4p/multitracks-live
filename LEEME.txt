@@ -1,0 +1,5 @@
+Copia estos archivos encima de los de tu proyecto (misma ruta).
+Borra src/songCache.ts (ya no se usa).
+Luego, para quitar del repo los archivos generados que ya estaban subidos:
+  git rm -r --cached android/app/src/main/assets/public android/app/src/main/assets/capacitor.config.json android/app/src/main/assets/capacitor.plugins.json
+  git commit -m "Limpieza: assets generados, reloj, backup"

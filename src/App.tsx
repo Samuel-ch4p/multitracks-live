@@ -9,7 +9,7 @@ import logoUrl from "./assets/logo.png";
 import Click from "./Click";
 import Splash from "./Splash";
 import Pads from "./Pads";
-import { PadEngine } from "./pads";
+import { PadEngine } from "./padEngine";
 import { Metronome } from "./metronome";
 import { computePeaks } from "./archive";
 
@@ -128,7 +128,6 @@ function createTrack(file: File): Track {
 
 const PEAK_BUCKETS = 1500;
 
-/** Mantiene la pantalla encendida mientras `active` (en vivo el celular no debe dormirse). */
 function useMediaQuery(query: string) {
   return useSyncExternalStore(
     (notify) => {
@@ -140,6 +139,7 @@ function useMediaQuery(query: string) {
   );
 }
 
+/** Mantiene la pantalla encendida mientras `active` (en vivo el celular no debe dormirse). */
 function useWakeLock(active: boolean) {
   useEffect(() => {
     if (!active || !("wakeLock" in navigator)) return;
@@ -203,7 +203,7 @@ export default function App() {
   const [duration, setDuration] = useState(0);
   const [masterVolume, setMasterVolume] = useState(85);
   const [showLibrary, setShowLibrary] = useState(false);
-  const [source, setSource] = useState<"local" | "mega">("local");
+  const [source, setSource] = useState<"local" | "cloud">("local");
   // Las pruebas automáticas (navegador sin cabeza) se saltan la pantalla de inicio.
   const [showSplash, setShowSplash] = useState(() => !navigator.webdriver);
   const [tab, setTab] = useState<"library" | "live" | "mixer">("live");
@@ -486,7 +486,13 @@ export default function App() {
         setDuration(0);
         return;
       }
-      const lead = active[0].audio;
+      // La pista de referencia es la más larga: si fuera una corta, su reloj se congelaría al terminar
+      // y la corrección de desfase devolvería las demás pistas a ese punto.
+      let lead = active[0].audio;
+      for (const track of active) {
+        const length = track.audio.duration;
+        if (Number.isFinite(length) && (!Number.isFinite(lead.duration) || length > lead.duration)) lead = track.audio;
+      }
       setCurrentTime(lead.currentTime || 0);
       const known = active.map((track) => track.audio.duration).filter(Number.isFinite);
       setDuration(known.length ? Math.max(...known) : 0);
@@ -496,7 +502,9 @@ export default function App() {
         void stopAll();
         return;
       }
-      for (const track of active.slice(1)) {
+      if (lead.ended) return;
+      for (const track of active) {
+        if (track.audio === lead) continue;
         if (!track.audio.ended && Math.abs(track.audio.currentTime - lead.currentTime) > 0.08) {
           try { track.audio.currentTime = lead.currentTime; } catch { /* aún cargando */ }
         }
@@ -754,24 +762,33 @@ export default function App() {
       </nav>
 
       {showLibrary && (
-        <div className="drawer-backdrop" onClick={() => setShowLibrary(false)}>
-          <aside className="drawer" onClick={(event) => event.stopPropagation()} aria-label="Biblioteca">
-            <div className="drawer-head">
-              <h2>Biblioteca</h2>
-              <button className="pill-btn" onClick={() => setShowLibrary(false)}>CERRAR</button>
-            </div>
-            <div className="source-tabs" role="tablist" aria-label="Origen de las canciones">
-              <button role="tab" aria-selected={source === "local"} className={source === "local" ? "is-on" : ""} onClick={() => setSource("local")}>
-                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 2h10a2 2 0 0 1 2 2v16a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2zm5 17.5a1.2 1.2 0 1 0 0-2.4 1.2 1.2 0 0 0 0 2.4zM7 5v10h10V5z" /></svg>
-                Este dispositivo
-              </button>
-              <button role="tab" aria-selected={source === "mega"} className={source === "mega" ? "is-on" : ""} onClick={() => setSource("mega")}>
-                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6.5 19a4.5 4.5 0 0 1-.6-8.96A6 6 0 0 1 17.4 9 4.5 4.5 0 0 1 17.5 19z" /></svg>
-                MEGA
-              </button>
+        <div className="library-layer" aria-label="Biblioteca musical">
+          <button className="library-scrim" aria-label="Cerrar biblioteca" onClick={() => setShowLibrary(false)} />
+          <aside className="library-panel">
+            <div className="library-panel-top">
+              <div className="library-panel-heading">
+                <div>
+                  <span className="eyebrow">CRESCENDO LIVE</span>
+                  <strong>Biblioteca</strong>
+                </div>
+                <button className="library-close" onClick={() => setShowLibrary(false)}>
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18" /></svg>
+                  <span>CERRAR</span>
+                </button>
+              </div>
+              <div className="source-switch" role="tablist" aria-label="Origen de las canciones">
+                <button role="tab" aria-selected={source === "local"} className={source === "local" ? "selected" : ""} onClick={() => setSource("local")}>
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="2.5" width="12" height="19" rx="2.5" /><path d="M10 18.5h4" /></svg>
+                  <span>Este dispositivo</span>
+                </button>
+                <button role="tab" aria-selected={source === "cloud"} className={source === "cloud" ? "selected" : ""} onClick={() => setSource("cloud")}>
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 18h11a4 4 0 0 0 .5-8A6.5 6.5 0 0 0 6 8.2 4.9 4.9 0 0 0 7 18Z" /></svg>
+                  <span>Nube Crescendo</span>
+                </button>
+              </div>
             </div>
             {source === "local"
-              ? <LocalImport onSongLoaded={addSong} />
+              ? <div className="library-scroll"><LocalImport onSongLoaded={addSong} /></div>
               : <MegaBrowser onSongLoaded={addSong} />}
           </aside>
         </div>

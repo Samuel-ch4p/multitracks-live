@@ -1,6 +1,6 @@
 # Convierte los pads largos (MP3 de 20 min) en ciclos de 32 s sin corte, ya normalizados y en OGG.
 # Uso: python3 tools/make_pad_loops.py public/pads   (ajusta U y SRC con la ruta y nombres de tus MP3; requiere ffmpeg, numpy)
-# Para menores o sostenidos: agrega la entrada en SRC (p. ej. "Cm": "Cm.mp3") y en SAMPLES de src/pads.ts.
+# Para menores o sostenidos: agrega la entrada en SRC (p. ej. "Cm": "Cm.mp3") y en SAMPLES de src/padEngine.ts.
 import subprocess, sys, numpy as np, wave, os
 U = "/root/.claude/uploads/33ac6054-58c6-5a97-8e93-b4ccc2940ea9"
 OUT = sys.argv[1]; os.makedirs(OUT, exist_ok=True)

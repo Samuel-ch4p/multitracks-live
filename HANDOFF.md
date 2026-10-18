@@ -17,7 +17,7 @@ Fuentes de canciones: carpeta de MEGA (fija en la app) y archivos del celular (a
 - `Fader.tsx`, `Pan.tsx`, `Waveform.tsx`: controles táctiles propios.
 - `LocalImport.tsx`, `MegaBrowser.tsx`, `archive.ts`: importación (RAR con libarchive.js; ZIP con fflate; MEGA con megajs).
 - `App.css`: diseño de vidrio azul marino basado en el Figma del usuario. Hay modos: escritorio, celular vertical, celular horizontal (barra de pestañas lateral).
-- `pads.ts` / `Pads.tsx`: pads con AUDIOS DEL USUARIO (el sintetizador anterior sonaba con interferencias y se descartó). `public/pads/*.ogg` son ciclos de 32 s sin corte hechos con `tools/make_pad_loops.py` a partir de MP3 de 20 min (C D E F G A B, mayores). El motor decodifica, repite en bucle y cruza acordes con potencia pareja; apagado en ~0,8 s. Los botones ♯ y m quedan deshabilitados ("PRONTO") hasta que haya audios: para añadirlos, convertir el MP3 con el script, poner el .ogg en `public/pads/` y añadir la línea en `SAMPLES` de `pads.ts` (clave `Cm`, `C♯`, `C♯m`).
+- `padEngine.ts` / `Pads.tsx`: pads con AUDIOS DEL USUARIO (el sintetizador anterior sonaba con interferencias y se descartó). `public/pads/*.ogg` son ciclos de 32 s sin corte hechos con `tools/make_pad_loops.py` a partir de MP3 de 20 min (C D E F G A B, mayores). El motor decodifica, repite en bucle y cruza acordes con potencia pareja; apagado en ~0,8 s. Los botones ♯ y m quedan deshabilitados ("PRONTO") hasta que haya audios: para añadirlos, convertir el MP3 con el script, poner el .ogg en `public/pads/` y añadir la línea en `SAMPLES` de `padEngine.ts` (clave `Cm`, `C♯`, `C♯m`).
 - Logo de la cabecera: `src/assets/logo.png` va a 192 px a propósito (se muestra a 42 px; una imagen mucho más grande se ve pixelada al reducirla). El emblema del inicio es `emblem.png` (1024 px).
 - `Splash.tsx`: pantalla de inicio (se salta sola en navegadores de prueba con `navigator.webdriver`).
 - `assets/` y `public/`: logo (ícono marino con "C" plateada). `assets/` en la raíz alimenta `@capacitor/assets`.
@@ -29,11 +29,32 @@ Fuentes de canciones: carpeta de MEGA (fija en la app) y archivos del celular (a
 - El usuario trabaja paso a paso: un cambio pequeño a la vez, sin saltar adelante.
 
 ## Hecho
-Mezclador (volumen, paneo, mute, solo), forma de onda con búsqueda, repertorio, click/metrónomo, importación MEGA + local, logo, rediseño Figma, link de MEGA oculto, pads (`pads.ts` + `Pads.tsx`, con audios del usuario; botón PAD abre el panel: junto al mezclador en pantalla ancha, como cajón en celular), pantalla de inicio (`Splash.tsx`: emblema plateado, CRESCENDO LIVE, "Preparando tu experiencia musical…", ~4 s, un toque la salta; copia el video de referencia del usuario, sin el sonido).
+Mezclador (volumen, paneo, mute, solo), forma de onda con búsqueda, repertorio, click/metrónomo, importación MEGA + local, logo, rediseño Figma, link de MEGA oculto, pads (`padEngine.ts` + `Pads.tsx`, con audios del usuario; botón PAD abre el panel: junto al mezclador en pantalla ancha, como cajón en celular), pantalla de inicio (`Splash.tsx`: emblema plateado, CRESCENDO LIVE, "Preparando tu experiencia musical…", ~4 s, un toque la salta; copia el video de referencia del usuario, sin el sonido).
 
 ## Pendiente (en este orden)
-1. Montar los pads menores y sostenidos cuando el usuario envíe los MP3 (ver `pads.ts` y `tools/make_pad_loops.py`). Probar los pads en el celular real.
+1. Montar los pads menores y sostenidos cuando el usuario envíe los MP3 (ver `padEngine.ts` y `tools/make_pad_loops.py`). Probar los pads en el celular real.
 2. Ideas: tonalidad de cada canción, secciones (Intro/Verso/Coro) en la forma de onda, sincronizar click con la canción, APK firmado de release.
 
 ## Sin verificar en dispositivo real
 Sonido del click, salida solo-izquierda por una interfaz USB (AudioBox iTwo no fue reconocida por el celular en pruebas previas: tema aparte).
+
+## Descarga de MEGA (oct 2026)
+- DECISIÓN DEL DUEÑO: las canciones NO se guardan en el dispositivo (software comercial; evitar que extraigan los multitracks). Viven solo en memoria. No añadir cachés/descargas persistentes. main.tsx borra la BD vieja "crescendo-songs".
+- MegaBrowser descarga con 16 conexiones y trozos de 1–8 MB (antes 4 conexiones, 128 KB–1 MB), con progreso (%, MB, MB/s).
+- Optimización mayor: src/megaFast.ts descifra con WebCrypto (AES-CTR nativo) en vez del descifrado JS + verificación MAC de megajs (~16 MB/s vs ~450 MB/s medido en servidor). MegaBrowser baja con returnCiphertext y descifra después; si no hay crypto.subtle (p. ej. http en la red local) cae al método normal. ZIP: zipToFilesAsync (fflate con hilos y filtro de audio).
+
+## Plan comercial (NO implementado; dueño pidió tenerlo en cuenta y avanzar poco a poco)
+- Quiere vender con membresía mensual (cuenta activa para usar la app), ofuscar/encriptar parte del código y esconder el link de MEGA.
+- Criterio de diseño: nada que el cliente pueda descargar debe depender de un secreto guardado dentro del APK. La protección real requiere servidor: login + suscripción vigente → el servidor entrega enlaces temporales/audio. No añadir cachés persistentes de canciones.
+- Pasos tentativos: 1) decidir backend y pagos; 2) login/licencia; 3) servidor entrega canciones; 4) ofuscar el JS en el build; 5) quitar el link fijo de MEGA del código.
+
+## Cambios revisados de otra cuenta de Claude (oct 2026)
+- App.tsx: la pista de referencia para sincronizar es la más larga (antes la primera; si era corta, al terminar arrastraba las demás hacia atrás). Probado: pistas de 4/7/12 s siguen avanzando hasta los 12 s y luego se detiene todo.
+- archive.ts: el RAR también ignora archivos ocultos / __MACOSX.
+- AndroidManifest: allowBackup=false (que no se puedan sacar datos de la app por copia de seguridad).
+- .gitignore: se ignoran los assets generados por `cap sync` (el workflow los regenera). OJO: la versión recibida había borrado node_modules/dist de la lista; se fusionó.
+
+## Biblioteca rediseñada (oct 2026)
+- Panel lateral izquierdo según el diseño del dueño (menu_diseno.rar) pero con el azul marino de la app (el azul claro del original se descartó). Origen "Nube Crescendo" en vez de "MEGA": ningún texto visible nombra a MEGA; los errores del servicio se traducen en friendlyError (MegaBrowser.tsx).
+- MegaBrowser.tsx devuelve dos bloques (subbar de estado/ubicación + lista con scroll); App.tsx pone cabecera y selector. Tocar un ZIP/RAR lo selecciona y muestra "＋ AÑADIR" (evita descargas accidentales). Solo se listan carpetas y ZIP/RAR.
+- En horizontal corto todo el panel hace scroll para dejar espacio a la lista.

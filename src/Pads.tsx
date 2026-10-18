@@ -1,5 +1,5 @@
 import { useEffect, useSyncExternalStore } from "react";
-import { PAD_NOTES, chordName, hasChord, hasVariant, type PadEngine } from "./pads";
+import { PAD_NOTES, chordName, hasChord, hasVariant, type PadEngine } from "./padEngine";
 
 type Props = { engine: PadEngine };
 
