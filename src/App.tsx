@@ -269,6 +269,8 @@ export default function App() {
   const playingRef = useRef(false);
   const busyRef = useRef(false);
   const masterVolumeRef = useRef(masterVolume);
+  // Mezcla (volumen, paneo, mute, solo) de cada canción, para recuperarla al volver a ella. Solo en memoria.
+  const mixesRef = useRef<Map<number, Map<string, Pick<Track, "volume" | "pan" | "muted" | "solo">>>>(new Map());
 
   masterVolumeRef.current = masterVolume;
 
@@ -333,8 +335,13 @@ export default function App() {
   }
 
   function loadSong(song: Song) {
+    const leaving = activeSongIdRef.current;
+    if (leaving !== null && tracksRef.current.length) {
+      mixesRef.current.set(leaving, new Map(tracksRef.current.map((t) => [t.file.name, { volume: t.volume, pan: t.pan, muted: t.muted, solo: t.solo }])));
+    }
     disposeActiveTracks();
-    const nextTracks = song.files.map(createTrack);
+    const saved = mixesRef.current.get(song.id);
+    const nextTracks = song.files.map((file) => ({ ...createTrack(file), ...saved?.get(file.name) }));
     tracksRef.current = nextTracks;
     setTracks(nextTracks);
     activeSongIdRef.current = song.id;
@@ -381,6 +388,7 @@ export default function App() {
     const next = playlistRef.current.filter((song) => song.id !== songId);
     playlistRef.current = next;
     setPlaylist(next);
+    mixesRef.current.delete(songId);
     if (songId !== activeSongIdRef.current) return;
     if (next.length > 0) activateSong(next[0]);
     else {
@@ -783,7 +791,6 @@ export default function App() {
               <Artwork index={Math.max(0, activeIndex)} />
               <span><small>CANCIÓN CARGADA</small><strong>{songName || "Ninguna"}</strong></span>
             </div>
-            <button className="glass-btn mixer-link" onClick={() => setTab("mixer")}><Icon name="mixer" />MEZCLADOR</button>
           </div>
           {songDeck}
           <div className="wave-panel" aria-label="Forma de onda">

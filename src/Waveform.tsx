@@ -23,6 +23,7 @@ export default function Waveform({ peaks, progress, playing, getProgress, loadin
   const baseRef = useRef<HTMLCanvasElement>(null);
   const playedRef = useRef<HTMLCanvasElement>(null);
   const playingRef = useRef(playing);
+  const dragRef = useRef<number | null>(null); // fracción bajo el dedo mientras se arrastra (null = sin arrastre)
   useEffect(() => { playingRef.current = playing; }, [playing]);
 
   const draw = useCallback(() => {
@@ -91,7 +92,7 @@ export default function Waveform({ peaks, progress, playing, getProgress, loadin
     if (!playing) return;
     let frame = 0;
     const tick = () => {
-      apply(getProgress());
+      if (dragRef.current === null) apply(getProgress());
       frame = requestAnimationFrame(tick);
     };
     frame = requestAnimationFrame(tick);
@@ -103,11 +104,11 @@ export default function Waveform({ peaks, progress, playing, getProgress, loadin
     if (!playingRef.current) apply(progress);
   }, [progress, apply]);
 
-  function seekFromPointer(clientX: number) {
+  function fractionAt(clientX: number) {
     const wrap = wrapRef.current;
-    if (!wrap || disabled) return;
+    if (!wrap) return 0;
     const rect = wrap.getBoundingClientRect();
-    onSeek(Math.min(1, Math.max(0, (clientX - rect.left) / rect.width)));
+    return Math.min(1, Math.max(0, (clientX - rect.left) / rect.width));
   }
 
   return (
@@ -120,7 +121,28 @@ export default function Waveform({ peaks, progress, playing, getProgress, loadin
       aria-valuemax={100}
       aria-valuenow={Math.round(progress * 100)}
       tabIndex={disabled ? -1 : 0}
-      onPointerDown={(event) => seekFromPointer(event.clientX)}
+      // Se puede arrastrar: la barra sigue al dedo y el audio salta una sola vez al soltar (mover el audio en cada pixel lo trabaría).
+      onPointerDown={(event) => {
+        if (disabled) return;
+        event.currentTarget.setPointerCapture(event.pointerId);
+        dragRef.current = fractionAt(event.clientX);
+        apply(dragRef.current);
+      }}
+      onPointerMove={(event) => {
+        if (dragRef.current === null) return;
+        dragRef.current = fractionAt(event.clientX);
+        apply(dragRef.current);
+      }}
+      onPointerUp={(event) => {
+        const target = dragRef.current;
+        if (target === null) return;
+        dragRef.current = null;
+        onSeek(fractionAt(event.clientX));
+      }}
+      onPointerCancel={() => {
+        dragRef.current = null;
+        apply(playingRef.current ? getProgress() : progress);
+      }}
       onKeyDown={(event) => {
         if (disabled) return;
         if (event.key === "ArrowRight") onSeek(Math.min(1, progress + 0.01));

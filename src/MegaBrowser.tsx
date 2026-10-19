@@ -320,8 +320,7 @@ export default function MegaBrowser({ onSongLoaded }: Props) {
           <div className={`library-state ${error ? "error" : "empty"}`}>
             <span className="state-icon"><CloudIcon name="cloud" /></span>
             <strong>{error ? "No pudimos conectar con la Nube Crescendo" : "Biblioteca Crescendo"}</strong>
-            <span>{error || "Conéctate para ver las canciones disponibles."}</span>
-            <button onClick={() => void connect()}>{error ? "REINTENTAR CONEXIÓN" : "CONECTAR"}</button>
+            <span>{error || "Toca CONECTAR arriba para ver las canciones disponibles."}</span>
           </div>
         )}
 

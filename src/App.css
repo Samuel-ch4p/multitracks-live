@@ -123,7 +123,6 @@
 .loaded-song > span { display: flex; min-width: 0; flex-direction: column; gap: 3px; }
 .loaded-song small { color: var(--faint); font-size: 7px; letter-spacing: .12em; }
 .loaded-song strong { overflow: hidden; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
-.mixer-link { margin-left: auto; min-height: 42px; padding: 0 18px; }
 
 /* ---------- Arte de canción ---------- */
 .artwork { position: relative; display: flex; flex: none; align-items: flex-end; overflow: hidden; padding: 5px; border: 1px solid var(--line); border-radius: 11px;
@@ -269,7 +268,6 @@
   .transport .icon-btn { flex: 1; width: auto; }
   .transport .play-btn { flex: 2; width: auto; }
   .live-status { display: none; }
-  .mixer-link { display: none; }
   .deck-card { flex-basis: 164px; }
   .deck-main .artwork { width: 44px; height: 44px; }
   .wave-panel .waveform { height: 72px; }

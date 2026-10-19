@@ -95,3 +95,12 @@ NO probado: teléfono real, Gradle/APK, RAR (no hay forma de generarlos aquí), 
 - `Fader.tsx`: con el dedo, tocar ya no mueve el fader hasta que el gesto sea vertical (>8 px y más vertical que horizontal); un toque corto y quieto sí salta a esa altura. Así se desliza el mezclador de lado por encima de los faders sin cambiar volúmenes. Mouse: inmediato como antes. `Pan.tsx` sigue con el comportamiento anterior (touch-action: none, mueve al tocar).
 - Menú "Cortar/Copiar/Pegar/Seleccionar todo": lo causaba `onFocus → select()` del campo BPM de `Click.tsx` (ahora al enfocar queda vacío con el BPM actual de marcador) y `user-select: text` en el panel de biblioteca y el cajón (quitado; solo los campos de texto lo conservan). `-webkit-touch-callout: none` en `.app`.
 - SIN probar en teléfono real tras este cambio.
+
+## Botones redundantes quitados (oct 2026)
+- Quitado el botón MEZCLADOR de la barra "en vivo" (ya está la pestaña Mezcla abajo) y el botón grande CONECTAR / REINTENTAR CONEXIÓN del centro de la biblioteca (ya está el de arriba a la derecha).
+
+## Forma de onda arrastrable (oct 2026)
+- `Waveform.tsx`: ahora se puede deslizar. Al tocar/arrastrar, la línea sigue el dedo (sin mover el audio); al soltar se hace un solo `onSeek`. Un toque simple sigue funcionando (salta al soltar). Sin probar en teléfono ni con canción cargada (solo compilación/lint).
+
+## Mezcla por canción (oct 2026)
+- `App.tsx`: al cambiar de canción se guarda en memoria (`mixesRef`, por nombre de archivo de pista) volumen, paneo, mute y solo de la canción que se deja, y se restauran al volver a ella. Solo vive mientras la app está abierta (no se guarda en el dispositivo). Se borra al quitar la canción de la lista. Master sigue siendo global. Sin probar en teléfono.
