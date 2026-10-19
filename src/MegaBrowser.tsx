@@ -9,10 +9,14 @@ type MegaNode = {
   directory?: boolean;
   size?: number;
   children?: MegaNode[];
-  download?: (
-    options: Record<string, unknown>,
-    callback: (error: Error | null, data?: Uint8Array) => void
-  ) => { on: (event: "progress", listener: (info: { bytesLoaded: number; bytesTotal: number }) => void) => unknown };
+  download?: (options: Record<string, unknown>) => DownloadStream;
+};
+
+type DownloadStream = {
+  on(event: "data", listener: (chunk: Uint8Array) => void): unknown;
+  on(event: "end", listener: () => void): unknown;
+  on(event: "error", listener: (error: Error) => void): unknown;
+  on(event: "progress", listener: (info: { bytesLoaded: number; bytesTotal: number }) => void): unknown;
 };
 
 type MegaFolder = MegaNode & {
@@ -37,29 +41,41 @@ const DOWNLOAD_OPTIONS = {
 
 const mb = (bytes: number) => (bytes / 1048576).toFixed(bytes >= 10485760 ? 0 : 1);
 
+/**
+ * Baja el archivo directamente a un solo bloque de memoria del tamaño exacto (antes se juntaban los trozos en una lista
+ * y luego se copiaban de nuevo, lo que duplicaba el uso de memoria durante la descarga).
+ */
 function downloadArchive(item: MegaNode, onProgress: (text: string) => void): Promise<Uint8Array> {
   return new Promise((resolve, reject) => {
-    if (typeof item.download !== "function") {
+    if (typeof item.download !== "function" || !item.size) {
       reject(new Error("La nube no permitió descargar este archivo."));
       return;
     }
+    const size = item.size;
     const started = performance.now();
     let lastShown = 0;
+    let received = 0;
+    const out = new Uint8Array(size);
     // Si el teléfono puede descifrar de forma nativa, se baja el archivo cifrado y se descifra después (mucho más rápido).
     const native = canDecryptNative(item.key);
-    const stream = item.download({ ...DOWNLOAD_OPTIONS, returnCiphertext: native }, (error, data) => {
-      if (error || !data) { reject(error ?? new Error("La descarga llegó vacía.")); return; }
-      if (!native) { resolve(data); return; }
-      onProgress("Descifrando...");
-      decryptMega(new Uint8Array(data.buffer, data.byteOffset, data.byteLength), item.key as Uint8Array).then(resolve, reject);
-    });
-    stream.on("progress", ({ bytesLoaded, bytesTotal }) => {
+    const stream = item.download({ ...DOWNLOAD_OPTIONS, returnCiphertext: native });
+
+    stream.on("data", (chunk) => {
+      if (received + chunk.length > size) return; // protección: nunca escribir fuera del bloque
+      out.set(chunk, received);
+      received += chunk.length;
       const now = performance.now();
       if (now - lastShown < 250) return;
       lastShown = now;
-      const speed = bytesLoaded / 1048576 / Math.max((now - started) / 1000, 0.1);
-      const percent = bytesTotal ? Math.round((bytesLoaded / bytesTotal) * 100) : 0;
-      onProgress(`Descargando ${percent}% · ${mb(bytesLoaded)} de ${mb(bytesTotal)} MB · ${speed.toFixed(1)} MB/s`);
+      const speed = received / 1048576 / Math.max((now - started) / 1000, 0.1);
+      onProgress(`Descargando ${Math.round((received / size) * 100)}% · ${mb(received)} de ${mb(size)} MB · ${speed.toFixed(1)} MB/s`);
+    });
+    stream.on("error", (error) => reject(error));
+    stream.on("end", () => {
+      if (received !== size) { reject(new Error("La descarga llegó incompleta. Inténtalo de nuevo.")); return; }
+      if (!native) { resolve(out); return; }
+      onProgress("Descifrando...");
+      decryptMega(out, item.key as Uint8Array).then(resolve, reject);
     });
   });
 }
@@ -177,21 +193,20 @@ export default function MegaBrowser({ onSongLoaded }: Props) {
     try {
       // Nada se guarda en el teléfono: la canción vive solo en memoria mientras la app está abierta.
       setStatus("Conectando para descargar...");
-      const downloaded = await downloadArchive(item, setStatus);
+      let downloaded: Uint8Array | null = await downloadArchive(item, setStatus);
+      const progress = (done: number, total: number) => setStatus(`Extrayendo pistas · ${done} de ${total}...`);
 
-      let files: File[] = [];
-
+      let files: File[];
       if (isZip) {
-        setStatus("Extrayendo archivos ZIP...");
-        files = await zipToFilesAsync(downloaded);
+        setStatus("Extrayendo pistas...");
+        files = await zipToFilesAsync(downloaded, progress);
       } else {
-        setStatus("Extrayendo archivos RAR...");
-
-        const buffer = new ArrayBuffer(downloaded.byteLength);
-        new Uint8Array(buffer).set(downloaded);
-
-        files = await rarToFiles(new File([buffer], item.name));
+        setStatus("Extrayendo pistas...");
+        const rarFile = new File([downloaded as BlobPart], item.name);
+        downloaded = null; // el navegador ya tiene su copia: se suelta la nuestra antes de extraer
+        files = await rarToFiles(rarFile, progress);
       }
+      downloaded = null; // suelta el archivo completo: solo quedan las pistas
 
       files = sortFiles(files.filter((file) => audioExtensions.test(file.name)));
 

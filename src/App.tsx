@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { memo, useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import "./App.css";
 import MegaBrowser from "./MegaBrowser";
 import LocalImport from "./LocalImport";
@@ -80,6 +80,16 @@ function waitForSeek(audio: HTMLAudioElement): Promise<void> {
     const timer = window.setTimeout(done, 2500);
     audio.addEventListener("seeked", done);
   });
+}
+
+/** Pista de referencia para el reloj y la sincronización: la más larga. */
+function pickLead(active: Track[]): HTMLAudioElement {
+  let lead = active[0].audio;
+  for (const track of active) {
+    const length = track.audio.duration;
+    if (Number.isFinite(length) && (!Number.isFinite(lead.duration) || length > lead.duration)) lead = track.audio;
+  }
+  return lead;
 }
 
 function formatTime(seconds: number) {
@@ -179,6 +189,39 @@ function Icon({ name }: { name: IconName }) {
   };
   return <svg aria-hidden="true" viewBox="0 0 24 24">{paths[name]}</svg>;
 }
+
+type ChannelStripProps = {
+  track: Track;
+  index: number;
+  displayName: string;
+  dimmed: boolean;
+  onChange: (id: number, changes: Partial<Track>) => void;
+  onRemove: (id: number) => void;
+};
+
+/** Un canal del mezclador. Con memo, mover un fader solo vuelve a pintar ese canal (y no los demás ni la pantalla entera). */
+const ChannelStrip = memo(function ChannelStrip({ track, index, displayName, dimmed, onChange, onRemove }: ChannelStripProps) {
+  return (
+    <article className={`channel ${dimmed ? "is-dimmed" : ""}`}>
+      <div className="channel-head">
+        <span>{String(index + 1).padStart(2, "0")}</span>
+        <div className="chip-row">
+          <button className={`chip mute ${track.muted ? "active" : ""}`} onClick={() => onChange(track.id, { muted: !track.muted })} aria-pressed={track.muted} aria-label={`Silenciar ${track.name}`}>M</button>
+          <button className={`chip solo ${track.solo ? "active" : ""}`} onClick={() => onChange(track.id, { solo: !track.solo })} aria-pressed={track.solo} aria-label={`Solo ${track.name}`}>S</button>
+        </div>
+      </div>
+      <div className="fader-wrap">
+        <Fader value={track.volume} onChange={(volume) => onChange(track.id, { volume })} label={`Volumen de ${track.name}`} dimmed={dimmed} />
+      </div>
+      <Pan value={track.pan} label={`Paneo de ${track.name}`} onChange={(pan) => onChange(track.id, { pan })} />
+      <div className="channel-name">
+        <strong title={track.name}>{displayName}</strong>
+        <small>{track.volume}</small>
+      </div>
+      <button className="channel-remove" onClick={() => onRemove(track.id)} aria-label={`Eliminar pista ${track.name}`}>×</button>
+    </article>
+  );
+});
 
 function Artwork({ index }: { index: number }) {
   return (
@@ -478,6 +521,20 @@ export default function App() {
   }
 
   // Tiempo, duración, fin de canción y corrección de desfase entre pistas.
+  const lastSecondRef = useRef(-1);
+  const lastTimeRef = useRef(0);
+  const lastDurationRef = useRef(0);
+  const getProgress = useCallback(() => {
+    const active = tracksRef.current;
+    if (!active.length) return 0;
+    const lead = pickLead(active);
+    let longest = 0;
+    for (const track of active) {
+      const length = track.audio.duration;
+      if (Number.isFinite(length) && length > longest) longest = length;
+    }
+    return longest > 0 ? (lead.currentTime || 0) / longest : 0;
+  }, []);
   useEffect(() => {
     const timer = window.setInterval(() => {
       const active = tracksRef.current;
@@ -488,14 +545,22 @@ export default function App() {
       }
       // La pista de referencia es la más larga: si fuera una corta, su reloj se congelaría al terminar
       // y la corrección de desfase devolvería las demás pistas a ese punto.
-      let lead = active[0].audio;
-      for (const track of active) {
-        const length = track.audio.duration;
-        if (Number.isFinite(length) && (!Number.isFinite(lead.duration) || length > lead.duration)) lead = track.audio;
+      const lead = pickLead(active);
+      // El estado de React (textos de tiempo) solo cambia cuando cambia el segundo que se muestra:
+      // la barra de la forma de onda se mueve aparte, en cada fotograma, sin pasar por React.
+      const now = lead.currentTime || 0;
+      const shownSecond = Math.floor(now);
+      if (shownSecond !== lastSecondRef.current || (!playingRef.current && Math.abs(now - lastTimeRef.current) > 0.02)) {
+        lastSecondRef.current = shownSecond;
+        lastTimeRef.current = now;
+        setCurrentTime(now);
       }
-      setCurrentTime(lead.currentTime || 0);
       const known = active.map((track) => track.audio.duration).filter(Number.isFinite);
-      setDuration(known.length ? Math.max(...known) : 0);
+      const longest = known.length ? Math.max(...known) : 0;
+      if (longest !== lastDurationRef.current) {
+        lastDurationRef.current = longest;
+        setDuration(longest);
+      }
 
       if (!playingRef.current || busyRef.current) return;
       if (active.every((track) => track.audio.ended)) {
@@ -555,6 +620,11 @@ export default function App() {
   const activeIndex = playlist.findIndex((song) => song.id === activeSongId);
   const hasSolo = tracks.some((track) => track.solo);
   const displayNames = trackDisplayNames(tracks.map((track) => track.name));
+  // Manejadores estables (siempre llaman a la versión más reciente) para que los canales con memo no se repinten sin motivo.
+  const trackActions = useRef({ changeTrack, removeTrack });
+  trackActions.current = { changeTrack, removeTrack };
+  const onTrackChange = useCallback((id: number, changes: Partial<Track>) => trackActions.current.changeTrack(id, changes), []);
+  const onTrackRemove = useCallback((id: number) => trackActions.current.removeTrack(id), []);
   const ready = tracks.length > 0 && !resetting;
   const syncLabel = resetting ? "Sincronizando…" : playing ? "En vivo" : ready ? "Pistas sincronizadas" : "Sin canción";
 
@@ -586,29 +656,17 @@ export default function App() {
     <div className="channels-box">
       {tracks.length === 0 && <div className="mixer-empty">Selecciona una canción del repertorio para cargar sus pistas.</div>}
       <div className="channels" hidden={tracks.length === 0}>
-        {tracks.map((track, index) => {
-          const dimmed = track.muted || (hasSolo && !track.solo);
-          return (
-            <article className={`channel ${dimmed ? "is-dimmed" : ""}`} key={track.id}>
-              <div className="channel-head">
-                <span>{String(index + 1).padStart(2, "0")}</span>
-                <div className="chip-row">
-                  <button className={`chip mute ${track.muted ? "active" : ""}`} onClick={() => changeTrack(track.id, { muted: !track.muted })} aria-pressed={track.muted} aria-label={`Silenciar ${track.name}`}>M</button>
-                  <button className={`chip solo ${track.solo ? "active" : ""}`} onClick={() => changeTrack(track.id, { solo: !track.solo })} aria-pressed={track.solo} aria-label={`Solo ${track.name}`}>S</button>
-                </div>
-              </div>
-              <div className="fader-wrap">
-                <Fader value={track.volume} onChange={(volume) => changeTrack(track.id, { volume })} label={`Volumen de ${track.name}`} dimmed={dimmed} />
-              </div>
-              <Pan value={track.pan} label={`Paneo de ${track.name}`} onChange={(pan) => changeTrack(track.id, { pan })} />
-              <div className="channel-name">
-                <strong title={track.name}>{displayNames[index]}</strong>
-                <small>{track.volume}</small>
-              </div>
-              <button className="channel-remove" onClick={() => removeTrack(track.id)} aria-label={`Eliminar pista ${track.name}`}>×</button>
-            </article>
-          );
-        })}
+        {tracks.map((track, index) => (
+          <ChannelStrip
+            key={track.id}
+            track={track}
+            index={index}
+            displayName={displayNames[index]}
+            dimmed={track.muted || (hasSolo && !track.solo)}
+            onChange={onTrackChange}
+            onRemove={onTrackRemove}
+          />
+        ))}
         <article className="channel master">
           <div className="channel-head">MASTER</div>
           <div className="fader-wrap">
@@ -727,6 +785,8 @@ export default function App() {
             <Waveform
               peaks={peaks}
               progress={progress}
+              playing={playing}
+              getProgress={getProgress}
               loading={peaksLoading && !peaks}
               disabled={tracks.length === 0 || duration <= 0}
               onSeek={(fraction) => void seekTo(fraction)}

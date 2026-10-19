@@ -2,39 +2,41 @@ import { useCallback, useEffect, useRef } from "react";
 
 type Props = {
   peaks: Float32Array | null; // valores 0..1
-  progress: number; // 0..1
+  progress: number; // 0..1, se actualiza poco a poco (sirve en pausa y para accesibilidad)
+  playing: boolean;
+  getProgress: () => number; // lectura en vivo (0..1): la barra la consulta en cada fotograma mientras suena
   loading: boolean;
   onSeek: (fraction: number) => void;
   disabled?: boolean;
 };
 
-export default function Waveform({ peaks, progress, loading, onSeek, disabled }: Props) {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
+const BAR = 6;
+const GAP = 4;
+
+/**
+ * La forma de onda se dibuja una sola vez (al cambiar la canción o el tamaño) en dos capas: una apagada y otra
+ * encendida. Mientras suena solo se mueve una variable CSS (--p) en cada fotograma: la capa encendida se recorta
+ * y la línea se desplaza con transform, sin volver a pintar nada ni tocar React.
+ */
+export default function Waveform({ peaks, progress, playing, getProgress, loading, onSeek, disabled }: Props) {
   const wrapRef = useRef<HTMLDivElement>(null);
+  const baseRef = useRef<HTMLCanvasElement>(null);
+  const playedRef = useRef<HTMLCanvasElement>(null);
+  const playingRef = useRef(playing);
+  useEffect(() => { playingRef.current = playing; }, [playing]);
 
   const draw = useCallback(() => {
-    const canvas = canvasRef.current;
     const wrap = wrapRef.current;
-    if (!canvas || !wrap) return;
+    if (!wrap) return;
     const dpr = window.devicePixelRatio || 1;
     const width = wrap.clientWidth;
     const height = wrap.clientHeight;
     if (!width || !height) return;
-    canvas.width = Math.round(width * dpr);
-    canvas.height = Math.round(height * dpr);
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-    ctx.scale(dpr, dpr);
-    ctx.clearRect(0, 0, width, height);
 
     const mid = height / 2;
-    const barWidth = 6;
-    const gap = 4;
-    const bars = Math.floor(width / (barWidth + gap));
-    const playedX = progress * width;
-
+    const bars = Math.floor(width / (BAR + GAP));
+    const amps: number[] = [];
     for (let i = 0; i < bars; i++) {
-      const x = i * (barWidth + gap);
       let amp = 0.04;
       if (peaks && peaks.length) {
         const from = Math.floor((i / bars) * peaks.length);
@@ -43,34 +45,32 @@ export default function Waveform({ peaks, progress, loading, onSeek, disabled }:
         for (let j = from; j < to; j++) max = Math.max(max, peaks[j]);
         amp = Math.max(0.03, max);
       }
-      const h = Math.max(2, amp * (height - 14));
-      const grad = ctx.createLinearGradient(0, mid - h / 2, 0, mid + h / 2);
-      if (x < playedX) { grad.addColorStop(0, "#bfeafb"); grad.addColorStop(1, "#4d9dff"); }
-      else { grad.addColorStop(0, "#c4dfeb"); grad.addColorStop(1, "#4a778f"); }
-      ctx.globalAlpha = x < playedX ? 1 : 0.72;
-      ctx.fillStyle = grad;
-      ctx.beginPath();
-      ctx.roundRect(x, mid - h / 2, barWidth, h, 2);
-      ctx.fill();
-      ctx.globalAlpha = 1;
+      amps.push(amp);
     }
 
-    // línea de reproducción
-    if (peaks || progress > 0) {
-      const x = Math.min(width - 2, Math.max(0, playedX - 1));
-      ctx.fillStyle = "#eaf3ff";
-      ctx.shadowColor = "#69d9f5";
-      ctx.shadowBlur = 8;
-      ctx.fillRect(x, 0, 2, height);
-      ctx.shadowBlur = 0;
-      ctx.beginPath();
-      ctx.moveTo(x - 5, 0);
-      ctx.lineTo(x + 7, 0);
-      ctx.lineTo(x + 1, 7);
-      ctx.closePath();
-      ctx.fill();
-    }
-  }, [peaks, progress]);
+    const paint = (canvas: HTMLCanvasElement | null, top: string, bottom: string, alpha: number) => {
+      if (!canvas) return;
+      canvas.width = Math.round(width * dpr);
+      canvas.height = Math.round(height * dpr);
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return;
+      ctx.scale(dpr, dpr);
+      ctx.globalAlpha = alpha;
+      for (let i = 0; i < bars; i++) {
+        const x = i * (BAR + GAP);
+        const h = Math.max(2, amps[i] * (height - 14));
+        const grad = ctx.createLinearGradient(0, mid - h / 2, 0, mid + h / 2);
+        grad.addColorStop(0, top);
+        grad.addColorStop(1, bottom);
+        ctx.fillStyle = grad;
+        ctx.beginPath();
+        ctx.roundRect(x, mid - h / 2, BAR, h, 2);
+        ctx.fill();
+      }
+    };
+    paint(baseRef.current, "#c4dfeb", "#4a778f", 0.72);
+    paint(playedRef.current, "#bfeafb", "#4d9dff", 1);
+  }, [peaks]);
 
   useEffect(() => {
     draw();
@@ -80,6 +80,28 @@ export default function Waveform({ peaks, progress, loading, onSeek, disabled }:
     observer.observe(wrap);
     return () => observer.disconnect();
   }, [draw]);
+
+  const apply = useCallback((value: number) => {
+    const clamped = Math.min(1, Math.max(0, Number.isFinite(value) ? value : 0));
+    wrapRef.current?.style.setProperty("--p", clamped.toFixed(5));
+  }, []);
+
+  // Mientras suena: una lectura por fotograma (a la frecuencia de la pantalla).
+  useEffect(() => {
+    if (!playing) return;
+    let frame = 0;
+    const tick = () => {
+      apply(getProgress());
+      frame = requestAnimationFrame(tick);
+    };
+    frame = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(frame);
+  }, [playing, getProgress, apply]);
+
+  // En pausa (o al saltar a otro punto) la posición viene del estado.
+  useEffect(() => {
+    if (!playingRef.current) apply(progress);
+  }, [progress, apply]);
 
   function seekFromPointer(clientX: number) {
     const wrap = wrapRef.current;
@@ -107,7 +129,9 @@ export default function Waveform({ peaks, progress, loading, onSeek, disabled }:
         event.preventDefault();
       }}
     >
-      <canvas ref={canvasRef} />
+      <canvas className="wave-base" ref={baseRef} />
+      <canvas className="wave-played" ref={playedRef} />
+      {(peaks || progress > 0) && <div className="wave-head" aria-hidden="true"><i /></div>}
       {loading && <span className="waveform-hint">Analizando forma de onda…</span>}
       {!loading && !peaks && <span className="waveform-hint">Sin canción cargada</span>}
     </div>

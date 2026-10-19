@@ -58,3 +58,16 @@ Sonido del click, salida solo-izquierda por una interfaz USB (AudioBox iTwo no f
 - Panel lateral izquierdo según el diseño del dueño (menu_diseno.rar) pero con el azul marino de la app (el azul claro del original se descartó). Origen "Nube Crescendo" en vez de "MEGA": ningún texto visible nombra a MEGA; los errores del servicio se traducen en friendlyError (MegaBrowser.tsx).
 - MegaBrowser.tsx devuelve dos bloques (subbar de estado/ubicación + lista con scroll); App.tsx pone cabecera y selector. Tocar un ZIP/RAR lo selecciona y muestra "＋ AÑADIR" (evita descargas accidentales). Solo se listan carpetas y ZIP/RAR.
 - En horizontal corto todo el panel hace scroll para dejar espacio a la lista.
+
+## Extracción de ZIP/RAR optimizada (oct 2026)
+- Antes (versión entregada con fflate `unzip` asíncrono): un ZIP de 153 MB con 10 pistas WAV tardaba ~14 s y llegaba a ~3,5 GB de RAM (descomprimía todas a la vez). Ahora (medido en Chromium headless con el mismo ZIP): ~2 s y ~0,6 GB; pistas idénticas (SHA-256).
+- archive.ts: `zipToFilesAsync(Blob | Uint8Array)` lee solo el índice del ZIP (incluye ZIP64) y descomprime cada pista con `DecompressionStream('deflate-raw')` hacia un Blob; las pistas sin compresión se usan sin copiar. Con un archivo del dispositivo el ZIP no se carga entero en memoria. Respaldo: `zipToFilesFallback` (fflate, una pista a la vez) si el navegador no trae DecompressionStream.
+- RAR sigue con libarchive.js (WASM); es más pesado (el archivo entero pasa por el WASM). Sin medir con un RAR grande (no hay forma de crear RAR aquí). Recomendación: guardar los multitracks de la biblioteca como ZIP.
+- Se borró public/__song.zip (archivo de prueba de 2,4 MB que se estaba empaquetando en el APK).
+
+## Fluidez de animaciones (oct 2026)
+- Causa de lo "tosco": cada 150 ms se llamaba a setCurrentTime → toda la app se repintaba y la forma de onda se redibujaba entera (gradientes por barra). Medido simulando un celular (CPU 4× más lento, 8 pistas): ~22 fps en reposo con tareas de hasta 170 ms. Ahora ~58 fps y tareas máx. ~50 ms.
+- Waveform.tsx: dibuja una sola vez dos capas (apagada/encendida); mientras suena solo mueve la variable CSS `--p` en cada requestAnimationFrame (clip-path de la capa encendida + transform de la línea). `getProgress` lee el audio en vivo; `progress` (estado) solo sirve en pausa/accesibilidad.
+- App.tsx: el estado `currentTime` solo cambia al cambiar el segundo mostrado (o en pausa); `ChannelStrip` con memo para que mover un fader solo repinte ese canal; `pickLead` compartido.
+- CSS: se quitó backdrop-filter del fondo de la biblioteca (caro en GPU móvil).
+- MainActivity.java: pide a Android la mayor frecuencia de pantalla disponible (90/120 Hz) con la misma resolución. SIN PROBAR en un teléfono real (solo se compiló contra stubs); si falla la compilación en GitHub Actions, revisar este archivo primero.
