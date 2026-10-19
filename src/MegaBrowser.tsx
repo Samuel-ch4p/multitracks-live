@@ -1,7 +1,7 @@
 import { useState, type ReactNode } from "react";
 import { File as MEGAFile } from "megajs";
 import { audioExtensions, rarToFiles, sortFiles, zipToFilesAsync } from "./archive";
-import { canDecryptNative, decryptMega } from "./megaFast";
+import { canDecryptNative, decryptMega, fastDownload } from "./megaFast";
 
 type MegaNode = {
   name: string;
@@ -10,6 +10,7 @@ type MegaNode = {
   size?: number;
   children?: MegaNode[];
   download?: (options: Record<string, unknown>) => DownloadStream;
+  api?: unknown;
 };
 
 type DownloadStream = {
@@ -45,7 +46,27 @@ const mb = (bytes: number) => (bytes / 1048576).toFixed(bytes >= 10485760 ? 0 : 
  * Baja el archivo directamente a un solo bloque de memoria del tamaño exacto (antes se juntaban los trozos en una lista
  * y luego se copiaban de nuevo, lo que duplicaba el uso de memoria durante la descarga).
  */
-function downloadArchive(item: MegaNode, onProgress: (text: string) => void): Promise<Uint8Array> {
+async function downloadArchive(item: MegaNode, onProgress: (text: string) => void): Promise<Uint8Array> {
+  if (canDecryptNative(item.key) && item.size && item.api) {
+    const started = performance.now();
+    let lastShown = 0;
+    try {
+      return await fastDownload(item as Parameters<typeof fastDownload>[0], (received, total) => {
+        const now = performance.now();
+        if (now - lastShown < 250) return;
+        lastShown = now;
+        const speed = received / 1048576 / Math.max((now - started) / 1000, 0.1);
+        onProgress(`Descargando ${Math.round((received / total) * 100)}% · ${mb(received)} de ${mb(total)} MB · ${speed.toFixed(1)} MB/s`);
+      });
+    } catch (e) {
+      if (/bandwidth/i.test((e as Error).message)) throw e;
+      console.warn("Descarga rápida falló, usando el método alterno", e);
+    }
+  }
+  return downloadArchiveSlow(item, onProgress);
+}
+
+function downloadArchiveSlow(item: MegaNode, onProgress: (text: string) => void): Promise<Uint8Array> {
   return new Promise((resolve, reject) => {
     if (typeof item.download !== "function" || !item.size) {
       reject(new Error("La nube no permitió descargar este archivo."));

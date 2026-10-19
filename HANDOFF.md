@@ -71,3 +71,6 @@ Sonido del click, salida solo-izquierda por una interfaz USB (AudioBox iTwo no f
 - App.tsx: el estado `currentTime` solo cambia al cambiar el segundo mostrado (o en pausa); `ChannelStrip` con memo para que mover un fader solo repinte ese canal; `pickLead` compartido.
 - CSS: se quitó backdrop-filter del fondo de la biblioteca (caro en GPU móvil).
 - MainActivity.java: pide a Android la mayor frecuencia de pantalla disponible (90/120 Hz) con la misma resolución. SIN PROBAR en un teléfono real (solo se compiló contra stubs); si falla la compilación en GitHub Actions, revisar este archivo primero.
+
+## Descarga propia (megaFast.fastDownload)
+Pide la URL una vez (`a:"g"`), baja trozos de 4 MB con 24 conexiones directo a un Uint8Array exacto, descifra cada trozo con WebCrypto al llegar (solapa descarga y descifrado), reintenta 4 veces; si falla cae al método anterior de megajs. Probado con servidor simulado (descarga idéntica con fallos forzados). Falta medir MB/s en el celular.

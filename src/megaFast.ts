@@ -30,3 +30,96 @@ export async function decryptMega(
   }
   return data;
 }
+
+type ApiNode = {
+  size?: number;
+  key?: unknown;
+  nodeId?: string;
+  downloadId?: string | string[];
+  api: { request: (req: Record<string, unknown>, cb: (err: Error | null, res: { g?: string; s?: number }) => void) => void };
+};
+
+const CHUNK = 4 * 1024 * 1024; // múltiplo de 16
+const CONNECTIONS = 24;
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/**
+ * Descarga propia: pide la dirección una sola vez y baja trozos de 4 MB por 24 conexiones a la vez,
+ * escribiendo cada uno directo en su lugar de la memoria y descifrándolo apenas llega
+ * (la descarga y el descifrado se solapan; no pasa por la emulación de streams de la librería).
+ */
+export async function fastDownload(
+  item: ApiNode,
+  onProgress: (received: number, total: number) => void
+): Promise<Uint8Array> {
+  const key = item.key as Uint8Array;
+  const req: Record<string, unknown> = { a: "g", g: 1, ssl: 2 };
+  if (item.nodeId) req.n = item.nodeId;
+  else if (Array.isArray(item.downloadId)) { req._querystring = { n: item.downloadId[0] }; req.n = item.downloadId[1]; }
+  else req.p = item.downloadId;
+
+  const res = await new Promise<{ g?: string; s?: number }>((resolve, reject) =>
+    item.api.request(req, (err, r) => (err ? reject(err) : resolve(r)))
+  );
+  if (typeof res.g !== "string" || !res.g.startsWith("http") || !res.s) throw new Error("La nube no entregó la descarga.");
+  const url = res.g;
+  const size = res.s;
+  const out = new Uint8Array(size);
+
+  const raw = new Uint8Array(16);
+  for (let i = 0; i < 16; i++) raw[i] = key[i] ^ key[16 + i];
+  const aes = await crypto.subtle.importKey("raw", raw, "AES-CTR", false, ["decrypt"]);
+  const decryptAt = async (start: number, end: number) => {
+    const counter = new Uint8Array(16);
+    counter.set(key.subarray(16, 24), 0);
+    new DataView(counter.buffer).setBigUint64(8, BigInt(start / 16));
+    const plain = await crypto.subtle.decrypt({ name: "AES-CTR", counter, length: 64 }, aes, out.subarray(start, end) as BufferSource);
+    out.set(new Uint8Array(plain), start);
+  };
+
+  let received = 0;
+  const total = Math.ceil(size / CHUNK);
+  let next = 0;
+  let failed: Error | null = null;
+
+  const fetchChunk = async (index: number) => {
+    const start = index * CHUNK;
+    const end = Math.min(size, start + CHUNK);
+    for (let attempt = 0; ; attempt++) {
+      let got = start;
+      try {
+        const resp = await fetch(`${url}/${start}-${end - 1}`);
+        if (resp.status === 509) throw Object.assign(new Error("Bandwidth limit reached"), { fatal: true });
+        if (!resp.ok || !resp.body) throw new Error(`status ${resp.status}`);
+        const reader = resp.body.getReader();
+        for (;;) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          if (got + value.length > end) throw new Error("respuesta demasiado larga");
+          out.set(value, got);
+          got += value.length;
+          received += value.length;
+          onProgress(received, size);
+        }
+        if (got !== end) throw new Error("trozo incompleto");
+        await decryptAt(start, end);
+        return;
+      } catch (e) {
+        received -= got - start; // se vuelve a bajar el trozo completo
+        if ((e as { fatal?: boolean }).fatal || attempt >= 4) throw e;
+        await sleep(400 * (attempt + 1));
+      }
+    }
+  };
+
+  const worker = async () => {
+    while (!failed && next < total) {
+      const index = next++;
+      try { await fetchChunk(index); } catch (e) { failed = e as Error; return; }
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(CONNECTIONS, total) }, worker));
+  if (failed) throw failed;
+  return out;
+}
