@@ -40,6 +40,8 @@ const DOWNLOAD_OPTIONS = {
   maxChunkSize: 8 * 1024 * 1024,
 };
 
+let downloadInFlight = false;
+
 const mb = (bytes: number) => (bytes / 1048576).toFixed(bytes >= 10485760 ? 0 : 1);
 
 /**
@@ -111,6 +113,9 @@ function friendlyError(err: unknown, fallback: string): string {
   }
   if (/failed to fetch|network|load failed|timeout|abort/i.test(message)) {
     return "No pudimos conectar con la Nube Crescendo. Comprueba tu conexión.";
+  }
+  if (err instanceof RangeError || /allocation|out of memory|memoria/i.test(message)) {
+    return "Este multitrack es demasiado grande para la memoria del dispositivo. Cierra otras apps e inténtalo de nuevo.";
   }
   const clean = message.replace(/mega(\.nz|js)?/gi, "la nube").trim();
   return clean || fallback;
@@ -208,6 +213,12 @@ export default function MegaBrowser({ onSongLoaded }: Props) {
       return;
     }
 
+    // El panel se desmonta al cerrarse: sin esta guarda, reabrirlo permitía iniciar una segunda descarga grande en paralelo.
+    if (downloadInFlight) {
+      setError("Ya hay una canción descargándose. Espera a que termine.");
+      return;
+    }
+    downloadInFlight = true;
     setAdding(true);
     setError("");
 
@@ -245,6 +256,7 @@ export default function MegaBrowser({ onSongLoaded }: Props) {
       setError(friendlyError(err, "No se pudo extraer el archivo."));
       setStatus("");
     } finally {
+      downloadInFlight = false;
       setAdding(false);
     }
   }

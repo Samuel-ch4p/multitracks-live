@@ -82,7 +82,8 @@ export default function Click({ metronome, onClose }: Props) {
                 max={BPM_MAX}
                 value={draft ?? String(state.bpm)}
                 aria-label="BPM"
-                onFocus={(event) => event.target.select()}
+                placeholder={String(state.bpm)}
+                onFocus={() => setDraft("")}
                 onChange={(event) => setDraft(event.target.value)}
                 onBlur={commitDraft}
                 onKeyDown={(event) => { if (event.key === "Enter") event.currentTarget.blur(); }}

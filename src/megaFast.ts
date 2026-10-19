@@ -41,6 +41,7 @@ type ApiNode = {
 
 const CHUNK = 4 * 1024 * 1024; // múltiplo de 16
 const CONNECTIONS = 24;
+const STALL_MS = 20000; // sin recibir un solo byte durante este tiempo, la conexión se considera caída
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -88,13 +89,19 @@ export async function fastDownload(
     const end = Math.min(size, start + CHUNK);
     for (let attempt = 0; ; attempt++) {
       let got = start;
+      // Si la conexión se queda colgada sin cortarse, se aborta y el trozo se reintenta (antes la descarga podía quedar congelada).
+      const controller = new AbortController();
+      let stall = setTimeout(() => controller.abort(), STALL_MS);
       try {
-        const resp = await fetch(`${url}/${start}-${end - 1}`);
+        // no-store: el navegador no debe dejar copias de la descarga en su caché del teléfono.
+        const resp = await fetch(`${url}/${start}-${end - 1}`, { signal: controller.signal, cache: "no-store" });
         if (resp.status === 509) throw Object.assign(new Error("Bandwidth limit reached"), { fatal: true });
         if (!resp.ok || !resp.body) throw new Error(`status ${resp.status}`);
         const reader = resp.body.getReader();
         for (;;) {
           const { done, value } = await reader.read();
+          clearTimeout(stall);
+          stall = setTimeout(() => controller.abort(), STALL_MS);
           if (done) break;
           if (got + value.length > end) throw new Error("respuesta demasiado larga");
           out.set(value, got);
@@ -109,6 +116,8 @@ export async function fastDownload(
         received -= got - start; // se vuelve a bajar el trozo completo
         if ((e as { fatal?: boolean }).fatal || attempt >= 4) throw e;
         await sleep(400 * (attempt + 1));
+      } finally {
+        clearTimeout(stall);
       }
     }
   };

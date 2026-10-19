@@ -74,3 +74,24 @@ Sonido del click, salida solo-izquierda por una interfaz USB (AudioBox iTwo no f
 
 ## Descarga propia (megaFast.fastDownload)
 Pide la URL una vez (`a:"g"`), baja trozos de 4 MB con 24 conexiones directo a un Uint8Array exacto, descifra cada trozo con WebCrypto al llegar (solapa descarga y descifrado), reintenta 4 veces; si falla cae al método anterior de megajs. Probado con servidor simulado (descarga idéntica con fallos forzados). Falta medir MB/s en el celular.
+
+## Revisión general (oct 2026)
+Hecho:
+- Borrado `src/songCache.ts` (caché IndexedDB de canciones, sin uso pero contradecía la regla de no guardar nada en el dispositivo) y `src/__old_bench.ts` (código muerto). `main.tsx` conserva la limpieza de la BD vieja.
+- `megaFast.ts`: cada trozo se pide con `cache: "no-store"` (nada queda en la caché HTTP del WebView) y con tiempo máximo de inactividad de 20 s (AbortController): antes una conexión colgada congelaba la descarga; ahora se aborta y el trozo se reintenta.
+- `MegaBrowser.tsx`: guarda a nivel de módulo contra descargas simultáneas (el panel se desmonta al cerrarse y se podía lanzar una segunda descarga grande en paralelo → riesgo de quedarse sin RAM); mensaje claro cuando no hay memoria (RangeError).
+- `App.tsx`: al quitar la última pista mientras suena, ya no queda "REPRODUCIENDO" con el botón bloqueado y la pantalla encendida; al quitar la última canción ya no queda pegado "Analizando forma de onda…".
+- Borrado `capacitor.config.json` de la raíz: `capacitor.config.ts` tiene prioridad y el .json estaba desactualizado (otro color y sin edge-to-edge).
+Pendiente / por decidir (ver informe): botón de cancelar descarga, memoria con ZIP >500 MB, nombres CP437 en ZIP, espera de `readyState` antes de reproducir, `src/assets/pads/` sin uso (3 MB), assets sin uso en `public/`.
+NO probado: teléfono real, Gradle/APK, RAR (no hay forma de generarlos aquí), descarga real desde la nube.
+
+## Pads sostenidos y menores (oct 2026)
+- Añadidos 12 ciclos OGG de 32 s en `public/pads/`: Cs, Ds, Fs, Gs, As (♯) y Cm, Dm, Em, Fm, Gm, Am, Bm (menores), hechos de los MP3 del dueño (`tools/make_pad_loops_extra.mjs`, versión Node de make_pad_loops.py; usa ffmpeg). Registrados en `SAMPLES` de `padEngine.ts`; los botones ♯ y m ya están habilitados.
+- No existen acordes sostenido+menor: al activar uno se apaga el otro (antes se apagaban ambos). E♯ y B♯ quedan deshabilitados (son F y C).
+- Memoria: ahora hay 19 audios (~11 MB decodificado c/u). `preload()` solo carga el acorde elegido y la caché guarda máx. 4.
+- Probado en navegador (vista previa de producción): los 12 OGG decodifican (32 s) y los botones cambian a C♯ y Bm. NO probado: el sonido real/empalme al oído en el teléfono.
+
+## Correcciones táctiles (oct 2026, probado por el dueño en teléfono: pads OK)
+- `Fader.tsx`: con el dedo, tocar ya no mueve el fader hasta que el gesto sea vertical (>8 px y más vertical que horizontal); un toque corto y quieto sí salta a esa altura. Así se desliza el mezclador de lado por encima de los faders sin cambiar volúmenes. Mouse: inmediato como antes. `Pan.tsx` sigue con el comportamiento anterior (touch-action: none, mueve al tocar).
+- Menú "Cortar/Copiar/Pegar/Seleccionar todo": lo causaba `onFocus → select()` del campo BPM de `Click.tsx` (ahora al enfocar queda vacío con el BPM actual de marcador) y `user-select: text` en el panel de biblioteca y el cajón (quitado; solo los campos de texto lo conservan). `-webkit-touch-callout: none` en `.app`.
+- SIN probar en teléfono real tras este cambio.

@@ -511,6 +511,8 @@ export default function App() {
     const next = tracksRef.current.filter((item) => item.id !== id);
     tracksRef.current = next;
     setTracks(next);
+    // Sin pistas no hay nada sonando: si no, el estado quedaba en "REPRODUCIENDO" con el botón bloqueado y la pantalla encendida.
+    if (next.length === 0) setPlayState(false, false);
     setStatusMessage("Pista eliminada del mezclador.");
   }
 
@@ -594,7 +596,10 @@ export default function App() {
   // Forma de onda de la canción activa.
   useEffect(() => {
     const song = playlistRef.current.find((item) => item.id === activeSongId);
-    if (!song) return;
+    if (!song) {
+      setPeaksLoading(false); // sin canción activa no hay nada que analizar (evita dejar el aviso "Analizando…" pegado)
+      return;
+    }
     let cancelled = false;
     setPeaksLoading(true);
     computePeaks(song.files, PEAK_BUCKETS, () => cancelled, (partial) => {

@@ -26,6 +26,18 @@ const SAMPLES: Record<string, string> = {
   G: "G.ogg",
   A: "A.ogg",
   B: "B.ogg",
+  "C♯": "Cs.ogg",
+  "D♯": "Ds.ogg",
+  "F♯": "Fs.ogg",
+  "G♯": "Gs.ogg",
+  "A♯": "As.ogg",
+  Cm: "Cm.ogg",
+  Dm: "Dm.ogg",
+  Em: "Em.ogg",
+  Fm: "Fm.ogg",
+  Gm: "Gm.ogg",
+  Am: "Am.ogg",
+  Bm: "Bm.ogg",
 };
 
 export const hasChord = (note: PadNote, sharp: boolean, minor: boolean) => chordName(note, sharp, minor) in SAMPLES;
@@ -108,7 +120,11 @@ export class PadEngine {
   /** Cambia nota, sostenido, menor o volumen. Si está sonando, el acorde cambia con cruce suave. */
   set(changes: Partial<PadSettings>) {
     const before = chordName(this.settings.note, this.settings.sharp, this.settings.minor);
-    this.settings = sanitize(changes, this.settings);
+    // No hay acordes sostenido + menor: al activar uno se apaga el otro (antes se apagaban los dos).
+    const adjusted = { ...changes };
+    if (adjusted.sharp === true && adjusted.minor === undefined) adjusted.minor = false;
+    if (adjusted.minor === true && adjusted.sharp === undefined) adjusted.sharp = false;
+    this.settings = sanitize(adjusted, this.settings);
     this.applyVolume();
     const after = chordName(this.settings.note, this.settings.sharp, this.settings.minor);
     this.commit();
@@ -135,11 +151,9 @@ export class PadEngine {
     } catch {
       return;
     }
-    void (async () => {
-      for (const key of Object.keys(SAMPLES)) {
-        try { await this.load(key); } catch { /* se reintenta al tocar */ }
-      }
-    })();
+    // Solo el acorde elegido: cada audio decodificado ocupa ~11 MB y ahora hay 19.
+    const { note, sharp, minor } = this.settings;
+    this.load(chordName(note, sharp, minor)).catch(() => { /* se reintenta al tocar */ });
   }
 
   async start() {
@@ -223,7 +237,11 @@ export class PadEngine {
       const response = await fetch(`${import.meta.env.BASE_URL}pads/${file}`);
       if (!response.ok) throw new Error(`No se pudo leer pads/${file}.`);
       const buffer = await ctx.decodeAudioData(await response.arrayBuffer());
-      if (this.ctx === ctx) this.buffers.set(key, buffer);
+      if (this.ctx === ctx) {
+        this.buffers.set(key, buffer);
+        // Máximo 4 acordes en memoria; el que suena conserva su propia referencia.
+        while (this.buffers.size > 4) this.buffers.delete(this.buffers.keys().next().value as string);
+      }
       return buffer;
     })();
     this.loads.set(key, task);
