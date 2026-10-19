@@ -1,9 +1,0 @@
-{
-  "appId": "com.redline.multitracks",
-  "appName": "Crescendo Live",
-  "webDir": "dist",
-  "backgroundColor": "#050506",
-  "android": {
-    "allowMixedContent": false
-  }
-}
