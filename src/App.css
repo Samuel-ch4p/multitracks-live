@@ -492,9 +492,11 @@
 .channels[hidden] { display: none; }
 
 /* ---------- Pantalla de inicio ---------- */
-.splash { position: fixed; inset: 0; z-index: 100; display: grid; place-items: center; overflow: hidden; background: radial-gradient(90% 70% at 50% 38%, #0d2547 0%, #07162b 48%, #030a14 100%); color: #eaf3fb; animation: splash-bg .6s ease both; }
+.splash { position: fixed; inset: 0; z-index: 100; display: grid; place-items: center; overflow: hidden; background: #07162b; color: #eaf3fb; }
+/* El degradado entra suavemente SOBRE el azul liso #07162b (igual al arranque del sistema): el primer fotograma coincide y no hay salto. */
+.splash::before { content: ""; position: absolute; inset: 0; background: radial-gradient(90% 70% at 50% 38%, #0d2547 0%, #07162b 48%, #030a14 100%); animation: splash-bg .6s ease both; }
 .splash.is-leaving { opacity: 0; transition: opacity .5s ease; pointer-events: none; }
-.splash-center { display: flex; flex-direction: column; align-items: center; gap: 22px; padding: 24px; }
+.splash-center { position: relative; display: flex; flex-direction: column; align-items: center; gap: 22px; padding: 24px; }
 .splash-emblem { position: relative; width: min(46vmin, 230px); aspect-ratio: 1; opacity: 0; animation: emblem-in 1.3s cubic-bezier(.2, .8, .25, 1) .3s forwards; }
 .splash-emblem img { width: 100%; height: 100%; display: block; filter: drop-shadow(0 0 22px rgba(120, 180, 255, .28)); }
 .splash-emblem i { position: absolute; inset: 0; -webkit-mask: var(--emblem) center / contain no-repeat; mask: var(--emblem) center / contain no-repeat; background: linear-gradient(105deg, transparent 38%, rgba(255, 255, 255, .95) 50%, transparent 62%) -160% 0 / 250% 100% no-repeat; animation: emblem-shine 1.6s ease 1.6s 1 forwards; }
@@ -508,7 +510,7 @@
 @keyframes emblem-shine { to { background-position: 160% 0; } }
 @keyframes title-in { from { opacity: 0; transform: translateY(8px); letter-spacing: .3em; } to { opacity: 1; transform: none; } }
 @media (prefers-reduced-motion: reduce) {
-  .splash *, .splash { animation-duration: .01ms !important; animation-delay: 0s !important; }
+  .splash *, .splash, .splash::before { animation-duration: .01ms !important; animation-delay: 0s !important; }
 }
 
 /* ---------- Pads ---------- */

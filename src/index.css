@@ -20,3 +20,6 @@ body {
 }
 
 button, input { font: inherit; }
+
+/* Antes de que React pinte, el mismo azul del arranque (evita ver el degradado de la app un instante). */
+#root:empty { background: #07162b; }

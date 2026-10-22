@@ -104,3 +104,10 @@ NO probado: teléfono real, Gradle/APK, RAR (no hay forma de generarlos aquí), 
 
 ## Mezcla por canción (oct 2026)
 - `App.tsx`: al cambiar de canción se guarda en memoria (`mixesRef`, por nombre de archivo de pista) volumen, paneo, mute y solo de la canción que se deja, y se restauran al volver a ella. Solo vive mientras la app está abierta (no se guarda en el dispositivo). Se borra al quitar la canción de la lista. Master sigue siendo global. Sin probar en teléfono.
+
+## Arranque sin saltos (oct 2026)
+- Color único `splash_bg` = #07162B (colors.xml; el mismo en `capacitor.config.ts` backgroundColor, `index.html` theme-color, windowBackground de los temas y `.splash` en App.css). `redline_bg` (#050C16) sigue para barras de estado/navegación.
+- Tema de lanzamiento `AppTheme.NoActionBarLaunch` (hereda Theme.SplashScreen): ya no usa `drawable/splash.png`; fondo azul liso + icono `drawable/splash_transparent.xml` (vector vacío). `values-v31/styles.xml` (Android 12+) añade los atributos android:windowSplashScreen* y duración 0 (el sistema puede ignorar la duración).
+- `Splash.tsx`/App.css: `.splash` es azul liso #07162b y el degradado radial entra con fundido en `::before` (antes todo el splash nacía en opacidad 0 y dejaba ver el degradado de la app). `#root:empty` (index.css) pinta el mismo azul antes de que React monte.
+- `@capacitor/splash-screen` NO está instalado ni se añadió. Los `splash.png` de res/drawable-* quedaron sin uso (se pueden borrar; `npm run assets` los regenera).
+- NO verificado: apariencia en teléfono real (Android 12+ y 11-) ni compilación de Gradle/aapt2.
