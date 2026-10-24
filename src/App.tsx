@@ -367,7 +367,8 @@ export default function App() {
       const AudioContextClass = window.AudioContext ||
         (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
       if (!AudioContextClass) throw new Error("Este navegador no admite Web Audio API.");
-      const context = new AudioContextClass();
+      // "playback": buffers de salida más grandes = muchas menos interrupciones en celulares modestos (aquí no hay instrumento en vivo).
+      const context = new AudioContextClass({ latencyHint: "playback" });
       const master = context.createGain();
       master.gain.value = masterVolumeRef.current / 100;
       master.connect(context.destination);
@@ -682,9 +683,11 @@ export default function App() {
         return;
       }
       if (lead.ended) return;
+      // Si alguna pista está cargando/buscando, no se corrige nada: mover pistas en ese momento solo causa más cortes.
+      if (active.some((track) => track.audio.seeking || (!track.audio.ended && track.audio.readyState < 3))) return;
       for (const track of active) {
         if (track.audio === lead) continue;
-        if (!track.audio.ended && Math.abs(track.audio.currentTime - lead.currentTime) > 0.08) {
+        if (!track.audio.ended && Math.abs(track.audio.currentTime - lead.currentTime) > 0.12) {
           try { track.audio.currentTime = lead.currentTime; } catch { /* aún cargando */ }
         }
       }
@@ -726,7 +729,7 @@ export default function App() {
     }
     let cancelled = false;
     setPeaksLoading(true);
-    const job = computePeaks(song.files, PEAK_BUCKETS, () => cancelled, (partial) => {
+    const job = computePeaks(song.files, PEAK_BUCKETS, () => cancelled, () => playingRef.current, (partial) => {
       if (!cancelled) setPeaks(partial);
     }, (file, stats) => {
       statsRef.current.set(file, stats);

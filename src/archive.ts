@@ -334,6 +334,8 @@ export async function computePeaks(
   files: File[],
   buckets: number,
   isCancelled: () => boolean,
+  /** Mientras devuelva true (suena la canción) el análisis espera: el audio tiene prioridad sobre el procesador y la memoria. */
+  shouldWait: () => boolean,
   onProgress?: (peaks: Float32Array) => void,
   onStats?: (file: File, stats: TrackStats) => void
 ): Promise<Float32Array | null> {
@@ -344,6 +346,7 @@ export async function computePeaks(
   const decoder = new OfflineAudioContext(1, 1, 22050);
 
   for (const file of files) {
+    while (shouldWait() && !isCancelled()) await new Promise((resolve) => setTimeout(resolve, 400));
     if (isCancelled()) return null;
     try {
       // WAV: se lee directo por tandas (sin decodificar, sin límite de tamaño, casi sin memoria).

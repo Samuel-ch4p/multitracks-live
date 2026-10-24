@@ -4,10 +4,17 @@ import { panTaps, type Layout } from "./panLaw.ts";
  * Cadena de cada pista (todas iguales, ninguna se salta el paneo):
  *   fuente → entrada (siempre 2 canales) → separador → matriz de paneo (4 ganancias) → unión → normalización → fader → destino
  * "normalización" y "fader" son ganancias separadas: el fader del usuario no se toca al normalizar.
+ * Optimización para multitracks grandes (29+ pistas en un celular): cuando una pista estéreo está en el centro la matriz
+ * de paneo es la identidad, así que se salta (entrada → normalización directo) y el separador, las 4 ganancias y la unión
+ * dejan de procesarse. El sonido es idéntico; al mover el paneo se vuelve a conectar la cadena completa.
  */
 export type TrackGraph = {
   input: GainNode;
   taps: [GainNode, GainNode, GainNode, GainNode];
+  splitter: ChannelSplitterNode;
+  merger: ChannelMergerNode;
+  /** true = la matriz de paneo está saltada (identidad). */
+  bypassed: boolean;
   norm: GainNode;
   fader: GainNode;
   /** Solo observa el nivel (post-fader) para el medidor; no altera el audio. */
@@ -48,12 +55,24 @@ export function buildTrackGraph(ctx: BaseAudioContext, source: AudioNode, destin
 
   const values = panTaps(0, "stereo");
   taps.forEach((tap, i) => { tap.gain.value = values[i]; });
-  return { input, taps, norm, fader, meter, nodes: [input, splitter, merger, ...taps, norm, fader, meter] };
+  return { input, taps, splitter, merger, bypassed: false, norm, fader, meter, nodes: [input, splitter, merger, ...taps, norm, fader, meter] };
 }
 
 /** Aplica el paneo. Con `ramp` (segundos) lo hace suave; sin él, de inmediato (pruebas fuera de línea). */
 export function applyPan(graph: TrackGraph, pan: number, layout: Layout, now?: number, ramp = 0.015) {
   const values = panTaps(pan, layout);
+  const identity = values[0] === 1 && values[1] === 0 && values[2] === 0 && values[3] === 1;
+  if (identity && !graph.bypassed) {
+    graph.input.connect(graph.norm);
+    graph.input.disconnect(graph.splitter);
+    graph.merger.disconnect(graph.norm);
+    graph.bypassed = true;
+  } else if (!identity && graph.bypassed) {
+    graph.merger.connect(graph.norm);
+    graph.input.connect(graph.splitter);
+    graph.input.disconnect(graph.norm);
+    graph.bypassed = false;
+  }
   graph.taps.forEach((tap, i) => {
     if (now === undefined) tap.gain.value = values[i];
     else tap.gain.setTargetAtTime(values[i], now, ramp);
