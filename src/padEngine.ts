@@ -14,30 +14,45 @@ export function chordName(note: PadNote, sharp: boolean, minor: boolean) {
 }
 
 /**
- * Audios de los pads (ciclos cortos sin corte, en public/pads/).
- * Para añadir más (menores, sostenidos) basta con poner el archivo y una línea aquí:
- *   "Cm": "Cm.ogg", "C♯": "Cs.ogg", "C♯m": "Csm.ogg"
+ * Audios de los pads (ciclos de 32 s sin corte, en public/pads/). Cada acorde apunta a un archivo y, si hace falta,
+ * a una velocidad de reproducción (un semitono = 2^(1/12)).
+ *  - Mayores, sostenidos y menores: hay audio propio.
+ *  - Sostenido + menor (C♯m, D♯m, F♯m, G♯m, A♯m): no hay audio; se toca el menor de la nota de abajo UN semitono más agudo.
+ *    Para usar un audio real basta con cambiar la entrada por { file: "Csm.ogg" } y poner el archivo en public/pads/.
+ *  - E♯ y B♯ no existen como notas distintas: son F y C (enarmónicos).
  */
-const SAMPLES: Record<string, string> = {
-  C: "C.ogg",
-  D: "D.ogg",
-  E: "E.ogg",
-  F: "F.ogg",
-  G: "G.ogg",
-  A: "A.ogg",
-  B: "B.ogg",
-  "C♯": "Cs.ogg",
-  "D♯": "Ds.ogg",
-  "F♯": "Fs.ogg",
-  "G♯": "Gs.ogg",
-  "A♯": "As.ogg",
-  Cm: "Cm.ogg",
-  Dm: "Dm.ogg",
-  Em: "Em.ogg",
-  Fm: "Fm.ogg",
-  Gm: "Gm.ogg",
-  Am: "Am.ogg",
-  Bm: "Bm.ogg",
+type Sample = { file: string; rate?: number };
+const SEMITONE = Math.pow(2, 1 / 12);
+const SAMPLES: Record<string, Sample> = {
+  C: { file: "C.ogg" },
+  D: { file: "D.ogg" },
+  E: { file: "E.ogg" },
+  F: { file: "F.ogg" },
+  G: { file: "G.ogg" },
+  A: { file: "A.ogg" },
+  B: { file: "B.ogg" },
+  "C♯": { file: "Cs.ogg" },
+  "D♯": { file: "Ds.ogg" },
+  "F♯": { file: "Fs.ogg" },
+  "G♯": { file: "Gs.ogg" },
+  "A♯": { file: "As.ogg" },
+  Cm: { file: "Cm.ogg" },
+  Dm: { file: "Dm.ogg" },
+  Em: { file: "Em.ogg" },
+  Fm: { file: "Fm.ogg" },
+  Gm: { file: "Gm.ogg" },
+  Am: { file: "Am.ogg" },
+  Bm: { file: "Bm.ogg" },
+  "C♯m": { file: "Cm.ogg", rate: SEMITONE },
+  "D♯m": { file: "Dm.ogg", rate: SEMITONE },
+  "F♯m": { file: "Fm.ogg", rate: SEMITONE },
+  "G♯m": { file: "Gm.ogg", rate: SEMITONE },
+  "A♯m": { file: "Am.ogg", rate: SEMITONE },
+  // Enarmónicos: se muestran como E♯ / B♯ pero suenan como F / C.
+  "E♯": { file: "F.ogg" },
+  "B♯": { file: "C.ogg" },
+  "E♯m": { file: "Fm.ogg" },
+  "B♯m": { file: "Cm.ogg" },
 };
 
 export const hasChord = (note: PadNote, sharp: boolean, minor: boolean) => chordName(note, sharp, minor) in SAMPLES;
@@ -120,11 +135,7 @@ export class PadEngine {
   /** Cambia nota, sostenido, menor o volumen. Si está sonando, el acorde cambia con cruce suave. */
   set(changes: Partial<PadSettings>) {
     const before = chordName(this.settings.note, this.settings.sharp, this.settings.minor);
-    // No hay acordes sostenido + menor: al activar uno se apaga el otro (antes se apagaban los dos).
-    const adjusted = { ...changes };
-    if (adjusted.sharp === true && adjusted.minor === undefined) adjusted.minor = false;
-    if (adjusted.minor === true && adjusted.sharp === undefined) adjusted.sharp = false;
-    this.settings = sanitize(adjusted, this.settings);
+    this.settings = sanitize(changes, this.settings);
     this.applyVolume();
     const after = chordName(this.settings.note, this.settings.sharp, this.settings.minor);
     this.commit();
@@ -153,7 +164,7 @@ export class PadEngine {
     }
     // Solo el acorde elegido: cada audio decodificado ocupa ~11 MB y ahora hay 19.
     const { note, sharp, minor } = this.settings;
-    this.load(chordName(note, sharp, minor)).catch(() => { /* se reintenta al tocar */ });
+    this.load(SAMPLES[chordName(note, sharp, minor)].file).catch(() => { /* se reintenta al tocar */ });
   }
 
   async start() {
@@ -163,14 +174,16 @@ export class PadEngine {
       const ctx = this.ensureContext();
       if (this.suspendTimer !== null) { window.clearTimeout(this.suspendTimer); this.suspendTimer = null; }
       const resumed = ctx.resume();
-      if (!this.buffers.has(key)) this.commit({ loading: true });
-      const buffer = await this.load(key);
+      const sample = SAMPLES[key];
+      if (!sample) throw new Error(`No hay audio para ${key}.`);
+      if (!this.buffers.has(sample.file)) this.commit({ loading: true });
+      const buffer = await this.load(sample.file);
       await resumed;
       if (id !== this.runId) return; // llegó otro toque mientras cargaba
       const now = ctx.currentTime;
       const crossing = this.voice !== null;
       this.releaseVoice(now, FADE_CHANGE);
-      this.voice = this.createVoice(ctx, buffer, now, crossing ? FADE_CHANGE : FADE_IN);
+      this.voice = this.createVoice(ctx, buffer, now, crossing ? FADE_CHANGE : FADE_IN, sample.rate ?? 1);
       this.commit({ playing: true, loading: false });
     } catch (error) {
       console.error("No se pudo iniciar el pad:", error);
@@ -225,14 +238,14 @@ export class PadEngine {
     return ctx;
   }
 
-  private load(key: string): Promise<AudioBuffer> {
+  /** Carga y decodifica un archivo de pad (la caché es por archivo: C♯m y Cm comparten el mismo). */
+  private load(file: string): Promise<AudioBuffer> {
+    const key = file;
     const cached = this.buffers.get(key);
     if (cached) return Promise.resolve(cached);
     const pending = this.loads.get(key);
     if (pending) return pending;
     const ctx = this.ensureContext();
-    const file = SAMPLES[key];
-    if (!file) return Promise.reject(new Error(`No hay audio para ${key}.`));
     const task = (async () => {
       const response = await fetch(`${import.meta.env.BASE_URL}pads/${file}`);
       if (!response.ok) throw new Error(`No se pudo leer pads/${file}.`);
@@ -240,7 +253,11 @@ export class PadEngine {
       if (this.ctx === ctx) {
         this.buffers.set(key, buffer);
         // Máximo 4 acordes en memoria; el que suena conserva su propia referencia.
-        while (this.buffers.size > 4) this.buffers.delete(this.buffers.keys().next().value as string);
+        while (this.buffers.size > 4) {
+          const oldest = this.buffers.keys().next().value as string;
+          this.buffers.delete(oldest);
+          this.loads.delete(oldest); // si no, la promesa vieja seguiría reteniendo el audio en memoria
+        }
       }
       return buffer;
     })();
@@ -257,7 +274,7 @@ export class PadEngine {
     else this.out.gain.setTargetAtTime(gain, ctx.currentTime, 0.05);
   }
 
-  private createVoice(ctx: AudioContext, buffer: AudioBuffer, time: number, fadeIn: number): Voice {
+  private createVoice(ctx: AudioContext, buffer: AudioBuffer, time: number, fadeIn: number, rate: number): Voice {
     // Entrada con curva de seno: con la salida en coseno del acorde anterior, el volumen total queda parejo.
     const gain = ctx.createGain();
     const curve = new Float32Array(64);
@@ -269,6 +286,7 @@ export class PadEngine {
     const source = ctx.createBufferSource();
     source.buffer = buffer;
     source.loop = true;
+    source.playbackRate.value = rate;
     source.connect(gain);
     source.start(time);
     return { gain, source };

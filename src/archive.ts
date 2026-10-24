@@ -1,5 +1,6 @@
 import { unzipSync } from "fflate";
 import { Archive } from "libarchive.js";
+import { measureBuffer, type TrackStats } from "./analysis.ts";
 
 export const audioExtensions = /\.(wav|mp3|ogg|m4a|aac|flac|aiff|aif)$/i;
 
@@ -312,25 +313,33 @@ function commonName(files: File[]): string {
 }
 
 /**
- * Calcula la forma de onda combinada de varias pistas (picos normalizados 0..1).
+ * Calcula la forma de onda combinada de varias pistas (picos normalizados 0..1) y, en la misma pasada,
+ * mide el nivel de cada pista (`onStats`, para normalizar volúmenes y detectar mono/estéreo).
  * Decodifica una pista a la vez para no saturar la memoria.
  */
 export async function computePeaks(
   files: File[],
   buckets: number,
   isCancelled: () => boolean,
-  onProgress?: (peaks: Float32Array) => void
+  onProgress?: (peaks: Float32Array) => void,
+  onStats?: (file: File, stats: TrackStats) => void
 ): Promise<Float32Array | null> {
   const total = new Float32Array(buckets);
   let decodedAny = false;
-  // Solo se dibuja un contorno: a 16 kHz cada pista ocupa unas 3 veces menos memoria al decodificarse.
-  const decoder = new OfflineAudioContext(1, 1, 16000);
+  // A 22,05 kHz cada pista ocupa la mitad de memoria que a 44,1 kHz y el nivel (RMS) se mide igual de bien;
+  // el pico de muestra puede quedar algo por debajo del real en sonidos muy agudos (hay margen: techo de -1 dBFS).
+  const decoder = new OfflineAudioContext(1, 1, 22050);
 
   for (const file of files) {
     if (isCancelled()) return null;
     if (file.size > 150 * 1024 * 1024) continue;
     try {
       const decoded = await decoder.decodeAudioData(await file.arrayBuffer());
+      if (onStats) {
+        const stats = await measureBuffer(decoded, isCancelled);
+        if (!stats) return null; // cancelado
+        onStats(file, stats);
+      }
       const trackPeaks = new Float32Array(buckets);
       const per = decoded.length / buckets;
       for (let c = 0; c < decoded.numberOfChannels; c++) {

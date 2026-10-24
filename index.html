@@ -6,8 +6,30 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="theme-color" content="#07162B" />
     <title>Crescendo Live</title>
+    <style>
+      /* Logo estático que se ve desde el primer instante (antes de que cargue el JavaScript): mismo azul, mismo logo y mismo
+         tamaño/posición que el icono de arranque de Android y que la pantalla de inicio animada. main.tsx lo quita después. */
+      html, body { background: #07162b; }
+      #boot { position: fixed; inset: 0; z-index: 200; display: grid; place-items: center; background: #07162b; }
+      #boot svg { width: 242px; height: 242px; }
+    </style>
   </head>
   <body>
+    <div id="boot" aria-hidden="true">
+      <svg viewBox="-1.8 0 120 120" fill="none" stroke="url(#bootsilver)" stroke-linecap="round">
+        <defs>
+          <linearGradient id="bootsilver" x1="0" x2="1" y1="0" y2="1">
+            <stop offset="0" stop-color="#8a929e" />
+            <stop offset=".42" stop-color="#f2f3f4" />
+            <stop offset=".68" stop-color="#adb3bb" />
+            <stop offset="1" stop-color="#f7f8f8" />
+          </linearGradient>
+        </defs>
+        <path d="M88 29a43 43 0 1 0 0 62" stroke-width="8" />
+        <path d="M79 41a29 29 0 1 0 0 38" stroke-width="7" />
+        <path d="M70 52a16 16 0 1 0 0 16" stroke-width="6" />
+      </svg>
+    </div>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>

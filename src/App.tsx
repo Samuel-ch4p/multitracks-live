@@ -1,17 +1,25 @@
 import { memo, useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import "./App.css";
+import "./skin.css";
+import "./skin-player.css";
 import MegaBrowser from "./MegaBrowser";
 import LocalImport from "./LocalImport";
 import Fader from "./Fader";
 import Pan from "./Pan";
 import Waveform from "./Waveform";
-import logoUrl from "./assets/logo.png";
+import BrandMark from "./BrandMark";
+import { FAMILY_COLORS, familyOf } from "./trackFamilies";
+import { bindAnalyser, bindMeterElements, setMetersActive } from "./meters";
+import { useFx } from "./effects";
+import ScrubBar from "./ScrubBar";
 import Click from "./Click";
 import Splash from "./Splash";
 import Pads from "./Pads";
 import { PadEngine } from "./padEngine";
 import { Metronome } from "./metronome";
 import { computePeaks } from "./archive";
+import { planGains, trackKind, type TrackStats } from "./analysis.ts";
+import { applyPan, buildTrackGraph, disposeTrackGraph, type TrackGraph } from "./trackGraph.ts";
 
 type Track = {
   id: number;
@@ -32,9 +40,13 @@ type Song = {
 
 type AudioChannel = {
   source: MediaElementAudioSourceNode;
-  gain: GainNode;
-  panner: StereoPannerNode;
+  graph: TrackGraph;
 };
+
+const NORMALIZE_KEY = "crescendo-normalize-v1";
+function loadNormalize(): boolean {
+  try { return localStorage.getItem(NORMALIZE_KEY) !== "0"; } catch { return true; }
+}
 
 let idCounter = 0;
 const nextId = () => ++idCounter;
@@ -177,7 +189,7 @@ function useWakeLock(active: boolean) {
   }, [active]);
 }
 
-type IconName = "metronome" | "restart" | "mixer" | "library" | "play";
+type IconName = "metronome" | "restart" | "mixer" | "library" | "play" | "spark";
 
 function Icon({ name }: { name: IconName }) {
   const paths: Record<IconName, React.ReactNode> = {
@@ -186,6 +198,7 @@ function Icon({ name }: { name: IconName }) {
     mixer: <><path d="M5 4v16M12 4v16M19 4v16" /><circle cx="5" cy="9" r="2" /><circle cx="12" cy="15" r="2" /><circle cx="19" cy="8" r="2" /></>,
     library: <><path d="M4 4v16M9 4v16" /><path d="m14 5 4-1 3 15-4 1-3-15Z" /></>,
     play: <path d="m8 5 11 7-11 7V5Z" />,
+    spark: <path d="M12 3v4M12 17v4M3 12h4M17 12h4M6 6l2.5 2.5M15.5 15.5 18 18M18 6l-2.5 2.5M8.5 15.5 6 18" />,
   };
   return <svg aria-hidden="true" viewBox="0 0 24 24">{paths[name]}</svg>;
 }
@@ -201,8 +214,21 @@ type ChannelStripProps = {
 
 /** Un canal del mezclador. Con memo, mover un fader solo vuelve a pintar ese canal (y no los demás ni la pantalla entera). */
 const ChannelStrip = memo(function ChannelStrip({ track, index, displayName, dimmed, onChange, onRemove }: ChannelStripProps) {
+  const rootRef = useRef<HTMLElement>(null);
+  const fillRef = useRef<HTMLElement>(null);
+  const family = FAMILY_COLORS[familyOf(track.name)];
+  // El medidor se mueve sin pasar por React (ver meters.ts)
+  useEffect(() => {
+    bindMeterElements(String(track.id), rootRef.current, fillRef.current);
+    return () => bindMeterElements(String(track.id), null, null);
+  }, [track.id]);
+  const style = { "--channel-color": family.color, "--channel-rgb": family.rgb } as React.CSSProperties;
   return (
-    <article className={`channel ${dimmed ? "is-dimmed" : ""}`}>
+    <article
+      ref={rootRef}
+      style={style}
+      className={`channel ${track.muted ? "is-muted" : ""} ${track.solo ? "is-soloed" : ""} ${dimmed ? "is-dimmed" : ""}`}
+    >
       <div className="channel-head">
         <span>{String(index + 1).padStart(2, "0")}</span>
         <div className="chip-row">
@@ -211,15 +237,68 @@ const ChannelStrip = memo(function ChannelStrip({ track, index, displayName, dim
         </div>
       </div>
       <div className="fader-wrap">
-        <Fader value={track.volume} onChange={(volume) => onChange(track.id, { volume })} label={`Volumen de ${track.name}`} dimmed={dimmed} />
+        <div className="channel-meter" aria-hidden="true"><i ref={fillRef as React.RefObject<HTMLElement>} /></div>
+        <Fader value={track.volume} onChange={(volume) => onChange(track.id, { volume })} label={`Volumen de ${track.name}`} dimmed={track.muted || dimmed} />
       </div>
       <Pan value={track.pan} label={`Paneo de ${track.name}`} onChange={(pan) => onChange(track.id, { pan })} />
       <div className="channel-name">
-        <strong title={track.name}>{displayName}</strong>
+        <strong title={track.name}><i className="family-dot" aria-hidden="true" />{displayName}</strong>
         <small>{track.volume}</small>
       </div>
       <button className="channel-remove" onClick={() => onRemove(track.id)} aria-label={`Eliminar pista ${track.name}`}>×</button>
     </article>
+  );
+});
+
+type MasterStripProps = { volume: number; onVolume: (value: number) => void; normalize: boolean; onNormalize: () => void };
+
+/** Canal MASTER: fader, medidor de salida e interruptor de normalización. */
+const MasterStrip = memo(function MasterStrip({ volume, onVolume, normalize, onNormalize }: MasterStripProps) {
+  const rootRef = useRef<HTMLElement>(null);
+  const fillRef = useRef<HTMLElement>(null);
+  useEffect(() => {
+    bindMeterElements("master", rootRef.current, fillRef.current);
+    return () => bindMeterElements("master", null, null);
+  }, []);
+  const style = { "--channel-color": FAMILY_COLORS.neutral.color, "--channel-rgb": FAMILY_COLORS.neutral.rgb } as React.CSSProperties;
+  return (
+    <article ref={rootRef} style={style} className="channel master">
+      <div className="channel-head">
+        MASTER
+        <button
+          className={`chip norm ${normalize ? "active" : ""}`}
+          onClick={onNormalize}
+          aria-pressed={normalize}
+          aria-label="Normalizar volúmenes de las pistas"
+          title="Normalizar volúmenes (compara con el original)"
+        >NORM</button>
+      </div>
+      <div className="fader-wrap">
+        <div className="channel-meter" aria-hidden="true"><i ref={fillRef as React.RefObject<HTMLElement>} /></div>
+        <Fader value={volume} onChange={onVolume} label="Volumen master" />
+      </div>
+      <div className="master-readout">{volume}%</div>
+      <div className="channel-name"><strong>Salida</strong></div>
+    </article>
+  );
+});
+
+const masterDb = (volume: number) => (volume <= 0 ? "−∞" : (20 * Math.log10(volume / 100)).toFixed(1).replace("-", "−"));
+
+/** Tarjeta de salida principal (pestaña Mezcla): nivel en dB del master y medidor de salida. */
+const MasterCard = memo(function MasterCard({ volume }: { volume: number }) {
+  const fillRef = useRef<HTMLElement>(null);
+  useEffect(() => {
+    bindMeterElements("master-card", null, fillRef.current, "x");
+    return () => bindMeterElements("master-card", null, null);
+  }, []);
+  return (
+    <div className="master-card">
+      <span className="master-icon" aria-hidden="true"><Icon name="mixer" /></span>
+      <div className="master-card-info"><small>SALIDA PRINCIPAL</small><strong>Master</strong></div>
+      <div className="master-db">{masterDb(volume)} <small>dB</small></div>
+      <div className="master-led" aria-hidden="true"><i ref={fillRef as React.RefObject<HTMLElement>} /></div>
+    </div>
   );
 });
 
@@ -259,6 +338,9 @@ export default function App() {
   const click = useSyncExternalStore(metronome.subscribe, metronome.getState);
   const [peaks, setPeaks] = useState<Float32Array | null>(null);
   const [peaksLoading, setPeaksLoading] = useState(false);
+  const [expanded, setExpanded] = useState(false);
+  const [normalize, setNormalize] = useState(loadNormalize);
+  const [statsVersion, setStatsVersion] = useState(0);
 
   const contextRef = useRef<AudioContext | null>(null);
   const masterGainRef = useRef<GainNode | null>(null);
@@ -269,6 +351,12 @@ export default function App() {
   const playingRef = useRef(false);
   const busyRef = useRef(false);
   const masterVolumeRef = useRef(masterVolume);
+  // Medidas de nivel/tipo de cada pista (se miden una vez al cargar la canción) y forma de onda ya calculada de cada canción.
+  const statsRef = useRef<Map<File, TrackStats>>(new Map());
+  const peaksCacheRef = useRef<Map<number, Float32Array>>(new Map());
+  const analysisRef = useRef<Promise<void>>(Promise.resolve());
+  const normalizeRef = useRef(normalize);
+  normalizeRef.current = normalize;
   // Mezcla (volumen, paneo, mute, solo) de cada canción, para recuperarla al volver a ella. Solo en memoria.
   const mixesRef = useRef<Map<number, Map<string, Pick<Track, "volume" | "pan" | "muted" | "solo">>>>(new Map());
 
@@ -283,6 +371,12 @@ export default function App() {
       const master = context.createGain();
       master.gain.value = masterVolumeRef.current / 100;
       master.connect(context.destination);
+      const level = context.createAnalyser(); // solo observa: alimenta el medidor del MASTER
+      level.fftSize = 512;
+      level.smoothingTimeConstant = 0;
+      master.connect(level);
+      bindAnalyser("master", level);
+      bindAnalyser("master-card", level);
       contextRef.current = context;
       masterGainRef.current = master;
     }
@@ -292,15 +386,21 @@ export default function App() {
   function applyMix(list: Track[]) {
     const context = contextRef.current;
     if (!context) return;
-    masterGainRef.current?.gain.setTargetAtTime(masterVolumeRef.current / 100, context.currentTime, 0.015);
+    const now = context.currentTime;
+    masterGainRef.current?.gain.setTargetAtTime(masterVolumeRef.current / 100, now, 0.015);
     const hasSolo = list.some((track) => track.solo);
-    for (const track of list) {
+    // Normalización: ganancia aparte del fader (nodo "norm"); el fader conserva el valor del usuario.
+    const plan = normalizeRef.current
+      ? planGains(list.map((track) => ({ kind: trackKind(track.name), stats: statsRef.current.get(track.file) ?? null })))
+      : null;
+    list.forEach((track, index) => {
       const channel = channelsRef.current.get(track.id);
-      if (!channel) continue;
+      if (!channel) return;
       const silent = track.muted || (hasSolo && !track.solo);
-      channel.gain.gain.setTargetAtTime(silent ? 0 : track.volume / 100, context.currentTime, 0.015);
-      channel.panner.pan.setTargetAtTime(track.pan, context.currentTime, 0.015);
-    }
+      channel.graph.fader.gain.setTargetAtTime(silent ? 0 : track.volume / 100, now, 0.015);
+      channel.graph.norm.gain.setTargetAtTime(plan ? plan.gains[index] : 1, now, 0.05);
+      applyPan(channel.graph, track.pan, statsRef.current.get(track.file)?.layout ?? "stereo", now);
+    });
   }
 
   function releaseTrack(track: Track) {
@@ -312,8 +412,8 @@ export default function App() {
     const channel = channelsRef.current.get(track.id);
     if (channel) {
       channel.source.disconnect();
-      channel.panner.disconnect();
-      channel.gain.disconnect();
+      disposeTrackGraph(channel.graph);
+      bindAnalyser(String(track.id), null);
       channelsRef.current.delete(track.id);
     }
   }
@@ -420,16 +520,20 @@ export default function App() {
     try {
       const context = getContext();
       await context.resume();
+      // El tipo de cada pista (mono / un lado / estéreo) y su nivel se conocen al terminar el análisis de la canción:
+      // se espera (máx. 15 s) para que el paneo y la normalización suenen bien desde el primer compás.
+      if (currentTracks.some((track) => !statsRef.current.has(track.file))) {
+        setStatusMessage("Analizando niveles de las pistas...");
+        await Promise.race([analysisRef.current, new Promise((resolve) => setTimeout(resolve, 15000))]);
+        setStatusMessage("Sincronizando las pistas...");
+      }
       await Promise.all(currentTracks.map((track) => resetAudio(track.audio)));
       for (const track of currentTracks) {
         if (channelsRef.current.has(track.id)) continue;
         const source = context.createMediaElementSource(track.audio);
-        const panner = context.createStereoPanner();
-        const gain = context.createGain();
-        source.connect(panner);
-        panner.connect(gain);
-        gain.connect(masterGainRef.current ?? context.destination);
-        channelsRef.current.set(track.id, { source, panner, gain });
+        const graph = buildTrackGraph(context, source, masterGainRef.current ?? context.destination);
+        channelsRef.current.set(track.id, { source, graph });
+        bindAnalyser(String(track.id), graph.meter);
       }
       applyMix(tracksRef.current);
       await Promise.all(currentTracks.map((track) => waitUntilAtStart(track.audio)));
@@ -591,6 +695,8 @@ export default function App() {
   }, []);
 
   useWakeLock(playing || click.running || padState.playing);
+  useEffect(() => { setMetersActive(playing); }, [playing]);
+  const [fx, setFx] = useFx();
 
   useEffect(() => () => metronome.dispose(), [metronome]);
   useEffect(() => () => pad.dispose(), [pad]);
@@ -599,22 +705,40 @@ export default function App() {
     applyMix(tracks);
     // applyMix lee solo refs.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tracks, masterVolume]);
+  }, [tracks, masterVolume, normalize, statsVersion]);
 
-  // Forma de onda de la canción activa.
+  useEffect(() => {
+    try { localStorage.setItem(NORMALIZE_KEY, normalize ? "1" : "0"); } catch { /* sin almacenamiento */ }
+  }, [normalize]);
+
+  // Forma de onda y análisis de nivel de la canción activa (una vez por canción; al volver a ella ya está hecho).
   useEffect(() => {
     const song = playlistRef.current.find((item) => item.id === activeSongId);
     if (!song) {
       setPeaksLoading(false); // sin canción activa no hay nada que analizar (evita dejar el aviso "Analizando…" pegado)
       return;
     }
+    const cached = peaksCacheRef.current.get(song.id);
+    if (cached && song.files.every((file) => statsRef.current.has(file))) {
+      setPeaks(cached);
+      setPeaksLoading(false);
+      return;
+    }
     let cancelled = false;
     setPeaksLoading(true);
-    computePeaks(song.files, PEAK_BUCKETS, () => cancelled, (partial) => {
+    const job = computePeaks(song.files, PEAK_BUCKETS, () => cancelled, (partial) => {
       if (!cancelled) setPeaks(partial);
+    }, (file, stats) => {
+      statsRef.current.set(file, stats);
+      if (!cancelled) setStatsVersion((version) => version + 1);
     })
-      .then((result) => { if (!cancelled && result) setPeaks(result); })
+      .then((result) => {
+        if (cancelled || !result) return;
+        peaksCacheRef.current.set(song.id, result);
+        setPeaks(result);
+      })
       .finally(() => { if (!cancelled) setPeaksLoading(false); });
+    analysisRef.current = job.catch(() => undefined);
     return () => { cancelled = true; };
   }, [activeSongId]);
 
@@ -675,19 +799,12 @@ export default function App() {
             track={track}
             index={index}
             displayName={displayNames[index]}
-            dimmed={track.muted || (hasSolo && !track.solo)}
+            dimmed={hasSolo && !track.solo && !track.muted}
             onChange={onTrackChange}
             onRemove={onTrackRemove}
           />
         ))}
-        <article className="channel master">
-          <div className="channel-head">MASTER</div>
-          <div className="fader-wrap">
-            <Fader value={masterVolume} onChange={setMasterVolume} label="Volumen master" />
-          </div>
-          <div className="master-readout">{masterVolume}%</div>
-          <div className="channel-name"><strong>Salida</strong></div>
-        </article>
+        <MasterStrip volume={masterVolume} onVolume={setMasterVolume} normalize={normalize} onNormalize={() => setNormalize((value) => !value)} />
       </div>
     </div>
   );
@@ -697,7 +814,7 @@ export default function App() {
       {showSplash && <Splash onDone={() => setShowSplash(false)} />}
       <header className="topbar">
         <div className="brand">
-          <img className="brand-logo" src={logoUrl} alt="" />
+          <BrandMark className="brand-logo" />
           <div className="brand-text">
             <strong>CRESCENDO</strong>
             <span>Live Multitracks</span>
@@ -756,6 +873,19 @@ export default function App() {
 
         <div className="top-tools">
           <span className={`sync-chip ${playing ? "playing" : ready ? "ready" : ""}`}><i />{syncLabel}</span>
+          <button
+            className={`glass-btn square fx-btn ${fx === "full" ? "is-on" : ""}`}
+            onClick={() => {
+              const next = fx === "full" ? "reduced" : "full";
+              setFx(next);
+              setStatusMessage(`Efectos visuales: ${next === "full" ? "Completos" : "Reducidos"}`);
+            }}
+            aria-pressed={fx === "full"}
+            aria-label={`Efectos visuales: ${fx === "full" ? "Completos" : "Reducidos"}`}
+            title={`Efectos visuales: ${fx === "full" ? "Completos" : "Reducidos"}`}
+          >
+            <Icon name="spark" />
+          </button>
           <button className="glass-btn restart-btn" onClick={() => void playAll()} disabled={resetting || tracks.length === 0} aria-label="Reiniciar desde el principio">
             <Icon name="restart" /><span>REINICIAR</span>
           </button>
@@ -787,10 +917,10 @@ export default function App() {
         <section className="screen" aria-label="En vivo">
           <div className="live-status">
             <div className="session-pill"><i className={playing ? "active" : ""} />SESIÓN EN VIVO<b>{click.beats}/4</b></div>
-            <div className="loaded-song">
+            <button className="loaded-song" onClick={() => tracks.length > 0 && setExpanded(true)} aria-label="Abrir el reproductor ampliado">
               <Artwork index={Math.max(0, activeIndex)} />
               <span><small>CANCIÓN CARGADA</small><strong>{songName || "Ninguna"}</strong></span>
-            </div>
+            </button>
           </div>
           {songDeck}
           <div className="wave-panel" aria-label="Forma de onda">
@@ -820,6 +950,7 @@ export default function App() {
         <section className="screen" aria-label="Mezclador">
           <div className="lib-head">
             <div><span className="eyebrow">{tracks.length} PISTAS CARGADAS</span><h1>Mezclador</h1></div>
+            <MasterCard volume={masterVolume} />
           </div>
           {mixer}
         </section>
@@ -827,11 +958,57 @@ export default function App() {
 
       {statusMessage && <div className="statusline" role="status">{statusMessage}</div>}
 
-      <nav className="tab-bar" aria-label="Navegación principal">
+      {tab !== "live" && tracks.length > 0 && (
+        <div className="mini-player">
+          <button className="mini-main" onClick={() => setExpanded(true)} aria-label="Abrir el reproductor ampliado">
+            <Artwork index={Math.max(0, activeIndex)} />
+            <span className="mini-copy"><strong>{songName}</strong><small>{playing ? "Reproduciendo" : paused ? "En pausa" : "Detenido"} · {tracks.length} pistas</small></span>
+            <span className={`mini-wave ${playing ? "is-live" : ""}`} aria-hidden="true"><i /><i /><i /><i /></span>
+          </button>
+          <button className={`play-btn ${playing ? "is-playing" : ""}`} onClick={togglePlay} disabled={resetting} aria-label={playing ? "Pausar" : "Reproducir"}>
+            {playing
+              ? <svg viewBox="0 0 24 24"><path d="M7 5h4v14H7zM13 5h4v14h-4z" /></svg>
+              : <svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z" /></svg>}
+          </button>
+        </div>
+      )}
+
+      <nav className="tab-bar" aria-label="Navegación principal" style={{ "--tab-i": tab === "library" ? 0 : tab === "live" ? 1 : 2 } as React.CSSProperties}>
         <button className={tab === "library" ? "active" : ""} onClick={() => setTab("library")}><Icon name="library" /><span>Biblioteca</span></button>
         <button className={tab === "live" ? "active" : ""} onClick={() => setTab("live")}><Icon name="play" /><span>Live</span></button>
         <button className={tab === "mixer" ? "active" : ""} onClick={() => setTab("mixer")}><Icon name="mixer" /><span>Mezcla</span></button>
       </nav>
+
+      {expanded && (
+        <div className="player-overlay" role="dialog" aria-label="Reproductor ampliado">
+          <div className="player-head">
+            <button className="glass-btn square" onClick={() => setExpanded(false)} aria-label="Cerrar el reproductor"><svg viewBox="0 0 24 24"><path d="m6 9 6 6 6-6" /></svg></button>
+            <span className="eyebrow">{playing ? "REPRODUCIENDO" : paused ? "EN PAUSA" : "DETENIDO"}</span>
+            <span className="player-head-spacer" />
+          </div>
+          <div className="player-art"><Artwork index={Math.max(0, activeIndex)} /></div>
+          <div className="player-body">
+            <div className="player-copy">
+              <h2>{songName}</h2>
+              <p>{tracks.length} pistas</p>
+            </div>
+            <div className="player-progress">
+              <ScrubBar progress={progress} playing={playing} getProgress={getProgress} disabled={tracks.length === 0 || duration <= 0} onSeek={(fraction) => void seekTo(fraction)} />
+              <div className="player-times"><span>{shortTime(currentTime)}</span><span>-{shortTime(Math.max(0, duration - currentTime))}</span></div>
+            </div>
+            <div className="player-controls">
+              <button className="icon-btn" onClick={() => stepSong(-1)} disabled={resetting || activeIndex <= 0} aria-label="Canción anterior"><svg viewBox="0 0 24 24"><path d="M6 5h2v14H6zM20 5v14L9 12z" /></svg></button>
+              <button className={`play-btn big ${playing ? "is-playing" : ""}`} onClick={togglePlay} disabled={resetting || tracks.length === 0} aria-label={playing ? "Pausar" : "Reproducir"}>
+                {resetting ? <span className="spinner" /> : playing
+                  ? <svg viewBox="0 0 24 24"><path d="M7 5h4v14H7zM13 5h4v14h-4z" /></svg>
+                  : <svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z" /></svg>}
+              </button>
+              <button className="icon-btn" onClick={() => stepSong(1)} disabled={resetting || activeIndex < 0 || activeIndex >= playlist.length - 1} aria-label="Canción siguiente"><svg viewBox="0 0 24 24"><path d="M16 5h2v14h-2zM4 5v14l11-7z" /></svg></button>
+            </div>
+            <button className="glass-btn open-mixer" onClick={() => { setExpanded(false); setTab("mixer"); }}><Icon name="mixer" />ABRIR MEZCLADOR</button>
+          </div>
+        </div>
+      )}
 
       {showLibrary && (
         <div className="library-layer" aria-label="Biblioteca musical">

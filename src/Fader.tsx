@@ -12,9 +12,13 @@ const clamp = (n: number) => Math.min(100, Math.max(0, n));
 /** Fader vertical con puntero (táctil y mouse) y teclado. */
 export default function Fader({ value, onChange, label, dimmed }: Props) {
   const railRef = useRef<HTMLDivElement>(null);
+  const rootRef = useRef<HTMLDivElement>(null);
   // Con el dedo, tocar no mueve el fader hasta que el gesto sea claramente vertical: así se puede deslizar el mezclador de lado
   // por encima de los faders sin cambiarles el volumen (con el mouse sigue siendo inmediato).
   const gesture = useRef<{ id: number; x: number; y: number; time: number; engaged: boolean } | null>(null);
+
+  // Mientras se arrastra, la perilla sigue al dedo sin retraso; al soltar o al cambiar por toque/teclado se desliza con inercia (CSS).
+  const setDragging = (on: boolean) => rootRef.current?.classList.toggle("is-dragging", on);
 
   function fromPointer(clientY: number) {
     const rail = railRef.current;
@@ -25,6 +29,7 @@ export default function Fader({ value, onChange, label, dimmed }: Props) {
 
   return (
     <div
+      ref={rootRef}
       className={`fader ${dimmed ? "is-dimmed" : ""}`}
       role="slider"
       tabIndex={0}
@@ -39,6 +44,7 @@ export default function Fader({ value, onChange, label, dimmed }: Props) {
           return;
         }
         event.currentTarget.setPointerCapture(event.pointerId);
+        setDragging(true);
         fromPointer(event.clientY);
       }}
       onPointerMove={(event) => {
@@ -50,6 +56,7 @@ export default function Fader({ value, onChange, label, dimmed }: Props) {
             if (dy < 8 || dy <= dx) return;
             g.engaged = true;
             event.currentTarget.setPointerCapture(event.pointerId);
+            setDragging(true);
           }
           fromPointer(event.clientY);
           return;
@@ -57,13 +64,15 @@ export default function Fader({ value, onChange, label, dimmed }: Props) {
         if (event.currentTarget.hasPointerCapture(event.pointerId)) fromPointer(event.clientY);
       }}
       onPointerUp={(event) => {
+        setDragging(false);
         const g = gesture.current;
         gesture.current = null;
         // Toque corto y quieto: salta a esa altura.
         if (g && g.id === event.pointerId && !g.engaged && performance.now() - g.time < 300
           && Math.abs(event.clientX - g.x) < 6 && Math.abs(event.clientY - g.y) < 6) fromPointer(event.clientY);
       }}
-      onPointerCancel={() => { gesture.current = null; }}
+      onPointerCancel={() => { gesture.current = null; setDragging(false); }}
+      onLostPointerCapture={() => setDragging(false)}
       onDoubleClick={() => onChange(80)}
       onKeyDown={(event) => {
         const step = event.shiftKey ? 10 : 2;
@@ -80,6 +89,7 @@ export default function Fader({ value, onChange, label, dimmed }: Props) {
       </div>
       <div className="fader-rail" ref={railRef}>
         <div className="fader-groove" />
+        <div className="fader-glow" style={{ height: `${value}%` }} />
         <div className="fader-fill" style={{ height: `${value}%` }} />
         <div className="fader-cap" style={{ bottom: `${value}%` }}><i /></div>
       </div>

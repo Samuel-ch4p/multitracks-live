@@ -111,3 +111,95 @@ NO probado: teléfono real, Gradle/APK, RAR (no hay forma de generarlos aquí), 
 - `Splash.tsx`/App.css: `.splash` es azul liso #07162b y el degradado radial entra con fundido en `::before` (antes todo el splash nacía en opacidad 0 y dejaba ver el degradado de la app). `#root:empty` (index.css) pinta el mismo azul antes de que React monte.
 - `@capacitor/splash-screen` NO está instalado ni se añadió. Los `splash.png` de res/drawable-* quedaron sin uso (se pueden borrar; `npm run assets` los regenera).
 - NO verificado: apariencia en teléfono real (Android 12+ y 11-) ni compilación de Gradle/aapt2.
+
+## Normalización, paneo y pads sostenidos (oct 2026)
+Archivos nuevos: `src/analysis.ts` (medición y plan de normalización), `src/panLaw.ts` (ley de paneo), `src/trackGraph.ts` (cadena de audio de cada pista), `tools/verify-normalize.ts` (`npm run verify`).
+
+### 1) Normalización de volúmenes
+- Causa: las pistas sonaban tal cual venían del archivo; no había ninguna medición de nivel.
+- Qué hace ahora: al cargar la canción, la misma pasada que dibuja la forma de onda (`computePeaks`, ahora a 22,05 kHz) mide cada pista por bloques de ~1 M de muestras cediendo el hilo entre bloques (no congela la pantalla). Potencia media con compuerta (bloques de 0,4 s; se ignoran los de menos de -50 dB y los 20 dB por debajo del promedio) y pico.
+- Ganancia en un nodo `norm` APARTE del fader: los faders siguen en 80 y se mueven normal.
+- Objetivos: instrumentos -18 dBFS de potencia media por pista (típico de una mezcla sana: deja margen para sumar y que los picos no lleguen a 0); Guía -20 dB (2 dB abajo, que se oiga sin tapar); Click por pico a -6 dBFS (suena en ráfagas, el RMS no sirve). Subida máx. +12 dB, bajada máx. -30 dB, techo -1 dBFS de pico por pista (en estéreo con 3 dB extra para el paneo extremo).
+- Seguridad de la suma: potencia estimada de la mezcla ≤ -14 dB y pico estimado ≤ -1 dBFS (picos sumados en cuadratura, -3 dB por no coincidir). Si pasa, TODAS las pistas bajan por igual (14 pistas ≈ -7,5 dB; 2 pistas, nada).
+- Click/Guía se reconocen por el nombre (click, clic, metrónomo, guía, guide, cue). Interruptor "NORM" en la tira MASTER del mezclador (activo por defecto, se recuerda en localStorage `crescendo-normalize-v1`).
+- Al pulsar play, si el análisis de la canción no ha terminado se espera (máx. 15 s, "Analizando niveles…"); la forma de onda y las medidas quedan en memoria por canción (volver a una canción es instantáneo).
+- Límite: a 22 kHz el pico medido puede quedar un poco bajo el real en sonidos muy agudos. Pistas de más de 150 MB no se miden (ganancia 1, paneo estéreo).
+
+### 2) Guía que no obedecía el paneo
+- Causa probable (no se tienen tus 2 archivos; el código no trata "Guía" de forma especial): todas las pistas pasaban por el mismo `StereoPannerNode`, pero una Guía exportada como ESTÉREO con el audio en un solo canal (L o R) quedaba fija en ese lado con el paneo al centro y el control "no hacía caso".
+- Ahora cada pista entra siempre como 2 canales y se clasifica al medirla: mono, solo-L, solo-R o estéreo. Mono / solo-L / solo-R usan UN canal con paneo normal (la Guía solo-R con paneo a la izquierda suena solo a la izquierda). El paneo se reaplica con cada cambio y con cada medición (`applyMix`), también al cambiar de canción.
+- Todas las pistas usan `buildTrackGraph` (fuente → entrada 2 canales → separador → 4 ganancias de paneo → unión → norm → fader → master); ninguna se salta el paneo.
+
+### 3) Volumen que baja al panear
+- Causa: `StereoPannerNode` con estéreo SUMA los dos canales hacia un lado: con L=R sube +3 dB al extremo, y con contenido amplio/en contrafase se pierde nivel; con una sola pista mono dependía de cómo se sumara en el altavoz.
+- Ley elegida (`panLaw.ts`): potencia constante, seno/coseno. Mono-like: gL = cos θ, gR = sin θ (centro 0,707 por lado = igual que antes). Estéreo: balance con compensación √2·cos θ sobre L y √2·sin θ sobre R (centro = pasa igual que antes; los lados no se mezclan entre sí).
+- Medido con render fuera de línea del grafo real (Chromium): variación de la energía total de -1 a +1: mono 0,00 dB, estéreo real 0,03 dB, solo-L / solo-R 0,00 dB, estéreo con L=R 0,00 dB (antes 3,01 dB). Centros idénticos a los de antes en mono, estéreo real y solo-L/R (en estéreo L=R sigue igual que antes).
+- Ojo: con un altavoz único o dos altavoces muy juntos (suma coherente) el centro se oye ~3 dB más fuerte que un extremo; es la propiedad de cualquier ley de potencia constante.
+
+### 4) Pads sostenidos
+- Se probaron en Chromium los 28 acordes (7 notas × mayor/♯/m/♯m) con el motor real: todos reproducen y tienen señal. Los 12 OGG nuevos existen y decodifican; los nombres de la tabla coinciden con los archivos. No se encontró un fallo en el motor para C♯ D♯ F♯ G♯ A♯.
+- Fallos reales encontrados (posible explicación de lo visto en el celular): (a) E♯ y B♯ estaban deshabilitados y con ♯ activo y la nota E o B, pulsar ♯ no hacía nada; (b) ♯ + menor apagaba los dos; (c) al expulsar audios de la caché la promesa vieja seguía reteniendo el audio.
+- Arreglado: E♯→F, B♯→C (se muestran como E♯/B♯); sostenido+menor (C♯m, D♯m, F♯m, G♯m, A♯m) ahora existe y se obtiene tocando el menor de la nota de abajo un semitono más agudo (`playbackRate` 2^(1/12)); si pasas audios reales, cambia la entrada en `SAMPLES` por `{ file: "Csm.ogg" }`. La caché de audios es por archivo (máx. 4).
+- Si en el celular algún sostenido sigue sin sonar: indica cuál nota y si estaba el ♯ o m activo; no se pudo confirmar con el dispositivo.
+
+### Cómo probar en el celular
+1. Canción con pistas muy dispares: tocar play; apagar/encender NORM (tira MASTER, al fondo del mezclador): debe cambiar el balance entre pistas y los faders no se mueven. Click y Guía deben oírse, sin tapar.
+2. Guía de las 2 canciones problemáticas: mover su paneo de lado a lado; debe oírse moverse (con paneo al centro suena por ambos lados).
+3. Mover el paneo de una pista mono y de una estéreo: el volumen debe sentirse parejo.
+4. Pads: probar ♯ con C D F G A, E♯/B♯ (suenan como F y C), m, y ♯+m (suena un semitono arriba).
+- Verificado por pruebas: `npm run verify` (clasificación mono/L/R/estéreo, nombres Click/Guía, tope +12 dB, techo -1 dBFS, suma ≤ -14 dB, paneo ±1 dB, centro igual que antes), render fuera de línea del grafo real, reproducción de 28 acordes, reproducción de 4 pistas de prueba en la app (ganancias norm/paneo leídas del grafo real; NORM apaga y se recuerda). No verificado: oído real, teléfono, mezcla de canciones reales, compilación Gradle.
+
+## Diseño nuevo de Figma aplicado (oct 2026)
+Referencia: `new diseno.rar` (export de Figma Make: src.zip con App.tsx e index.css; la parte más reciente del CSS manda). Se reconstruyó sobre el código real SIN tocar audio, descarga ni pads. Adaptación principal: el fondo del diseño era casi negro-grafito; se mantuvo AZUL MARINO (#07162B) como pediste y de Figma se tomó el sistema plateado, vidrio, colores por familia y animaciones.
+
+### Archivos
+- `src/theme.css` (NUEVO): TODAS las variables: fondos navy (`--c-bg-*`), plateados (`--c-silver-*`), texto/líneas/cristal, estados, familias (`--fam-*` + `-rgb`), neón de pads (`--pad-neon`), radios `--r-*`, espacios `--sp-*`, sombras `--sh-*`, movimiento. `--c-bg-1` (#07162B) es el MISMO color de Android (`colors.xml` → `splash_bg`), `capacitor.config.ts` e `index.html`.
+- `src/skin.css` (NUEVO): el aspecto de cada componente (App.css conserva la disposición). Las animaciones costosas llevan el comentario `[PESADO]` o `[PESADO-LIGERO]`.
+- `src/trackFamilies.ts` (NUEVO): mapa de nombres de pista → familia (listas `KEYWORDS`, edítalas ahí). Rojo ritmo #FF3B4E (batería, percusión, loops, kick, snare…), azul eléctrico #2F6BFF armonía (guitarras, bajo, teclas, pads, piano, synth…), morado #9B5CFF guía y click (guia, guide, cue, click, metrónomo…), rosado #FF4FA3 voces (voz, vox, coros, bgv…); sin reconocer = plateado #D3D7DC. Prioridad: guía/click → voces → ritmo → armonía. Sin tildes ni mayúsculas. Prueba: `npm run verify` (42 nombres).
+- `src/BrandMark.tsx` (NUEVO): logo "C" de anillos en vectores (nítido a cualquier tamaño, sin recuadro). Se usa en cabecera, splash y tarjeta de carga. Se borraron `assets/logo.png` y `emblem.png` (ya no se usan).
+- `src/meters.ts` (NUEVO): medidores vivos. Un solo requestAnimationFrame; lee un AnalyserNode por canal y mueve el relleno con `transform` directo en el DOM (cero re-renders de React). Se detiene solo cuando no hay señal.
+- `src/effects.ts` (NUEVO): ajuste "Efectos visuales: Completos / Reducidos".
+- `src/trackGraph.ts`: ÚNICO cambio de audio: se añadió un `AnalyserNode` que cuelga del fader solo para observar el nivel (no se oye ni cambia la señal). `App.tsx` también crea un analizador en el master. Todo lo demás del audio (normalización, paneo, pads) intacto.
+- `Fader.tsx`, `Waveform.tsx`, `App.tsx`, `Splash.tsx`, `MegaBrowser.tsx`, `main.tsx`, `index.html`, `index.css`, `App.css`: cambios de presentación (colores plateados, medidor LED, punto de color, solo/mute, inercia del fader, cabezal con estela, tarjeta de carga con progreso, entrada escalonada de la lista, splash).
+- Android: `res/drawable/splash_icon.xml` (la "C" en vectores, lienzo 288 dp, sin fondo ni recuadro), `values/styles.xml` y `values-v31/styles.xml` (fondo `splash_bg`, icono `splash_icon`, duración 0), se quitó `splash_transparent.xml`.
+
+### Dónde se activan/desactivan los efectos
+- Botón de destellos (✦) arriba a la derecha de la cabecera: alterna Completos ⇄ Reducidos y lo recuerda (`localStorage` `crescendo-fx-v1`). Aplica `<html data-fx="full|reduced">`. Valor por defecto: Completos.
+- Reducidos apaga: desenfoques de fondo (cabecera, panel de biblioteca, tarjeta de carga), atmósfera y partículas del splash, brillo difuso de los faders, estela del cabezal, aura de la tarjeta de carga, resplandor de pads, brillo de señal en los canales (`--sig`), y baja los medidores de ≈40 a ≈20 fps.
+- `prefers-reduced-motion` del sistema apaga todas las animaciones (CSS) sin tocar el ajuste.
+
+### Animaciones que considero pesadas (para simplificar si el celular sufre)
+1. `backdrop-filter` de cabecera, scrim de biblioteca y tarjeta de carga (desenfoque del fondo): la más costosa en GPU media.
+2. Splash: atmósfera (`filter: blur(100px)` sobre 380 px) y 14 partículas.
+3. Brillo difuso de faders (`.fader-glow`, blur 7 px × 8–16 canales, anima solo opacidad).
+4. Medidores LED + `--sig` en cada canal (JS por fotograma; con 16 canales ≈ 40 fps). Si hace falta: bajar a 20 fps en `meters.ts` (`minGap`).
+5. Aura giratoria de la tarjeta de carga (`conic-gradient` rotando).
+6. Resplandor pulsante de pad activo (`pad-afterglow`, solo opacidad) y trazo de luz con `drop-shadow` en los anillos del splash.
+7. Transición entre pestañas con perspectiva (solo transform/opacidad; barata, pero repinta la pantalla entera).
+Todo lo demás (botones, fader con inercia, pulso de pads) usa solo transform/opacidad.
+
+### Arranque continuo (Android + app)
+Sistema (Android 12+: `values-v31`; ≤11: tema compatible de androidx) → fondo #07162B + "C" de anillos centrada (anillos de ~190 dp) → en cuanto carga el HTML, `#boot` de `index.html` muestra el MISMO logo (242 px, centro) → `Splash.tsx` empieza con el logo en el mismo sitio y los anillos "se encienden" con un trazo de luz; `main.tsx` quita `#boot` tras el primer pintado. Sin destello blanco: html/body/WebView/ventana son #07162B.
+
+### Cómo probar en el celular
+1. Compilar APK, abrir: ¿el arranque del sistema es azul marino con la "C" nítida, sin recuadro ni borroso, y pasa al splash animado sin parpadeo?
+2. Horizontal y vertical: botones de play/stop grandes, M/S (38 px), faders con perilla plateada, relleno de color por familia, línea de color arriba de cada canal, medidor LED que se mueve al sonar.
+3. Solo (S): ese canal brilla y los demás bajan; Mute (M): canal desaturado.
+4. Pads: borde morado, pad activo con degradado y brillo, pulso al tocar. Click y biblioteca: plateado, sin celestes.
+5. Biblioteca → Nube Crescendo → CONECTAR → elegir un ZIP → AÑADIR: lista con entrada escalonada y tarjeta de progreso (porcentaje real, velocidad, "pista X de Y").
+6. Botón ✦: pasar a Reducidos y comprobar que baja el consumo/mejoran los fps.
+- NO verificado aquí: apariencia real en teléfono (probé en Chromium con ventanas de 844×390, 390×800 y 1280×760), notch/zonas seguras reales, compilación de Gradle/aapt2 de los recursos Android nuevos, tarjeta de carga con una descarga real (no hay red a la nube aquí).
+
+### Piezas añadidas del diseño (oct 2026, 2.ª pasada)
+- `src/skin-player.css` (NUEVO, se carga tras skin.css) + `src/ScrubBar.tsx` (NUEVO).
+- Indicador deslizante de la barra de pestañas (`.tab-bar::before`, usa `--tab-i`; horizontal en vertical/PC, vertical en el riel del celular horizontal). Solo transform.
+- Mini-reproductor (pestañas Biblioteca y Mezcla, con canción cargada): nombre, estado, barras vivas y play/pausa; tocarlo abre el reproductor ampliado. En celular horizontal bajo se oculta (la cabecera ya trae el transporte).
+- Reproductor ampliado (`.player-overlay`): arte grande, nombre, nº de pistas, barra de progreso ARRASTRABLE (salta una sola vez al soltar), anterior/play/siguiente y "Abrir mezclador". Se abre desde el mini-reproductor o tocando "Canción cargada" en Live. Dos columnas en horizontal.
+- Tarjeta Master en la pestaña Mezcla: nivel en dB del master (20·log10 del fader; 85 % = −1,4 dB) y medidor LED horizontal de la salida (`meters.ts` ahora admite eje X; clave "master-card").
+- NO añadido por falta de datos (esperan tu respuesta): artista, tonalidad y secciones (Intro/Verso/Coro). Ver propuestas abajo. Tampoco la pestaña Mezcla como lista distinta de las tiras (el diseño usa las mismas tarjetas).
+- Probado en Chromium (390×800, 844×390): mini-reproductor, ampliado, tarjeta Master con dB y LED, pastilla de pestañas. No probado en celular.
+
+### Datos pendientes de decidir (no inventados)
+- Artista: ninguno de los archivos lo trae. Propuesta: tomarlo del NOMBRE DE LA CARPETA de la nube (ej. "MercyMe/Almost There/…zip" → MercyMe; ya se conoce `path` en MegaBrowser) y, en canciones locales, del patrón "Artista - Canción" del nombre del archivo si existe.
+- Tonalidad: tampoco viene en los archivos. Opciones: (a) campo que tú tocas para elegirla por canción (se guarda solo en memoria, o en un nombre de archivo "Canción (Tono A).zip" que la app lea), (b) leerla del nombre del ZIP si sigue un patrón, (c) detectarla automáticamente (poco fiable con pistas separadas).
+- Secciones: no hay datos. Opciones: marcadores dentro del ZIP (un `markers.json` o `.txt` con tiempo+nombre), o ponerlos a mano en la app durante la sesión (sin guardar).

@@ -16,10 +16,8 @@ html, body, #root {
 }
 
 body {
-  background: radial-gradient(120% 90% at 50% 0%, #0f2a52 0%, #081a33 45%, #050c16 100%) fixed;
+  background: radial-gradient(120% 90% at 50% 0%, #0d2342 0%, #07162b 45%, #050c16 100%) fixed;
 }
 
 button, input { font: inherit; }
 
-/* Antes de que React pinte, el mismo azul del arranque (evita ver el degradado de la app un instante). */
-#root:empty { background: #07162b; }

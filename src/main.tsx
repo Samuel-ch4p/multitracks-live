@@ -4,14 +4,21 @@ import "@fontsource/inter/latin-400.css";
 import "@fontsource/inter/latin-500.css";
 import "@fontsource/inter/latin-600.css";
 import "@fontsource/inter/latin-700.css";
+import "./theme.css";
 import "./index.css";
+import { applyFx } from "./effects";
 import App from "./App.tsx";
 
 // Limpieza: borra cualquier copia de canciones que una versión de prueba anterior haya dejado en el teléfono.
 try { indexedDB.deleteDatabase("crescendo-songs"); } catch { /* sin almacenamiento */ }
+
+applyFx();
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <App />
   </StrictMode>
 );
+
+// Quita el logo estático de index.html cuando la app ya pintó su propia pantalla de inicio (mismo logo en el mismo sitio).
+requestAnimationFrame(() => requestAnimationFrame(() => document.getElementById("boot")?.remove()));

@@ -69,8 +69,9 @@ export default function Waveform({ peaks, progress, playing, getProgress, loadin
         ctx.fill();
       }
     };
-    paint(baseRef.current, "#c4dfeb", "#4a778f", 0.72);
-    paint(playedRef.current, "#bfeafb", "#4d9dff", 1);
+    // Plateados (diseño): la parte ya reproducida es más clara y luminosa que la que falta
+    paint(baseRef.current, "#c9d0d9", "#4b5666", 0.7);
+    paint(playedRef.current, "#f4f6f8", "#9aa4b2", 1);
   }, [peaks]);
 
   useEffect(() => {

@@ -10,7 +10,8 @@
     "preview": "vite preview",
     "android:sync": "npm run build && cap sync android",
     "android:open": "cap open android",
-    "assets": "capacitor-assets generate --android"
+    "assets": "capacitor-assets generate --android",
+    "verify": "node tools/verify-normalize.ts && node tools/verify-families.ts"
   },
   "dependencies": {
     "@capacitor/android": "^7.6.9",

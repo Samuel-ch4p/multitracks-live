@@ -1,0 +1,79 @@
+/* =====================================================================
+   Crescendo Live · TOKENS DE DISEÑO (un solo lugar para ajustar colores, radios, sombras y espacios)
+   Fondo azul marino profundo + acentos plateados. El azul eléctrico solo aparece como color de la familia "Armonía".
+   ===================================================================== */
+:root {
+  /* Fondos (azul marino). --c-bg-1 es EL MISMO color del arranque de Android (colors.xml: splash_bg) */
+  --c-bg-0: #050c16;
+  --c-bg-1: #07162b;
+  --c-bg-2: #0b1d38;
+  --c-bg-3: #102846;
+  --c-panel: rgba(9, 24, 44, .72);
+
+  /* Plateados */
+  --c-silver-100: #f4f5f7;
+  --c-silver-200: #d3d7dc;
+  --c-silver-300: #a9afb8;
+  --c-silver-400: #7f8794;
+  --c-silver-500: #5a6270;
+
+  /* Texto y líneas */
+  --c-text: #f2f4f6;
+  --c-muted: #a3adba;
+  --c-faint: #6e7a8a;
+  --c-line: rgba(205, 213, 224, .13);
+  --c-line-strong: rgba(222, 228, 236, .28);
+  --c-glass: rgba(205, 213, 226, .06);
+  --c-glass-strong: rgba(205, 213, 226, .12);
+
+  /* Estados */
+  --c-success: #62b88f;
+  --c-warn: #d2af72;
+  --c-danger: #ff5c6c;
+
+  /* Familias de pistas (el mapa de nombres está en src/trackFamilies.ts) */
+  --fam-rhythm: #ff3b4e;
+  --fam-rhythm-rgb: 255 59 78;
+  --fam-harmony: #2f6bff;
+  --fam-harmony-rgb: 47 107 255;
+  --fam-guide: #9b5cff;
+  --fam-guide-rgb: 155 92 255;
+  --fam-vocal: #ff4fa3;
+  --fam-vocal-rgb: 255 79 163;
+  --fam-neutral: #d3d7dc;
+  --fam-neutral-rgb: 211 215 220;
+
+  /* Pads: neón morado */
+  --pad-neon: #9b5cff;
+  --pad-neon-rgb: 155 92 255;
+
+  /* Radios */
+  --r-xs: 8px;
+  --r-sm: 11px;
+  --r-md: 15px;
+  --r-lg: 20px;
+  --r-xl: 28px;
+
+  /* Espacios */
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-5: 24px;
+
+  /* Sombras */
+  --sh-card: inset 0 1px rgba(255, 255, 255, .07), 0 10px 26px rgba(0, 4, 12, .22);
+  --sh-pop: 0 30px 80px rgba(0, 0, 0, .6);
+  --sh-btn: inset 0 1px rgba(255, 255, 255, .16), 0 6px 16px rgba(0, 4, 12, .24);
+
+  /* Movimiento */
+  --ease-out: cubic-bezier(.16, 1, .3, 1);
+  --t-fast: .14s;
+  --t-mid: .26s;
+
+  /* Efectos pesados: el ajuste "Efectos visuales: Completos / Reducidos" (src/effects.ts) pone <html data-fx="..."> */
+  --fx-blur: 18px;
+}
+
+/* Efectos "Reducidos": sin desenfoques de fondo, sin partículas ni brillos grandes (ver skin.css) */
+:root[data-fx="reduced"] { --fx-blur: 0px; }

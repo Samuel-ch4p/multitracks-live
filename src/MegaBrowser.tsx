@@ -1,6 +1,7 @@
-import { useState, type ReactNode } from "react";
+import { useState, type CSSProperties, type ReactNode } from "react";
 import { File as MEGAFile } from "megajs";
 import { audioExtensions, rarToFiles, sortFiles, zipToFilesAsync } from "./archive";
+import BrandMark from "./BrandMark";
 import { canDecryptNative, decryptMega, fastDownload } from "./megaFast";
 
 type MegaNode = {
@@ -119,6 +120,30 @@ function friendlyError(err: unknown, fallback: string): string {
   }
   const clean = message.replace(/mega(\.nz|js)?/gi, "la nube").trim();
   return clean || fallback;
+}
+
+/** Tarjeta de progreso: lee el avance del texto de estado (solo presentación; la descarga no se toca). */
+function LoadCard({ status, fileName }: { status: string; fileName: string }) {
+  const percent = status.match(/(d+)%/);
+  const tracks = status.match(/(d+) de (d+)/);
+  const stage = /extra/i.test(status) ? "extract" : /descifr/i.test(status) ? "decrypt" : "download";
+  let pct: number | null = null;
+  if (percent) pct = Number(percent[1]);
+  else if (tracks && Number(tracks[2]) > 0) pct = Math.round((Number(tracks[1]) / Number(tracks[2])) * 100);
+  const title = stage === "download" ? "Descargando canción" : stage === "decrypt" ? "Preparando el audio" : "Extrayendo pistas";
+  const detail = stage === "download" ? status.split("·").slice(1).join("·").trim() : stage === "extract" && tracks ? `pista ${tracks[1]} de ${tracks[2]}` : "";
+  return (
+    <div className="load-layer" role="status" aria-live="polite">
+      <div className="load-card">
+        <BrandMark />
+        <span className="eyebrow">PREPARANDO MULTITRACK</span>
+        <h2>{title}</h2>
+        <p>{fileName}</p>
+        <div className={`load-progress ${pct === null ? "is-indeterminate" : ""}`} style={{ "--pct": pct === null ? 0 : pct / 100 } as CSSProperties}><span /></div>
+        <div className="load-meta"><strong>{pct === null ? "…" : `${pct}%`}</strong><span>{detail || "Conexión segura"}</span></div>
+      </div>
+    </div>
+  );
 }
 
 function CloudIcon({ name }: { name: "cloud" | "folder" | "archive" | "back" | "refresh" }) {
@@ -349,7 +374,7 @@ export default function MegaBrowser({ onSongLoaded }: Props) {
               const isFolder = !!item.directory;
               const isSelected = !isFolder && selected === item.name;
               return (
-                <div className={`library-item ${isFolder ? "folder" : "archive"} ${isSelected ? "selected" : ""}`} key={`${item.name}-${index}`}>
+                <div className={`library-item ${isFolder ? "folder" : "archive"} ${isSelected ? "selected" : ""}`} key={`${item.name}-${index}`} style={{ "--i": Math.min(index, 12) } as CSSProperties}>
                   <button
                     className="library-item-main"
                     disabled={busy}
@@ -377,6 +402,7 @@ export default function MegaBrowser({ onSongLoaded }: Props) {
           </div>
         )}
       </div>
+      {adding && <LoadCard status={status} fileName={selected ?? ""} />}
     </>
   );
 }

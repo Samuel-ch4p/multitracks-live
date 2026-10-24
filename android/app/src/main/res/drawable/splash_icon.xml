@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Icono de arranque: la "C" de anillos plateados (los mismos trazos de src/BrandMark.tsx), en vectores = siempre nítido.
+     Lienzo de 288 dp (tamaño de icono sin fondo en Android 12+); los anillos miden ~190 dp, dentro del círculo de 192 dp que
+     el sistema deja libre. Sin fondo propio: no hay recuadro. El centro del círculo de anillos está en el centro del lienzo. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="288dp"
+    android:height="288dp"
+    android:viewportWidth="288"
+    android:viewportHeight="288">
+    <group
+        android:scaleX="2.0167"
+        android:scaleY="2.0167"
+        android:translateX="26.63"
+        android:translateY="23.0">
+        <path
+            android:pathData="M88,29a43,43 0 1,0 0,62"
+            android:strokeColor="#DDE0E5"
+            android:strokeWidth="8"
+            android:strokeLineCap="round" />
+        <path
+            android:pathData="M79,41a29,29 0 1,0 0,38"
+            android:strokeColor="#DDE0E5"
+            android:strokeWidth="7"
+            android:strokeLineCap="round" />
+        <path
+            android:pathData="M70,52a16,16 0 1,0 0,16"
+            android:strokeColor="#DDE0E5"
+            android:strokeWidth="6"
+            android:strokeLineCap="round" />
+    </group>
+</vector>
