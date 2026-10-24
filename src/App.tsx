@@ -521,10 +521,10 @@ export default function App() {
       const context = getContext();
       await context.resume();
       // El tipo de cada pista (mono / un lado / estéreo) y su nivel se conocen al terminar el análisis de la canción:
-      // se espera (máx. 15 s) para que el paneo y la normalización suenen bien desde el primer compás.
+      // se espera (máx. 4 s; si no alcanza, empieza igual y el nivel se ajusta al terminar de medir) para que el paneo y la normalización suenen bien desde el primer compás.
       if (currentTracks.some((track) => !statsRef.current.has(track.file))) {
         setStatusMessage("Analizando niveles de las pistas...");
-        await Promise.race([analysisRef.current, new Promise((resolve) => setTimeout(resolve, 15000))]);
+        await Promise.race([analysisRef.current, new Promise((resolve) => setTimeout(resolve, 4000))]);
         setStatusMessage("Sincronizando las pistas...");
       }
       await Promise.all(currentTracks.map((track) => resetAudio(track.audio)));

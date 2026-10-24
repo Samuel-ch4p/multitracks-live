@@ -1,6 +1,7 @@
 import { unzipSync } from "fflate";
 import { Archive } from "libarchive.js";
 import { measureBuffer, type TrackStats } from "./analysis.ts";
+import { analyzeWav } from "./wavAnalysis.ts";
 
 export const audioExtensions = /\.(wav|mp3|ogg|m4a|aac|flac|aiff|aif)$/i;
 
@@ -227,6 +228,8 @@ async function zipToFilesFallback(
   return files;
 }
 
+const RAR_MAX_BYTES = 900 * 1024 * 1024;
+
 let archiveInitialized = false;
 
 function initializeArchive() {
@@ -253,10 +256,20 @@ export async function rarToFiles(
     if ((await archive.hasEncryptedData()) === true) {
       throw new Error("Este archivo RAR está protegido con contraseña.");
     }
-    const listed = (await archive.getFilesArray()) as { file: { name: string; extract: () => Promise<File> }; path: string }[];
+    const listed = (await archive.getFilesArray()) as { file: { name: string; size: number; extract: () => Promise<File> }; path: string }[];
     const wanted = listed.filter(
       (entry) => audioExtensions.test(entry.file.name) && !isHiddenPath(entry.path) && !entry.file.name.startsWith(".")
     );
+
+    // Un RAR se extrae a memoria (WASM) y cada pista queda como Blob: pasado cierto tamaño el navegador del celular
+    // se queda sin espacio (las últimas pistas salen ilegibles o la app se cierra). Mejor avisar antes que colgarse.
+    const totalBytes = wanted.reduce((sum, entry) => sum + (entry.file.size || 0), 0);
+    if (totalBytes > RAR_MAX_BYTES) {
+      throw new Error(
+        `Este RAR ocupa ${(totalBytes / 1e9).toFixed(1)} GB ya descomprimido y el celular no puede abrirlo. ` +
+        "Conviértelo en la PC a ZIP sin compresión (solo las pistas de audio) y vuelve a elegirlo: el ZIP no se carga en memoria."
+      );
+    }
 
     const files: File[] = [];
     for (let index = 0; index < wanted.length; index++) {
@@ -332,8 +345,20 @@ export async function computePeaks(
 
   for (const file of files) {
     if (isCancelled()) return null;
-    if (file.size > 150 * 1024 * 1024) continue;
     try {
+      // WAV: se lee directo por tandas (sin decodificar, sin límite de tamaño, casi sin memoria).
+      if (/.wav$/i.test(file.name)) {
+        const direct = await analyzeWav(file, buckets, isCancelled);
+        if (direct === "cancelled") return null;
+        if (direct) {
+          onStats?.(file, direct.stats);
+          for (let b = 0; b < buckets; b++) total[b] += direct.peaks[b];
+          decodedAny = true;
+          if (onProgress) onProgress(normalize(total));
+          continue;
+        }
+      }
+      if (file.size > 150 * 1024 * 1024) continue; // el resto de formatos se decodifica entero: se salta lo muy grande
       const decoded = await decoder.decodeAudioData(await file.arrayBuffer());
       if (onStats) {
         const stats = await measureBuffer(decoded, isCancelled);
