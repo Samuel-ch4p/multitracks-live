@@ -54,3 +54,12 @@ export function familyOf(name: string): Family {
   }
   return "neutral";
 }
+
+/**
+ * Paneo inicial de cada pista al cargar la canción (-1 = 100 % izquierda, 0 = centro).
+ * Las pistas de la familia "Guía y Click" (lista `guide` de arriba) arrancan a la izquierda; el resto, al centro.
+ * Es solo el valor inicial: el usuario puede moverlo.
+ */
+export function defaultPan(name: string): number {
+  return familyOf(name) === "guide" ? -1 : 0;
+}

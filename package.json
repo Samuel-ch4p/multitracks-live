@@ -11,7 +11,7 @@
     "android:sync": "npm run build && cap sync android",
     "android:open": "cap open android",
     "assets": "capacitor-assets generate --android",
-    "verify": "node tools/verify-normalize.ts && node tools/verify-families.ts"
+    "verify": "node tools/verify-normalize.ts && node tools/verify-families.ts && node tools/verify-pan-default.ts"
   },
   "dependencies": {
     "@capacitor/android": "^7.6.9",

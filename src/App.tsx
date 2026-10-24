@@ -8,7 +8,7 @@ import Fader from "./Fader";
 import Pan from "./Pan";
 import Waveform from "./Waveform";
 import BrandMark from "./BrandMark";
-import { FAMILY_COLORS, familyOf } from "./trackFamilies";
+import { FAMILY_COLORS, defaultPan, familyOf } from "./trackFamilies";
 import { bindAnalyser, bindMeterElements, setMetersActive } from "./meters";
 import { useFx } from "./effects";
 import ScrubBar from "./ScrubBar";
@@ -142,7 +142,7 @@ function createTrack(file: File): Track {
     file,
     audio,
     volume: 80,
-    pan: 0,
+    pan: defaultPan(file.name), // Click y Guía arrancan a la izquierda
     muted: false,
     solo: false,
   };

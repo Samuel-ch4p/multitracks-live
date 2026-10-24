@@ -203,3 +203,11 @@ Sistema (Android 12+: `values-v31`; ≤11: tema compatible de androidx) → fond
 - Artista: ninguno de los archivos lo trae. Propuesta: tomarlo del NOMBRE DE LA CARPETA de la nube (ej. "MercyMe/Almost There/…zip" → MercyMe; ya se conoce `path` en MegaBrowser) y, en canciones locales, del patrón "Artista - Canción" del nombre del archivo si existe.
 - Tonalidad: tampoco viene en los archivos. Opciones: (a) campo que tú tocas para elegirla por canción (se guarda solo en memoria, o en un nombre de archivo "Canción (Tono A).zip" que la app lea), (b) leerla del nombre del ZIP si sigue un patrón, (c) detectarla automáticamente (poco fiable con pistas separadas).
 - Secciones: no hay datos. Opciones: marcadores dentro del ZIP (un `markers.json` o `.txt` con tiempo+nombre), o ponerlos a mano en la app durante la sesión (sin guardar).
+
+## Click ligado a la canción
+Probado y revertido por decisión del usuario.
+
+## Paneo inicial de Click y Guía (oct 2026)
+- `trackFamilies.ts` → `defaultPan(name)`: las pistas de la familia "Guía y Click" (la misma lista `guide`, sin distinguir mayúsculas/tildes) arrancan en paneo -1 (100 % izquierda); el resto en 0. `App.tsx` lo usa en `createTrack`, así que la perilla y el audio (`applyMix` → `applyPan`) coinciden desde que se carga la canción. Es solo el valor inicial: si el usuario lo mueve, se respeta (y la mezcla por canción en memoria lo recuerda). Para cambiar qué pistas van a la izquierda, editar la lista `guide` de `trackFamilies.ts`.
+- `panLaw.ts`, pistas ESTÉREO: antes, a paneo total el canal contrario se descartaba (√2·L, R perdido). Ahora el contrario se dobla hacia el lado elegido (a 100 % sale 0,707·(L+R) por un lado). Con lados parecidos el volumen es igual al del centro (±0,5 dB en la prueba); con lados totalmente distintos baja ~3 dB (inherente a sumar). Esto afecta también al paneo manual de pistas estéreo. Mono / un solo lado: sin cambios (a la izquierda: todo por L con nivel 1 = misma energía que 0,707 por lado).
+- Pruebas: `tools/verify-pan-default.ts` (Click/Guía en -1, resto en 0) y casos nuevos en `tools/verify-normalize.ts`; ambas dentro de `npm run verify`. Verificado en navegador: al cargar Bajo/Click/Guía/Pad, las perillas marcan 0 / -100 / -100 / 0. SIN comprobar al oído en el celular.

@@ -355,8 +355,8 @@
 .splash-title { margin: 0; color: #f2f5f9; font-size: clamp(17px, 4.4vmin, 24px); font-weight: 650; letter-spacing: .21em; opacity: 0; animation: splash-title-in .62s var(--ease-out) 1s forwards; }
 .splash-title span { color: #aeb4bd; font-weight: 500; }
 @keyframes splash-title-in { from { opacity: 0; transform: translateY(10px); letter-spacing: .34em; } to { opacity: 1; transform: none; } }
-.splash-loading { min-height: 0; gap: 12px; opacity: 0; animation: title-in .5s ease 1.5s forwards; }
-.splash-loading p { color: #7f8c9e; }
+.splash-loading { display: flex; flex-direction: column; align-items: center; min-height: 0; gap: 12px; opacity: 0; animation: title-in .5s ease 1.5s forwards; }
+.splash-loading p { margin: 0; color: #7f8c9e; text-align: center; }
 .loading-line { display: block; width: 132px; height: 2px; overflow: hidden; border-radius: 999px; background: rgba(202, 206, 213, .12); }
 .loading-line i { display: block; width: 42%; height: 100%; border-radius: inherit; background: linear-gradient(90deg, transparent, #edf0f2, transparent); animation: loading-line .9s ease-in-out infinite; }
 @keyframes loading-line { from { transform: translateX(-130%); } to { transform: translateX(340%); } }

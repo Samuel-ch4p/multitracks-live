@@ -8,9 +8,11 @@
  *   solo en L o solo en R): se toma UN canal c y sale por el paneo seno/coseno: gL = cos θ, gR = sin θ, θ = (pan+1)·π/4.
  *   gL² + gR² = 1 en todo el recorrido → la energía total no cambia al panear; en el centro cada lado vale 0,707
  *   (igual que el StereoPannerNode que se usaba antes con una pista mono).
- * - Pista estéreo real: balance con compensación, gL = √2·cos θ sobre L y gR = √2·sin θ sobre R. En el centro vale 1
- *   (pasa tal cual, como antes). Al panear no se mezclan los dos lados (el StereoPannerNode los sumaba, y el contenido
- *   amplio o en contrafase perdía volumen); el √2 repone la energía del lado que se atenúa.
+ * - Pista estéreo real: en el centro pasa tal cual. Al panear hacia un lado, el canal contrario se "dobla" hacia ese lado:
+ *   con t = |pan| (0..1), lado destino D y contrario O:  D ← cos(tπ/4)·D + sin(tπ/4)·O,  O ← cos(tπ/2)·O.
+ *   A paneo total todo sale por un solo lado como 0,707·(L + R): no se pierde nada del canal contrario y, con contenido
+ *   parecido en ambos lados (lo normal), el volumen percibido es el mismo que en el centro. (Con dos lados totalmente
+ *   distintos, sumarlos suena ~3 dB más bajo que en el centro: es inherente a sumar en mono.)
  */
 export type Layout = "mono" | "left" | "right" | "stereo";
 
@@ -21,7 +23,13 @@ export function panTaps(pan: number, layout: Layout): PanTaps {
   const theta = ((p + 1) * Math.PI) / 4;
   const gl = Math.cos(theta);
   const gr = Math.sin(theta);
-  if (layout === "stereo") return [Math.SQRT2 * gl, 0, 0, Math.SQRT2 * gr];
+  if (layout === "stereo") {
+    const t = Math.abs(p);
+    const keep = Math.cos((t * Math.PI) / 4);
+    const fold = Math.sin((t * Math.PI) / 4);
+    const fade = Math.cos((t * Math.PI) / 2);
+    return p <= 0 ? [keep, 0, fold, fade] : [fade, fold, 0, keep]; // [LL, LR, RL, RR]
+  }
   if (layout === "right") return [0, 0, gl, gr];
   return [gl, gr, 0, 0]; // "mono" y "left": se usa el canal izquierdo
 }

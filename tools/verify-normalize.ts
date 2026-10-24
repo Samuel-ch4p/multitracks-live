@@ -82,7 +82,16 @@ const ster = sweep("stereo", n1, n2);
 const oneSide = sweep("left", n1, new Float32Array(n1.length));
 const rightOnly = sweep("right", new Float32Array(n1.length), n1);
 check("mono: energía total ±1 dB de izquierda a derecha", mono.max <= 1, "variación máx " + mono.max.toFixed(2) + " dB");
-check("estéreo real: energía total ±1 dB", ster.max <= 1, "variación máx " + ster.max.toFixed(2) + " dB");
+const near = Float32Array.from(n1, (v, i) => v * 0.9 + n2[i] * 0.1); // estéreo típico: lados parecidos
+const sterNear = sweep("stereo", n1, near);
+check("estéreo con lados parecidos (lo normal): energía total ±1 dB", sterNear.max <= 1, "variación máx " + sterNear.max.toFixed(2) + " dB");
+check("estéreo con lados totalmente distintos: energía ±3,1 dB (sumar L+R en un lado pierde 3 dB, inherente)", ster.max <= 3.1, "variación máx " + ster.max.toFixed(2) + " dB");
+const [hLL, hLR, hRL, hRR] = panTaps(-1, "stereo");
+check("estéreo a 100 % izquierda: el canal derecho se SUMA al izquierdo y nada sale por la derecha", Math.abs(hLL - Math.SQRT1_2) < 1e-9 && Math.abs(hRL - Math.SQRT1_2) < 1e-9 && hLR === 0 && Math.abs(hRR) < 1e-9);
+const [kLL, kLR, kRL, kRR] = panTaps(1, "stereo");
+check("estéreo a 100 % derecha: simétrico", Math.abs(kRR - Math.SQRT1_2) < 1e-9 && Math.abs(kLR - Math.SQRT1_2) < 1e-9 && kRL === 0 && Math.abs(kLL) < 1e-9);
+const mL = panTaps(-1, "mono");
+check("mono a 100 % izquierda: todo por la izquierda, nivel 1 (misma energía que 0,707 por lado)", Math.abs(mL[0] - 1) < 1e-9 && Math.abs(mL[1]) < 1e-9);
 check("Guía solo en L: energía ±1 dB", oneSide.max <= 1, "variación máx " + oneSide.max.toFixed(2) + " dB");
 check("Guía solo en R: energía ±1 dB", rightOnly.max <= 1, "variación máx " + rightOnly.max.toFixed(2) + " dB");
 const c = panTaps(0, "mono");
