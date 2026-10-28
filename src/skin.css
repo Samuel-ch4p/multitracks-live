@@ -409,7 +409,7 @@
 @media (max-width: 820px), (max-height: 520px) { .profile-top { display: inline-flex; } }
 
 /* ---------- Etapa 5: mezclador · M y S de 44x44 dp, canales aislados para repintar poco ---------- */
-.channel { contain: layout style; }
+.deck-card, .song-row, .library-item { contain: content; } /* aislan el repintado de las filas; en .channel no ayudó al medirlo (ver HANDOFF) */
 .chip { width: var(--tap); height: var(--tap); }
 .chip.norm { height: var(--tap); min-width: var(--tap); }
 .channel.master .channel-head { flex-direction: column; gap: 3px; min-height: 0; padding-bottom: 2px; }
@@ -525,3 +525,18 @@
 .marker-colors button.active { border-color: #fff; box-shadow: 0 0 0 2px rgba(0, 0, 0, .4) inset; }
 .pill-btn.danger { border-color: rgba(255, 92, 108, .5); color: #ffd5da; }
 @media (max-height: 520px) { .marker-card { gap: 6px; padding: 12px 18px; } .marker-card .brand-mark { display: none; } .marker-colors button { width: 36px; height: 36px; } .marker-names button { min-height: 34px; padding: 0 9px; } }
+
+/* Excepción medida: la barra superior (franja baja, no pantalla completa) conserva un desenfoque ligero solo en "Completos".
+   Quitarlo bajaba ~10 % los fotogramas del mezclador con la CPU a 8x más lenta: la franja pasa a su propia capa de composición. */
+:root[data-fx="full"] .topbar { -webkit-backdrop-filter: blur(12px) saturate(115%); backdrop-filter: blur(12px) saturate(115%); }
+
+/* Vertical: hay alto de sobra, así que la fila "Canción cargada" (con PERFIL) se queda y la barra superior no se satura */
+@media (max-width: 820px) and (orientation: portrait) {
+  .live-status { display: flex; }
+  .profile-top { display: none; }
+}
+@media (max-width: 820px) and (orientation: landscape) and (min-height: 521px) { .profile-top { display: inline-flex; } }
+.loaded-song > span { min-width: 0; }
+.loaded-song small, .loaded-song strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Pantalla ancha: el canal también necesita sitio para M y S de 44 dp */
+@media (min-width: 821px) and (min-height: 521px) { .channel { flex-basis: 108px; } .channel.master { flex-basis: 100px; } }

@@ -283,3 +283,92 @@ Archivos nuevos: `cloudConfig.ts`, `driveSource.ts`, `NubeBrowser.tsx`, `searchI
 - Por pruebas automáticas (`npm run verify`): paginación, filtrado, orden, Range y errores de Drive (simulado), búsqueda (acentos, varias palabras, concurrencia 6, fallos, sin IndexedDB), etiquetas, normalización (Click/Guía exactamente 0 dB, balance conservado, ±6 dB, techo de pico, silencios, modos, datos incompletos), limitador (en Node y renderizado real en Chromium), perfiles (prioridad, validación, almacenamiento, exportar/importar), WAV directo, paneo.
 - En Chromium contra un Drive simulado: listado de artistas, descarga con Range y extracción de 335 MB y de 1,7 GB, búsqueda con IndexedDB, progreso "Preparando pistas… n/13", Play de 17 ms, ganancias reales (música +3,5 dB igual para todas, Click/Guía 0,00 dB), modo NORM rotando, perfiles guardados, aplicados y restablecidos tras recargar.
 - SOLO en el celular: Drive real (llave, cuota, preflight de `Range`), tiempos reales de decodificación y preparación en el teléfono, que el audio no se entrecorte con 13-29 pistas, el teclado sobre el buscador, el sonido real de la normalización y del limitador, memoria con canciones grandes.
+
+---
+
+# Rediseño visual (rama `rediseno`)
+
+La maqueta de Figma Make (`diseno/rediseno/`, no versionada; ver `.gitignore`) es **solo referencia visual**. La app real ya tenía casi toda la estructura de esa maqueta (pestañas, mezclador con medidores por refs, mini reproductor, tarjeta de carga), así que el trabajo fue llevar sus tokens y detalles, y añadir lo que faltaba. Sin Tailwind: todo es CSS normal.
+
+## Mapa maqueta → componentes reales
+| Maqueta | App real |
+|---|---|
+| `SplashScreen` | `Splash.tsx` + `BrandMark.tsx` (vectorial, sin recuadro) + arranque nativo (`values-v31`, `splash_icon.xml`, fondo `#07162B`) |
+| `app-header`, `tempo-block`, `PlayButton` | `.topbar` en `App.tsx`; reloj en `clock.tsx` (`HeaderClock`) |
+| `song-deck`, `deck-card` | `songDeck` en `App.tsx` |
+| `waveform-panel`, marcadores | `Waveform.tsx` + `markers.ts` + `MarkerEditor.tsx` (marcadores nuevos) |
+| `channel`, `master-column`, `master-card` | `ChannelStrip`, `MasterStrip`, `MasterCard`, `Fader.tsx`, `Pan.tsx`, `meters.ts` |
+| `mini-player` | bloque `.mini-player` en `App.tsx` (`skin-player.css`) |
+| `LibraryPanel` | `NubeBrowser.tsx`, `MegaBrowser.tsx` (respaldo), `LocalImport.tsx` |
+| `load-card` | `LoadCard` en `MegaBrowser.tsx` (la usa `NubeBrowser`), `MemoryDialog.tsx` |
+| `utility-panel` Pads / Click / Perfiles | `Pads.tsx`, `Click.tsx`, `ProfileDrawer.tsx` |
+| Ajustes (+ Diagnóstico, nuevo) | `SettingsDrawer.tsx`, `fpsMonitor.ts`, `motion.ts` |
+| `app-toast` | `.app-toast` (aviso de estado de `App.tsx`, se oculta solo a los 5 s) |
+
+## Tokens y estilos
+- `src/styles/tokens.css`: colores (fondo marino, plateados, familias de pista), radios, espacios, sombras, tipografía (`--fs-xs` = 11 px mínimo), `--tap` = 44 px, zonas seguras `--safe-*`, capas `--z-*`, movimiento. `--c-faint` subió a `#8996a8` (contraste ≥ 5:1).
+- `src/styles/base.css`: reset, fondo, utilidades `contain-*`, pausa de animaciones con la app en segundo plano (`visibility.ts` pone `data-hidden`).
+- Disposición: `App.css`; aspecto: `skin.css` y `skin-player.css` (las reglas de cada etapa están al final, con su cabecera). Pendiente de orden: la maqueta separa estilos por pantalla; aquí siguen en 3 archivos grandes.
+
+## Qué se adaptó y por qué
+- Etapa 2: la atmósfera del splash usaba `filter: blur(100px)` y el trazo de luz `drop-shadow`; ahora son degradados radiales estáticos (se ven igual y no pintan filtros).
+- Etapa 3: el reloj salió de `App` (`clock.tsx`, `useSyncExternalStore`): el segundero repinta solo los textos de tiempo, la onda y la barra del reproductor. Controles de 44 dp. Quité los desenfoques de pantalla completa (`library-scrim`, `load-layer`) y puse fondos más oscuros.
+- **Excepción medida**: `.topbar` conserva `backdrop-filter: blur(12px)` solo en «Completos». Quitarlo bajó ~10 % los fotogramas con la CPU 8x más lenta (la franja deja de tener su propia capa de composición).
+- Etapa 4: el mini reproductor ahora **también se ve en horizontal** (antes se ocultaba): ocupa su propia fila bajo el contenido. «1 pista» en singular (`format.ts`). En horizontal bajo el botón PERFIL va en la barra superior; en vertical queda en la fila «Canción cargada».
+- Etapa 5: M y S de 44×44; el brillo del fader pasó de `blur(7px)` a un degradado radial; los canales atenuados solo cambian opacidad (sin `filter`).
+- Etapa 6: **Cancelar** (AbortController real en la descarga), **Reintentar** en errores, y el **aviso de memoria llena** deja elegir qué quitar del repertorio (antes quitaba canciones en silencio). «Preparando pistas 8/13» con barra de progreso. Avisos flotantes.
+- Etapa 7: listas de artistas/canciones por ventanas (`windowed.tsx`, 40 filas y otras 40 al llegar al final).
+- Etapa 8: nuevo panel **Ajustes** (normalización, efectos visuales, «El sistema pidió menos animaciones» con interruptor, perfiles, Diagnóstico). Si hay < 40 fps durante 5 s con «Completos», se **propone** pasar a «Reducidos» (nunca en silencio).
+- Etapa 9: marcadores de sección (pulsación larga en la onda; nombre, posición y color; un toque salta; pulsación larga en el marcador lo edita). Guardados por canción en `localStorage` (con try/catch); sin marcadores no aparece la barra.
+- Herramientas de desarrollo: `window.__demo(nombre, pistas, MBsimulados)` (solo en `npm run dev`) crea canciones sintéticas; `tools/measure-fps.mjs` mide fotogramas (ver su cabecera).
+
+## Animaciones y efectos pesados (inventario)
+Animadas solo con `transform`/`opacity` salvo lo indicado. «Reducidos» (`data-fx="reduced"`) apaga: partículas/atmósfera/destello del splash (`.fx-heavy`), aura giratoria de la tarjeta de carga, `.fader-glow`, brillo del cabezal, desenfoque de la barra superior, respiración de las órbitas de las carátulas, ondas del mini reproductor, pulso de los pads.
+- `backdrop-filter`: 1 (barra superior, solo Completos). Antes: 4 (barra, `library-scrim`, `load-layer` y otros).
+- `filter`: ya no hay `blur` ni `drop-shadow` animados. Queda `filter: brightness` al arrastrar un fader (un solo elemento).
+- Medidores: un solo `requestAnimationFrame` (`meters.ts`), `transform: scaleY`, ≈40 fps en Completos / ≈20 en Reducidos; se detiene sin señal.
+- Con la app en segundo plano: `animation-play-state: paused` (el audio sigue).
+- `contain: content` en tarjetas del repertorio, filas de canciones y de biblioteca. En `.channel` se probó `contain: layout style` y **no mejoró** (medido), por eso no está.
+
+## Medición de rendimiento
+Edge sin cabeza (`tools/measure-fps.mjs`), 915×412 @2x móvil, 13 pistas sonando, compilación de producción, CPU ralentizada por CDP. Pantalla a ~75 Hz. «Antes» = commit `e112748`.
+
+| Ralentización | Pantalla | Antes | Después |
+|---|---|---|---|
+| 4x | En vivo (mezclador) | 74,4 fps | 74,6 fps |
+| 4x | Mezcla | 74,9 fps | 74,9 fps |
+| 6x | En vivo | 57,2 fps | 56,2 fps |
+| 6x | Mezcla | 72,0 fps | 67,7 fps |
+| 8x | En vivo | 31,4 fps | 29,5–32,8 fps |
+| 8x | Mezcla | 57,8 fps | 41–48 fps |
+
+Lectura honesta: a 4x no hay diferencia; a 6x está dentro del ruido (±3 fps); a 8x (extremo) la pestaña Mezcla cae porque **ahora el mini reproductor se ve en horizontal** (pedido; quitarlo devolvía ~6 fps) y los botones M/S son más grandes. Las repeticiones varían ±5 fps. No se midió en un celular real.
+
+## Lista de paridad
+| Función | Dónde está ahora | Verificada |
+|---|---|---|
+| Logo, BPM y compás, CLICK, PAD | `.topbar` (`.tempo`, `.click-btn`, `.pad-btn`) | Sí: 915×412, 412×915, 1280×800 |
+| Tiempo transcurrido/total | `HeaderClock` | Sí |
+| Transporte (anterior, play/pausa, stop, siguiente) | `.transport` | Sí (play/pausa probado) |
+| Efectos visuales | Ajustes › Efectos visuales (ya no es botón suelto) | Sí (se abre; el cambio no se pulsó) |
+| REINICIAR | `.restart-btn` (solo icono en pantalla compacta) | Visual; no se pulsó |
+| Indicador «En vivo» | `.sync-chip` y pastilla «SESIÓN EN VIVO» | Sí |
+| Setlist: tarjetas, quitar, «+», activa resaltada | `songDeck` | Sí |
+| Forma de onda con posición (tocar mueve) | `Waveform.tsx` | Parcial: se ve y sigue al sonar; el salto por toque no se pulsó |
+| Mezclador: M, S, fader, medidor, paneo, nombre, valor | `ChannelStrip` | Sí (medidores vivos con la canción sonando) |
+| MASTER: normalización (Apagado/Suave/Nivelar), volumen, «Salida principal» | `MasterStrip`, `MasterCard`, Ajustes | Visual; el cambio de modo no se pulsó |
+| PERFIL (fábrica/predeterminado/canción; guardar, restablecer, exportar, importar) | `ProfileDrawer`, botón PERFIL | Solo existe y abre; guardar/importar no se pulsaron (`npm run verify` cubre la lógica) |
+| Mini reproductor «Reproduciendo» | `.mini-player` (Mezcla y Biblioteca, también horizontal) | Sí en Mezcla 800×360 |
+| Tarjeta de carga + progreso + Cancelar | `LoadCard` | **No** probada con red (no hay llaves de la nube); compila |
+| Error con Reintentar | `LoadCard` modo error | **No** probada con red |
+| Aviso de memoria llena + qué quitar | `MemoryDialog` | Sí (simulado con `__demo`: quitar y añadir) |
+| Biblioteca: selector de fuente, «Este dispositivo» | `.library-panel`, `LocalImport` | Sí (visual) |
+| Biblioteca Nube: buscador, artistas/canciones, tamaño/tono/BPM, Añadir, Actualizar, índice | `NubeBrowser` | **No** probada con datos reales (sin llaves); las ventanas de lista no se ejercitaron |
+| Pads (notas, menor, sostenido, volumen) | `Pads.tsx` en cajón | Sí (visual) |
+| Panel de Click (BPM, compás, volumen) | `Click.tsx` | Sin cambios de lógica; no se abrió esta sesión |
+| Ajustes y Diagnóstico | `SettingsDrawer` | Sí |
+| Toasts y splash | `.app-toast`, `Splash.tsx` | Toast sí; el splash no se vio en pantalla tras los cambios |
+| Marcadores de sección | `MarkerEditor`, `.marker-bar` | Sí (crear, guardar, persistir, saltar) |
+
+## Pendiente de confirmar en el celular
+Fluidez real con 13–30 pistas; contraste bajo luz de tarima; descarga real (Cancelar/Reintentar); arranque nativo sin parpadeo; pulsación larga en la onda con el dedo; teclado del buscador.
