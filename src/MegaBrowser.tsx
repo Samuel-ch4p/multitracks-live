@@ -1,4 +1,5 @@
 import { useState, type CSSProperties, type ReactNode } from "react";
+import { pistas } from "./format";
 import { File as MEGAFile } from "megajs";
 import { audioExtensions, rarToFiles, sortFiles, zipToFilesAsync } from "./archive";
 import BrandMark from "./BrandMark";
@@ -275,7 +276,7 @@ export default function MegaBrowser({ onSongLoaded }: Props) {
 
       onSongLoaded(songName, files, { inMemory: true });
       setSelected(null);
-      setStatus(`Añadida: ${songName} · ${files.length} pistas.`);
+      setStatus(`Añadida: ${songName} · ${pistas(files.length)}.`);
     } catch (err) {
       console.error("Error al extraer multitrack:", err);
       setError(friendlyError(err, "No se pudo extraer el archivo."));

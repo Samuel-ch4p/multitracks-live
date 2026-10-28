@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { pistas } from "./format";
 import { audioExtensions, sortFiles, zipToFilesAsync } from "./archive";
 import { CloudIcon, LoadCard } from "./MegaBrowser";
 import { DRIVE_API_KEY, DRIVE_ROOT_ID } from "./cloudConfig";
@@ -223,7 +224,7 @@ export default function NubeBrowser({ onSongLoaded }: Props) {
       const { songName, files } = await fetchSong(item, setStatus);
       onSongLoaded(songName, files, { inMemory: true });
       setSelected(null);
-      setStatus(`Añadida: ${songName} · ${files.length} pistas.`);
+      setStatus(`Añadida: ${songName} · ${pistas(files.length)}.`);
     } catch (e) {
       console.error("Nube: error al descargar o extraer", e);
       // Los errores de extracción ya vienen en español ("El ZIP está dañado…"); los de red o cuota usan el mensaje amable.

@@ -1,4 +1,5 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { pistas } from "./format";
 import "./App.css";
 import "./skin.css";
 import "./skin-player.css";
@@ -565,7 +566,7 @@ export default function App() {
   function activateSong(song: Song) {
     if (busyRef.current) return;
     loadSong(song);
-    setStatusMessage(`${song.name} · ${song.files.length} pistas`);
+    setStatusMessage(`${song.name} · ${pistas(song.files.length)}`);
   }
 
   const addSong = useCallback((name: string, files: File[], options?: { inMemory?: boolean }) => {
@@ -597,7 +598,7 @@ export default function App() {
     setStatusMessage(
       dropped.length
         ? `${name} añadida. Para liberar memoria se quitó del repertorio: ${dropped.join(", ")} (vuelve a añadirla desde la Nube).`
-        : `${name} añadida a la lista (${files.length} pistas).`
+        : `${name} añadida a la lista (${pistas(files.length)}).`
     );
     if (activeSongIdRef.current === null || replaceActive) loadSong(song);
     // loadSong solo toca refs y estado de React; no depende de renders previos.
@@ -917,6 +918,15 @@ export default function App() {
     });
   }, []);
 
+  // Solo en desarrollo: canciones sintéticas para ver y medir la interfaz (window.__demo("Nombre", 13)).
+  useEffect(() => {
+    if (!import.meta.env.DEV) return;
+    window.__demo = async (title = "Todo de nuevo", count = 13) => {
+      const { makeDemoSong } = await import("./devDemo");
+      addSong(title, makeDemoSong(title, count));
+    };
+  }, [addSong]);
+
   // Un solo AudioContext para toda la sesión; se despierta con el primer gesto del usuario (los celulares lo dejan dormido hasta entonces)
   // y de nuevo si el sistema lo vuelve a suspender.
   useEffect(() => {
@@ -1033,7 +1043,7 @@ export default function App() {
         <article className={`deck-card ${song.id === activeSongId ? "active" : ""}`} key={song.id}>
           <button className="deck-main" onClick={() => selectSong(song)} title={song.name} aria-label={`Seleccionar ${song.name}`}>
             <Artwork index={index} />
-            <span><strong>{song.name}</strong><small>{song.files.length} pistas</small></span>
+            <span><strong>{song.name}</strong><small>{pistas(song.files.length)}</small></span>
           </button>
           <button className="deck-remove" onClick={() => removeSong(song.id)} aria-label={`Quitar ${song.name}`}>×</button>
         </article>
@@ -1123,6 +1133,7 @@ export default function App() {
 
         <div className="top-tools">
           <span className={`sync-chip ${playing ? "playing" : ready ? "ready" : ""}`} role="status" title={syncLabel} aria-label={syncLabel}><i /><b className="sync-label">{syncLabel}</b></span>
+          <button className="glass-btn profile-top" onClick={() => setProfileOpen(true)} aria-label="Perfil de pistas">PERFIL</button>
           <button
             className={`glass-btn square fx-btn ${fx === "full" ? "is-on" : ""}`}
             onClick={() => {
@@ -1154,7 +1165,7 @@ export default function App() {
               <article className={`song-row ${song.id === activeSongId ? "selected" : ""}`} key={song.id}>
                 <button className="row-main" onClick={() => { selectSong(song); setTab("live"); }} aria-label={`Abrir ${song.name}`}>
                   <Artwork index={index} />
-                  <span><strong>{song.name}</strong><small>{song.id === activeSongId && playing ? "Reproduciendo" : `${song.files.length} pistas`}</small></span>
+                  <span><strong>{song.name}</strong><small>{song.id === activeSongId && playing ? "Reproduciendo" : pistas(song.files.length)}</small></span>
                 </button>
                 <button className="deck-remove" onClick={() => removeSong(song.id)} aria-label={`Quitar ${song.name}`}>×</button>
               </article>
@@ -1199,7 +1210,7 @@ export default function App() {
       {tab === "mixer" && (
         <section className="screen" aria-label="Mezclador">
           <div className="lib-head">
-            <div><span className="eyebrow">{tracks.length} PISTAS CARGADAS</span><h1>Mezclador</h1></div>
+            <div><span className="eyebrow">{pistas(tracks.length).toUpperCase()} {tracks.length === 1 ? "CARGADA" : "CARGADAS"}</span><h1>Mezclador</h1></div>
             <button className="glass-btn profile-chip" onClick={() => setProfileOpen(true)} aria-label="Perfil de pistas">PERFIL · {PROFILE_LABEL[profileSource].toUpperCase()}</button>
             <MasterCard volume={masterVolume} />
           </div>
@@ -1220,7 +1231,7 @@ export default function App() {
         <div className="mini-player">
           <button className="mini-main" onClick={() => setExpanded(true)} aria-label="Abrir el reproductor ampliado">
             <Artwork index={Math.max(0, activeIndex)} />
-            <span className="mini-copy"><strong>{songName}</strong><small>{playing ? "Reproduciendo" : paused ? "En pausa" : "Detenido"} · {tracks.length} pistas</small></span>
+            <span className="mini-copy"><strong>{songName}</strong><small>{playing ? "Reproduciendo" : paused ? "En pausa" : "Detenido"} · {pistas(tracks.length)}</small></span>
             <span className={`mini-wave ${playing ? "is-live" : ""}`} aria-hidden="true"><i /><i /><i /><i /></span>
           </button>
           <button className={`play-btn ${playing ? "is-playing" : ""}`} onClick={togglePlay} disabled={resetting} aria-label={playing ? "Pausar" : "Reproducir"}>
@@ -1248,7 +1259,7 @@ export default function App() {
           <div className="player-body">
             <div className="player-copy">
               <h2>{songName}</h2>
-              <p>{tracks.length} pistas</p>
+              <p>{pistas(tracks.length)}</p>
             </div>
             <div className="player-progress">
               <ScrubBar playing={playing} getProgress={getProgress} disabled={tracks.length === 0} onSeek={(fraction) => void seekTo(fraction)} />

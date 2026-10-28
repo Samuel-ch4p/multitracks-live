@@ -12,6 +12,7 @@ declare global {
   interface Window {
     __perf?: Row[]; __perfTable?: () => void; __perfReset?: () => void;
     /** Solo en desarrollo: ganancia de normalización y fader reales de cada pista. */
+    __demo?: (title?: string, count?: number) => Promise<void>;
     __mix?: () => { name: string; norm: number; fader: number; pan: number[] }[];
   }
 }

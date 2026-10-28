@@ -16,7 +16,6 @@
 .tab-bar button.active { border-color: transparent; background: none; box-shadow: none; }
 @media (max-height: 520px) and (orientation: landscape) {
   .tab-bar::before { top: 4px; left: 4px; right: 4px; bottom: auto; width: auto; height: calc((100% - 16px) / 3); transform: translateY(calc(var(--tab-i, 1) * (100% + 4px))); border-radius: 14px; }
-  .mini-player { display: none; }
 }
 
 /* Canción cargada: ahora abre el reproductor ampliado */
@@ -101,5 +100,12 @@ button.loaded-song:active { transform: scale(.98); }
 .scrub-knob { position: absolute; inset: 0; pointer-events: none; transform: translateX(calc(var(--p) * 100%)); will-change: transform; }
 .scrub-knob::after { content: ""; position: absolute; left: -10px; top: 50%; width: 20px; height: 20px; margin-top: -10px; border-radius: 50%; background: linear-gradient(145deg, #f6f7f8, #8d949e); box-shadow: inset 0 1px #fff, 0 3px 10px rgba(0, 0, 0, .5); }
 
-/* En celular horizontal bajo (la cabecera ya trae el transporte) el mini-reproductor no se muestra */
-@media (max-height: 520px) and (orientation: landscape) { .mini-player { display: none; } }
+
+
+/* Celular horizontal: el mini-reproductor ocupa su propia fila bajo el contenido (no tapa los canales) */
+@media (max-height: 520px) and (orientation: landscape) {
+  .app { grid-template-rows: auto minmax(0, 1fr) auto; grid-template-areas: "rail top" "rail main" "rail mini"; }
+  .mini-player { grid-area: mini; margin: 0 max(12px, var(--safe-r)) 6px 12px; padding: 4px 8px 4px 5px; border-radius: var(--r-md); }
+  .mini-main .artwork { width: 36px; height: 36px; }
+  .mini-player .play-btn { height: var(--tap); }
+}

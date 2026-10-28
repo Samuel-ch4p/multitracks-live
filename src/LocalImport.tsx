@@ -1,4 +1,5 @@
 import { useRef, useState } from "react";
+import { pistas } from "./format";
 import { songsFromPicked } from "./archive";
 
 type Props = {
@@ -27,7 +28,7 @@ export default function LocalImport({ onSongLoaded }: Props) {
       }
       for (const song of songs) onSongLoaded(song.name, song.files);
       setStatus(songs.length === 1
-        ? `Añadida: ${songs[0].name} · ${songs[0].files.length} pistas.`
+        ? `Añadida: ${songs[0].name} · ${pistas(songs[0].files.length)}.`
         : `${songs.length} canciones añadidas.`);
     } catch (err) {
       console.error("Error al cargar archivos locales:", err);
