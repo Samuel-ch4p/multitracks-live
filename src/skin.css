@@ -426,3 +426,52 @@
   .chip-row { flex-direction: column; }
   .channel:not(.master) .channel-head { min-height: calc(var(--tap) * 2 + 4px); }
 }
+
+/* ---------- Etapa 6: tarjeta de carga ---------- */
+.load-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 16px; }
+.load-actions .pill-btn { min-height: var(--tap); min-width: 110px; }
+.pill-btn.primary { border-color: rgba(226, 231, 238, .5); background: linear-gradient(145deg, #f2f4f6, #9ea6b1); color: #0a1220; }
+.load-card.is-error { border-color: rgba(255, 92, 108, .4); }
+.load-card.is-error h2 { overflow: hidden; font-size: 17px; text-overflow: ellipsis; white-space: nowrap; }
+.load-error-text { margin: 4px 0 0; color: #ffd5da; font-size: var(--fs-sm); line-height: 1.45; white-space: normal !important; }
+.load-card { max-height: calc(100% - 16px); overflow-y: auto; }
+
+/* Aviso de memoria llena */
+.memory-layer { position: fixed; z-index: var(--z-modal); }
+.memory-card { width: min(440px, 100%); }
+.memory-card h2 { font-size: 17px; line-height: 1.3; }
+.memory-hint { white-space: normal !important; line-height: 1.45; }
+.memory-list { display: flex; flex-direction: column; gap: 8px; max-height: 38vh; margin: 0; padding: 0; overflow-y: auto; list-style: none; overscroll-behavior: contain; }
+.memory-list li { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 10px; border: 1px solid var(--c-line); border-radius: var(--r-md); background: rgba(205, 213, 226, .05); }
+.memory-name { display: flex; min-width: 0; flex-direction: column; gap: 2px; }
+.memory-name strong { overflow: hidden; font-size: var(--fs-sm); text-overflow: ellipsis; white-space: nowrap; }
+.memory-name small, .memory-empty { color: var(--c-muted); font-size: var(--fs-xs); }
+.memory-list .pill-btn { min-height: var(--tap); }
+
+/* Avisos (toasts): píldora flotante pequeña; solo animan transform y opacidad */
+.app-toast {
+  position: absolute; z-index: var(--z-toast); left: 50%; bottom: calc(76px + var(--safe-b)); display: flex; max-width: min(520px, calc(100% - 32px)); align-items: center; gap: 9px;
+  padding: 10px 16px; border: 1px solid var(--c-line-strong); border-radius: 999px; background: rgba(12, 28, 52, .96);
+  box-shadow: var(--sh-pop), inset 0 1px rgba(255, 255, 255, .1); color: var(--c-text); font-size: var(--fs-sm); line-height: 1.3;
+  transform: translateX(-50%); animation: toast-in .32s var(--ease-out); pointer-events: none;
+}
+.app-toast svg { width: 16px; height: 16px; flex: none; color: var(--c-silver-200); }
+.app-toast span { overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+@keyframes toast-in { from { opacity: 0; transform: translate(-50%, 12px); } }
+@media (max-height: 520px) and (orientation: landscape) { .app-toast { bottom: calc(70px + var(--safe-b)); } }
+
+/* Preparando pistas: tarjeta compacta con barra de progreso */
+.prepare-bar { gap: 14px; margin: 0 12px 8px; padding: 8px 10px 8px 14px; border: 1px solid var(--c-line-strong); border-radius: var(--r-md); background: rgba(10, 24, 46, .92); box-shadow: var(--sh-card); justify-content: space-between; }
+.prepare-copy { display: flex; min-width: 0; flex: 1; flex-direction: column; gap: 4px; }
+.prepare-copy strong { font-size: var(--fs-sm); letter-spacing: 0; }
+.prepare-copy .load-progress { height: 5px; }
+.prepare-bar .pill-btn { min-height: var(--tap); }
+@media (max-height: 520px) {
+  .memory-card { padding: 14px 18px; }
+  .memory-card h2 { margin: 2px 0; font-size: 15px; }
+  .memory-card .memory-hint { margin-bottom: 8px; }
+  .memory-list { max-height: 30vh; }
+  .memory-list li { padding: 5px 10px; }
+  .memory-card .load-actions { margin-top: 10px; }
+  .memory-card .brand-mark { display: none; }
+}

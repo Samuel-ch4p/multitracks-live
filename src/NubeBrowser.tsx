@@ -33,7 +33,9 @@ const sizeLabel = (size?: number) => (typeof size === "number" ? `${(size / 1048
  * Descarga y extrae una canción. Nada se guarda en el teléfono: vive solo en memoria mientras la app está abierta.
  * Una sola a la vez (el panel se desmonta al cerrarse: sin esta guarda se podía iniciar una segunda descarga grande).
  */
-async function fetchSong(item: DriveFile, onStatus: (text: string) => void): Promise<{ songName: string; files: File[] }> {
+const cancelled = () => new DOMException("Descarga cancelada", "AbortError");
+
+async function fetchSong(item: DriveFile, onStatus: (text: string) => void, signal: AbortSignal): Promise<{ songName: string; files: File[] }> {
   downloadInFlight = true;
   try {
     onStatus("Conectando para descargar...");
@@ -45,12 +47,14 @@ async function fetchSong(item: DriveFile, onStatus: (text: string) => void): Pro
       lastShown = now;
       const speed = received / 1048576 / Math.max((now - started) / 1000, 0.1);
       onStatus(`Descargando ${Math.round((received / total) * 100)}% · ${mb(received)} de ${mb(total)} MB · ${speed.toFixed(1)} MB/s`);
-    }, cfg);
+    }, cfg, { signal });
+    if (signal.aborted) throw cancelled();
 
     onStatus("Extrayendo pistas...");
     const files = sortFiles(
       (await zipToFilesAsync(blob, (done, total) => onStatus(`Extrayendo pistas · ${done} de ${total}...`))).filter((file) => audioExtensions.test(file.name))
     );
+    if (signal.aborted) throw cancelled();
     if (files.length === 0) throw new Error("No se encontraron pistas de audio compatibles en este archivo.");
     return { songName: item.name.replace(/\.zip$/i, ""), files };
   } finally {
@@ -78,6 +82,8 @@ export default function NubeBrowser({ onSongLoaded }: Props) {
   const [selected, setSelected] = useState<DriveFile | null>(null);
   const [error, setError] = useState(() => (!DRIVE_API_KEY || !DRIVE_ROOT_ID ? friendlyDriveMessage(new DriveError("config", 0, "sin configurar")) : ""));
   const [status, setStatus] = useState("");
+  const [loadFail, setLoadFail] = useState<string | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
   // Buscador
   const [query, setQuery] = useState("");
   const [search, setSearch] = useState("");
@@ -218,22 +224,30 @@ export default function NubeBrowser({ onSongLoaded }: Props) {
 
   async function addSong(item: DriveFile) {
     if (downloadInFlight) { setError("Ya hay una canción descargándose. Espera a que termine."); return; }
+    const controller = new AbortController();
+    abortRef.current = controller;
+    setSelected(item);
     setAdding(true);
     setError("");
+    setLoadFail(null);
     try {
-      const { songName, files } = await fetchSong(item, setStatus);
+      const { songName, files } = await fetchSong(item, setStatus, controller.signal);
       onSongLoaded(songName, files, { inMemory: true });
       setSelected(null);
       setStatus(`Añadida: ${songName} · ${pistas(files.length)}.`);
     } catch (e) {
+      if (controller.signal.aborted) { if (mounted.current) setStatus("Descarga cancelada."); return; }
       console.error("Nube: error al descargar o extraer", e);
       // Los errores de extracción ya vienen en español ("El ZIP está dañado…"); los de red o cuota usan el mensaje amable.
-      setError(e instanceof Error && !(e instanceof DriveError) && !(e instanceof RangeError) && !/fetch|network|abort/i.test(e.message) ? e.message : friendlyDriveMessage(e));
+      if (mounted.current) setLoadFail(e instanceof Error && !(e instanceof DriveError) && !(e instanceof RangeError) && !/fetch|network|abort/i.test(e.message) ? e.message : friendlyDriveMessage(e));
       setStatus("");
     } finally {
+      abortRef.current = null;
       setAdding(false);
     }
   }
+
+  function cancelAdd() { abortRef.current?.abort(); }
 
   function pickSong(file: DriveFile) {
     if (SEARCH_TAP_LOADS) { setSelected(file); void addSong(file); return; }
@@ -417,7 +431,16 @@ export default function NubeBrowser({ onSongLoaded }: Props) {
           </div>
         )}
       </div>
-      {adding && <LoadCard status={status} fileName={(selected?.name ?? "").replace(/\.zip$/i, "")} />}
+      {(adding || loadFail) && (
+        <LoadCard
+          status={status}
+          fileName={(selected?.name ?? "").replace(/\.zip$/i, "")}
+          error={loadFail}
+          onCancel={adding ? cancelAdd : undefined}
+          onRetry={loadFail && selected ? () => void addSong(selected) : undefined}
+          onClose={() => setLoadFail(null)}
+        />
+      )}
     </>
   );
 }

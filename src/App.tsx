@@ -1,5 +1,6 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { pistas } from "./format";
+import MemoryDialog, { type MemorySong } from "./MemoryDialog";
 import "./App.css";
 import "./skin.css";
 import "./skin-player.css";
@@ -569,41 +570,40 @@ export default function App() {
     setStatusMessage(`${song.name} · ${pistas(song.files.length)}`);
   }
 
-  const addSong = useCallback((name: string, files: File[], options?: { inMemory?: boolean }) => {
+  const [memoryPrompt, setMemoryPrompt] = useState<{ name: string; files: File[] } | null>(null);
+  const [, setMemoryVersion] = useState(0);
+
+  const addSong = useCallback((name: string, files: File[], options?: { inMemory?: boolean; force?: boolean }) => {
     if (!Array.isArray(files) || files.length === 0) {
       setStatusMessage(`No se pudo añadir ${name}: no contiene pistas válidas.`);
       return;
     }
-    const song: Song = { id: nextId(), name, files, memoryBytes: options?.inMemory ? files.reduce((sum, file) => sum + file.size, 0) : 0 };
-    let next = [...playlistRef.current, song];
-    // Presupuesto de memoria: se sueltan las canciones descargadas más antiguas que no son la activa ni la recién añadida.
-    let used = next.reduce((sum, item) => sum + item.memoryBytes, 0);
-    const dropped: string[] = [];
-    // Primero las inactivas (más antiguas primero); si aun así no cabe y la activa está parada, también se suelta y la nueva pasa a ser la activa.
-    let replaceActive = false;
-    const activeId = activeSongIdRef.current;
-    const candidates = [...next.filter((item) => item.id !== activeId), ...next.filter((item) => item.id === activeId && !playingRef.current)];
-    for (const old of candidates) {
-      if (used <= memoryBudget()) break;
-      if (old.memoryBytes === 0 || old.id === song.id) continue;
-      used -= old.memoryBytes;
-      dropped.push(old.name);
-      mixesRef.current.delete(old.id);
-      peaksCacheRef.current.delete(old.id);
-      if (old.id === activeId) replaceActive = true;
-      next = next.filter((item) => item.id !== old.id);
+    const memoryBytes = options?.inMemory ? files.reduce((sum, file) => sum + file.size, 0) : 0;
+    // Presupuesto de memoria: si no cabe, no se quita nada en silencio; se pregunta qué quitar (MemoryDialog).
+    const used = playlistRef.current.reduce((sum, item) => sum + item.memoryBytes, 0);
+    if (!options?.force && memoryBytes > 0 && used + memoryBytes > memoryBudget()) {
+      setMemoryPrompt({ name, files });
+      setStatusMessage(`Memoria llena: elige qué quitar para añadir ${name}.`);
+      return;
     }
+    const song: Song = { id: nextId(), name, files, memoryBytes };
+    const next = [...playlistRef.current, song];
     playlistRef.current = next;
     setPlaylist(next);
-    setStatusMessage(
-      dropped.length
-        ? `${name} añadida. Para liberar memoria se quitó del repertorio: ${dropped.join(", ")} (vuelve a añadirla desde la Nube).`
-        : `${name} añadida a la lista (${pistas(files.length)}).`
-    );
-    if (activeSongIdRef.current === null || replaceActive) loadSong(song);
+    setStatusMessage(`${name} añadida a la lista (${pistas(files.length)}).`);
+    if (activeSongIdRef.current === null) loadSong(song);
     // loadSong solo toca refs y estado de React; no depende de renders previos.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  const memoryView = (() => {
+    if (!memoryPrompt) return null;
+    const used = playlistRef.current.reduce((sum, item) => sum + item.memoryBytes, 0);
+    const songs: MemorySong[] = playlistRef.current
+      .filter((item) => item.memoryBytes > 0)
+      .map((item) => ({ id: item.id, name: item.name, tracks: item.files.length, bytes: item.memoryBytes, locked: item.id === activeSongIdRef.current && playingRef.current }));
+    return { songs, freeBytes: memoryBudget() - used, bytes: memoryPrompt.files.reduce((sum, file) => sum + file.size, 0) };
+  })();
 
   function selectSong(song: Song) {
     if (song.id === activeSongIdRef.current || busyRef.current) return;
@@ -905,6 +905,13 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Los avisos se ocultan solos.
+  useEffect(() => {
+    if (!statusMessage) return;
+    const timer = window.setTimeout(() => setStatusMessage(""), 5000);
+    return () => window.clearTimeout(timer);
+  }, [statusMessage]);
+
   useWakeLock(playing || click.running || padState.playing);
   useEffect(() => { setMetersActive(playing); }, [playing]);
   const [fx, setFx] = useFx();
@@ -921,9 +928,9 @@ export default function App() {
   // Solo en desarrollo: canciones sintéticas para ver y medir la interfaz (window.__demo("Nombre", 13)).
   useEffect(() => {
     if (!import.meta.env.DEV) return;
-    window.__demo = async (title = "Todo de nuevo", count = 13) => {
+    window.__demo = async (title = "Todo de nuevo", count = 13, fakeMB = 0) => {
       const { makeDemoSong } = await import("./devDemo");
-      addSong(title, makeDemoSong(title, count));
+      addSong(title, makeDemoSong(title, count, 60, fakeMB), { inMemory: fakeMB > 0 });
     };
   }, [addSong]);
 
@@ -1220,12 +1227,20 @@ export default function App() {
 
       {preparing && (
         <div className="prepare-bar" role="status" aria-live="polite">
-          <span className="spinner" aria-hidden="true" />
-          <strong>Preparando pistas… {readyCount}/{tracks.length}</strong>
+          <div className="prepare-copy">
+            <span className="eyebrow">PREPARANDO MULTITRACK</span>
+            <strong>Preparando pistas {readyCount}/{tracks.length}</strong>
+            <div className="load-progress" style={{ "--pct": tracks.length ? readyCount / tracks.length : 0 } as React.CSSProperties}><span /></div>
+          </div>
           <button className="pill-btn" onClick={() => { setQueuedPlay(false); void playAll(true); }} disabled={resetting}>TOCAR YA</button>
         </div>
       )}
-      {statusMessage && <div className="statusline" role="status">{statusMessage}</div>}
+      {statusMessage && !memoryPrompt && (
+        <div className="app-toast" role="status" aria-live="polite" key={statusMessage}>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8L12 3Z" /></svg>
+          <span>{statusMessage}</span>
+        </div>
+      )}
 
       {tab !== "live" && tracks.length > 0 && (
         <div className="mini-player">
@@ -1310,6 +1325,17 @@ export default function App() {
               : CLOUD_SOURCE === "mega" ? <MegaBrowser onSongLoaded={addSong} /> : <NubeBrowser onSongLoaded={addSong} />}
           </aside>
         </div>
+      )}
+
+      {memoryPrompt && memoryView && (
+        <MemoryDialog
+          incoming={{ name: memoryPrompt.name, tracks: memoryPrompt.files.length, bytes: memoryView.bytes }}
+          songs={memoryView.songs}
+          freeBytes={memoryView.freeBytes}
+          onRemove={(id) => { removeSong(id); setMemoryVersion((version) => version + 1); }}
+          onConfirm={() => { addSong(memoryPrompt.name, memoryPrompt.files, { inMemory: true, force: true }); setMemoryPrompt(null); }}
+          onCancel={() => { setMemoryPrompt(null); setStatusMessage("Canción no añadida."); }}
+        />
       )}
 
       {showClick && <Click metronome={metronome} onClose={() => setShowClick(false)} />}

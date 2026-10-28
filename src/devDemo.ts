@@ -16,6 +16,11 @@ function wav(seconds: number, freq: number, rate = 22050): Blob {
   return new Blob([buffer], { type: "audio/wav" });
 }
 
-export function makeDemoSong(title: string, trackCount: number, seconds = 60): File[] {
-  return NAMES.slice(0, Math.min(trackCount, NAMES.length)).map((name, i) => new File([wav(seconds, 110 * (1 + i * 0.37))], `${title} - ${name}.wav`, { type: "audio/wav" }));
+/** fakeMB: aparenta que la canción ocupa ese tamaño en memoria (para probar el aviso de memoria llena). */
+export function makeDemoSong(title: string, trackCount: number, seconds = 60, fakeMB = 0): File[] {
+  return NAMES.slice(0, Math.min(trackCount, NAMES.length)).map((name, i) => {
+    const file = new File([wav(seconds, 110 * (1 + i * 0.37))], `${title} - ${name}.wav`, { type: "audio/wav" });
+    if (fakeMB > 0) Object.defineProperty(file, "size", { value: (fakeMB * 1048576) / trackCount });
+    return file;
+  });
 }
