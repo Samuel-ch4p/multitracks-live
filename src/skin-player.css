@@ -1,6 +1,6 @@
 /* =====================================================================
    Piezas añadidas del diseño: barra de pestañas con indicador deslizante, mini-reproductor, reproductor ampliado,
-   tarjeta Master con dB. (Se carga después de skin.css; usa las variables de theme.css.)
+   tarjeta Master con dB. (Se carga después de skin.css; usa las variables de styles/tokens.css.)
    ===================================================================== */
 
 /* Indicador que se desliza entre pestañas (solo transform) */
@@ -28,10 +28,10 @@ button.loaded-song:active { transform: scale(.98); }
 .master-icon { display: grid; width: 34px; height: 34px; place-items: center; border: 1px solid var(--c-line); border-radius: 11px; background: var(--c-glass); color: var(--c-silver-200); }
 .master-icon svg { width: 18px; height: 18px; }
 .master-card-info { display: flex; flex-direction: column; gap: 2px; }
-.master-card-info small { color: var(--c-faint); font-size: 7px; letter-spacing: .12em; }
+.master-card-info small { color: var(--c-faint); font-size: var(--fs-xs); letter-spacing: .12em; }
 .master-card-info strong { font-size: 12px; }
 .master-db { min-width: 66px; color: #f6f7f8; font-size: 19px; font-weight: 700; font-variant-numeric: tabular-nums; text-align: right; }
-.master-db small { color: var(--c-faint); font-size: 9px; font-weight: 600; }
+.master-db small { color: var(--c-faint); font-size: var(--fs-xs); font-weight: 600; }
 .master-led {
   width: 120px; height: 6px; overflow: hidden; border-radius: 3px; background: rgba(1, 7, 13, .62); box-shadow: inset 0 1px 3px rgba(0, 0, 0, .6);
   -webkit-mask-image: repeating-linear-gradient(to right, #000 0 4px, transparent 4px 6px); mask-image: repeating-linear-gradient(to right, #000 0 4px, transparent 4px 6px);
@@ -52,7 +52,7 @@ button.loaded-song:active { transform: scale(.98); }
 .mini-main .artwork { width: 42px; height: 42px; }
 .mini-copy { display: flex; min-width: 0; flex: 1; flex-direction: column; gap: 3px; }
 .mini-copy strong { overflow: hidden; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
-.mini-copy small { overflow: hidden; color: var(--c-muted); font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
+.mini-copy small { overflow: hidden; color: var(--c-muted); font-size: var(--fs-xs); text-overflow: ellipsis; white-space: nowrap; }
 .mini-wave { display: flex; align-items: center; gap: 3px; height: 22px; padding-right: 4px; }
 .mini-wave i { display: block; width: 3px; height: 100%; border-radius: 2px; background: var(--c-silver-300); transform: scaleY(.3); transform-origin: 50% 50%; }
 .mini-wave.is-live i { animation: mini-bar .7s ease-in-out infinite alternate; }
@@ -79,7 +79,7 @@ button.loaded-song:active { transform: scale(.98); }
 .player-body { display: flex; min-width: 0; flex-direction: column; justify-content: center; gap: 16px; }
 .player-copy h2 { margin: 0 0 4px; overflow: hidden; font-size: clamp(22px, 5vw, 30px); letter-spacing: -.02em; text-overflow: ellipsis; white-space: nowrap; }
 .player-copy p { margin: 0; color: var(--c-muted); font-size: 12px; }
-.player-times { display: flex; justify-content: space-between; margin-top: 4px; color: var(--c-faint); font-size: 10px; font-variant-numeric: tabular-nums; }
+.player-times { display: flex; justify-content: space-between; margin-top: 4px; color: var(--c-faint); font-size: var(--fs-xs); font-variant-numeric: tabular-nums; }
 .player-controls { display: flex; align-items: center; justify-content: center; gap: 22px; }
 .player-controls .icon-btn { width: 54px; height: 54px; border-radius: 18px; }
 .play-btn.big { width: 84px; height: 66px; border-radius: 24px; }
