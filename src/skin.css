@@ -500,3 +500,28 @@
 /* Aviso de fotogramas lentos */
 .slow-prompt { position: absolute; z-index: var(--z-toast); left: 50%; bottom: calc(76px + var(--safe-b)); display: flex; max-width: calc(100% - 24px); flex-wrap: wrap; align-items: center; justify-content: center; gap: 8px 10px; padding: 10px 12px 10px 16px; border: 1px solid var(--c-line-strong); border-radius: var(--r-lg); background: rgba(12, 28, 52, .97); box-shadow: var(--sh-pop); font-size: var(--fs-sm); transform: translateX(-50%); animation: toast-in .32s var(--ease-out); }
 .slow-prompt .pill-btn { min-height: var(--tap); }
+
+/* ---------- Etapa 9: marcadores de sección ---------- */
+.wave-panel { position: relative; }
+.wave-marks { position: absolute; z-index: 2; left: 0; right: 0; top: 0; height: calc(100% - 26px); pointer-events: none; }
+.wave-marks i { position: absolute; top: 0; bottom: 0; width: 2px; margin-left: -1px; border-radius: 1px; opacity: .85; }
+.marker-bar { display: flex; flex: 0 0 auto; gap: 8px; overflow-x: auto; padding: 0 2px 2px; scrollbar-width: none; touch-action: pan-x; }
+.marker-bar::-webkit-scrollbar { display: none; }
+.marker-chip { display: inline-flex; min-height: var(--tap); flex: none; align-items: center; gap: 8px; padding: 0 14px; border: 1px solid var(--c-line-strong); border-radius: 999px; background: rgba(205, 213, 226, .07); color: var(--c-text); font-size: var(--fs-sm); font-weight: 600; touch-action: manipulation; -webkit-touch-callout: none; }
+.marker-chip i { width: 10px; height: 10px; border-radius: 50%; background: var(--marker-color); }
+.marker-chip:active { transform: scale(.96); background: rgba(205, 213, 226, .16); }
+.marker-hint { display: inline-flex; align-items: center; gap: 6px; color: var(--c-muted); font-size: var(--fs-xs); }
+.marker-hint button { display: grid; width: var(--tap); height: var(--tap); margin: -10px -6px -10px 0; place-items: center; border: 0; background: none; color: var(--c-muted); font-size: 18px; }
+.marker-layer { position: fixed; z-index: var(--z-modal); }
+.marker-card { width: min(420px, 100%); display: flex; flex-direction: column; gap: 10px; }
+.marker-names { display: flex; flex-wrap: wrap; gap: 6px; }
+.marker-names button { min-height: 40px; padding: 0 12px; border: 1px solid var(--c-line); border-radius: 999px; background: rgba(205, 213, 226, .05); color: var(--c-muted); font-size: var(--fs-sm); font-weight: 600; }
+.marker-names button.active { border-color: var(--c-line-strong); background: rgba(205, 213, 226, .18); color: #fff; }
+.marker-field { display: flex; flex-direction: column; gap: 4px; color: var(--c-muted); font-size: var(--fs-xs); letter-spacing: .1em; }
+.marker-field input[type="text"], .marker-field input:not([type]) { min-height: var(--tap); padding: 0 12px; border: 1px solid var(--c-line-strong); border-radius: var(--r-md); background: rgba(5, 12, 24, .6); color: var(--c-text); font-size: var(--fs-md); }
+.marker-field input[type="range"] { width: 100%; min-height: var(--tap); accent-color: var(--c-silver-200); }
+.marker-colors { display: flex; gap: 10px; }
+.marker-colors button { width: var(--tap); height: var(--tap); border: 2px solid transparent; border-radius: 50%; }
+.marker-colors button.active { border-color: #fff; box-shadow: 0 0 0 2px rgba(0, 0, 0, .4) inset; }
+.pill-btn.danger { border-color: rgba(255, 92, 108, .5); color: #ffd5da; }
+@media (max-height: 520px) { .marker-card { gap: 6px; padding: 12px 18px; } .marker-card .brand-mark { display: none; } .marker-colors button { width: 36px; height: 36px; } .marker-names button { min-height: 34px; padding: 0 9px; } }

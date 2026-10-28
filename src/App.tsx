@@ -2,6 +2,8 @@ import { memo, useCallback, useEffect, useMemo, useRef, useState, useSyncExterna
 import { pistas } from "./format";
 import SettingsDrawer, { type DiagnosticsInfo } from "./SettingsDrawer";
 import { startFpsWatch, stopFpsWatch } from "./fpsMonitor";
+import MarkerEditor from "./MarkerEditor";
+import { MARKER_COLORS, dismissHint, hintDismissed, loadMarkers, saveMarkers, type Marker } from "./markers";
 import MemoryDialog, { type MemorySong } from "./MemoryDialog";
 import "./App.css";
 import "./skin.css";
@@ -343,6 +345,27 @@ const MasterCard = memo(function MasterCard({ volume }: { volume: number }) {
   );
 });
 
+/** Marcador en la barra: un toque salta a ese punto; mantenerlo pulsado lo edita. */
+const MarkerChip = memo(function MarkerChip({ marker, onJump, onEdit }: { marker: Marker; onJump: () => void; onEdit: () => void }) {
+  const timer = useRef(0);
+  const longPressed = useRef(false);
+  return (
+    <button
+      className="marker-chip"
+      style={{ "--marker-color": marker.color } as React.CSSProperties}
+      aria-label={`Ir a ${marker.name}`}
+      onPointerDown={() => { longPressed.current = false; timer.current = window.setTimeout(() => { longPressed.current = true; onEdit(); }, 520); }}
+      onPointerUp={() => window.clearTimeout(timer.current)}
+      onPointerLeave={() => window.clearTimeout(timer.current)}
+      onPointerCancel={() => window.clearTimeout(timer.current)}
+      onClick={() => { if (!longPressed.current) onJump(); }}
+      onContextMenu={(event) => event.preventDefault()}
+    >
+      <i aria-hidden="true" />{marker.name}
+    </button>
+  );
+});
+
 function Artwork({ index }: { index: number }) {
   return (
     <div className={`artwork a${index % 5}`} aria-hidden="true">
@@ -555,6 +578,8 @@ export default function App() {
     const display = trackDisplayNames(song.files.map((file) => file.name.replace(/\.[^/.]+$/, "")));
     const resolved = resolveProfile(song.files.map((file, index) => ({ fileName: file.name, displayName: display[index] })), loadSongProfile(songKey), loadGeneral());
     songKeyRef.current = songKey;
+    setMarkers(loadMarkers(songKey));
+    setMarkerDraft(null);
     setProfileSource(resolved.source);
     if (resolved.masterSource !== "factory") setMasterVolume(resolved.master);
     const nextTracks = song.files.map((file) => ({ ...createTrack(file), ...resolved.settings.get(file.name), ...saved?.get(file.name) }));
@@ -632,6 +657,7 @@ export default function App() {
       disposeActiveTracks();
       activeSongIdRef.current = null;
       setActiveSongId(null);
+      setMarkers([]);
       setSongName("Añade una canción");
       setStatusMessage("La lista está vacía.");
     }
@@ -917,6 +943,9 @@ export default function App() {
   useWakeLock(playing || click.running || padState.playing);
   useEffect(() => { setMetersActive(playing); }, [playing]);
   const [fx, setFx] = useFx();
+  const [markers, setMarkers] = useState<Marker[]>([]);
+  const [markerDraft, setMarkerDraft] = useState<{ marker: Marker; isNew: boolean } | null>(null);
+  const [hintShown, setHintShown] = useState(() => !hintDismissed());
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [slowPrompt, setSlowPrompt] = useState(false);
   // Fotogramas lentos sostenidos (< 40 fps durante 5 s) con efectos Completos: se propone pasar a Reducidos (nunca se cambia en silencio).
@@ -1045,6 +1074,24 @@ export default function App() {
     // playAll solo usa refs y setters estables.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [queuedPlay, preparing]);
+
+  function commitMarkers(next: Marker[]) {
+    const sorted = [...next].sort((a, b) => a.position - b.position);
+    setMarkers(sorted);
+    if (songKeyRef.current) saveMarkers(songKeyRef.current, sorted);
+  }
+
+  function addMarkerAt(fraction: number) {
+    if (!getClock().duration) return;
+    const color = MARKER_COLORS[markers.length % MARKER_COLORS.length];
+    setMarkerDraft({ marker: { id: Date.now(), name: "Coro", position: fraction, color }, isNew: true });
+  }
+
+  function saveMarker(marker: Marker) {
+    commitMarkers([...markers.filter((item) => item.id !== marker.id), marker]);
+    setMarkerDraft(null);
+    if (hintShown) { dismissHint(); setHintShown(false); }
+  }
 
   function getDiagnostics(): DiagnosticsInfo {
     const context = contextRef.current;
@@ -1213,13 +1260,33 @@ export default function App() {
               loading={peaksLoading && !peaks}
               disabled={tracks.length === 0}
               onSeek={(fraction) => void seekTo(fraction)}
+              onLongPress={addMarkerAt}
             />
+            {markers.length > 0 && (
+              <div className="wave-marks" aria-hidden="true">
+                {markers.map((marker) => <i key={marker.id} style={{ left: `${marker.position * 100}%`, background: marker.color }} />)}
+              </div>
+            )}
             <div className="wave-meta">
               <ElapsedText />
-              <strong><i className={`state-dot ${playing ? "is-playing" : ""}`} />{playing ? "REPRODUCIENDO" : paused ? "EN PAUSA" : "DETENIDO"}</strong>
+              {markers.length === 0 && hintShown && tracks.length > 0 ? (
+                <span className="marker-hint">
+                  <span>Mantén pulsada la onda para añadir marcadores</span>
+                  <button aria-label="No volver a mostrar" onClick={() => { dismissHint(); setHintShown(false); }}>×</button>
+                </span>
+              ) : (
+                <strong><i className={`state-dot ${playing ? "is-playing" : ""}`} />{playing ? "REPRODUCIENDO" : paused ? "EN PAUSA" : "DETENIDO"}</strong>
+              )}
               <RemainingText />
             </div>
           </div>
+          {markers.length > 0 && (
+            <div className="marker-bar" role="toolbar" aria-label="Marcadores de sección">
+              {markers.map((marker) => (
+                <MarkerChip key={marker.id} marker={marker} onJump={() => void seekTo(marker.position)} onEdit={() => setMarkerDraft({ marker, isNew: false })} />
+              ))}
+            </div>
+          )}
           <div className="mixer-row">
             {mixer}
             {padInline && <aside className="pad-side" aria-label="Pads"><Pads engine={pad} /></aside>}
@@ -1248,7 +1315,7 @@ export default function App() {
           <button className="pill-btn" onClick={() => { setQueuedPlay(false); void playAll(true); }} disabled={resetting}>TOCAR YA</button>
         </div>
       )}
-      {statusMessage && !memoryPrompt && (
+      {statusMessage && !memoryPrompt && !markerDraft && (
         <div className="app-toast" role="status" aria-live="polite" key={statusMessage}>
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8L12 3Z" /></svg>
           <span>{statusMessage}</span>
@@ -1348,6 +1415,17 @@ export default function App() {
           onRemove={(id) => { removeSong(id); setMemoryVersion((version) => version + 1); }}
           onConfirm={() => { addSong(memoryPrompt.name, memoryPrompt.files, { inMemory: true, force: true }); setMemoryPrompt(null); }}
           onCancel={() => { setMemoryPrompt(null); setStatusMessage("Canción no añadida."); }}
+        />
+      )}
+
+      {markerDraft && (
+        <MarkerEditor
+          marker={markerDraft.marker}
+          isNew={markerDraft.isNew}
+          duration={getClock().duration}
+          onSave={saveMarker}
+          onDelete={() => { commitMarkers(markers.filter((item) => item.id !== markerDraft.marker.id)); setMarkerDraft(null); }}
+          onClose={() => setMarkerDraft(null)}
         />
       )}
 
