@@ -8,12 +8,14 @@ import "./styles/tokens.css";
 import "./styles/base.css";
 import { applyFx } from "./effects";
 import { watchVisibility } from "./visibility";
+import { applyMotion } from "./motion";
 import App from "./App.tsx";
 
 // Limpieza: borra cualquier copia de canciones que una versión de prueba anterior haya dejado en el teléfono.
 try { indexedDB.deleteDatabase("crescendo-songs"); } catch { /* sin almacenamiento */ }
 
 applyFx();
+applyMotion();
 watchVisibility();
 
 createRoot(document.getElementById("root")!).render(

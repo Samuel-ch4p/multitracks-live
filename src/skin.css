@@ -370,10 +370,9 @@
 :root[data-fx="reduced"] .play-btn.is-playing { box-shadow: inset 0 1px #fff, 0 6px 16px rgba(0, 4, 12, .4); }
 
 /* Sin movimiento si el sistema lo pide */
-@media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after { animation-duration: .01ms !important; animation-delay: 0s !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
-  .brand-trace { display: none; }
-}
+/* data-motion lo pone motion.ts: "reduce" solo si el sistema lo pide y el usuario decidió respetarlo en Ajustes */
+:root[data-motion="reduce"] *, :root[data-motion="reduce"] *::before, :root[data-motion="reduce"] *::after { animation-duration: .01ms !important; animation-delay: 0s !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
+:root[data-motion="reduce"] .brand-trace { display: none; }
 
 /* ---------- Tamaños para el pulgar según pantalla ---------- */
 @media (max-height: 520px) and (orientation: landscape) {
@@ -475,3 +474,29 @@
   .memory-card .load-actions { margin-top: 10px; }
   .memory-card .brand-mark { display: none; }
 }
+
+/* ---------- Etapa 8: Ajustes y Diagnóstico ---------- */
+.icon-btn { min-width: var(--tap); }
+.settings-drawer { gap: 14px; }
+.setting-block { display: flex; flex-direction: column; gap: 10px; padding: 14px; border: 1px solid var(--c-line); border-radius: var(--r-lg); background: rgba(205, 213, 226, .045); }
+.setting-block strong { display: block; font-size: var(--fs-md); }
+.setting-block small { display: block; margin-top: 3px; color: var(--c-muted); font-size: var(--fs-xs); line-height: 1.4; }
+.segmented-setting { display: flex; gap: 4px; padding: 4px; border: 1px solid var(--c-line); border-radius: var(--r-md); background: rgba(5, 12, 24, .5); }
+.segmented-setting button { min-height: var(--tap); flex: 1; padding: 0 8px; border: 1px solid transparent; border-radius: 11px; background: none; color: var(--c-muted); font-size: var(--fs-sm); font-weight: 600; touch-action: manipulation; }
+.segmented-setting button.active { border-color: var(--c-line-strong); background: linear-gradient(145deg, rgba(219, 223, 229, .2), rgba(82, 89, 100, .08)); color: #fff; box-shadow: inset 0 1px rgba(255, 255, 255, .16); }
+.switch { display: flex; min-height: var(--tap); align-items: center; gap: 12px; padding: 0 4px; border: 0; background: none; color: var(--c-text); font-size: var(--fs-sm); font-weight: 600; touch-action: manipulation; }
+.switch i { position: relative; width: 48px; height: 28px; flex: none; border: 1px solid var(--c-line-strong); border-radius: 999px; background: rgba(5, 12, 24, .7); }
+.switch i::after { content: ""; position: absolute; left: 3px; top: 3px; width: 20px; height: 20px; border-radius: 50%; background: var(--c-silver-400); transition: transform var(--t-mid) var(--ease-out); }
+.switch.on i { background: rgba(205, 213, 226, .22); }
+.switch.on i::after { background: #fff; transform: translateX(20px); }
+.settings-link { min-height: var(--tap); padding: 0 14px; border: 1px solid var(--c-line); border-radius: var(--r-md); background: rgba(205, 213, 226, .05); color: var(--c-text); font-size: var(--fs-sm); font-weight: 600; text-align: left; }
+.diag-list { margin: 0; padding: 4px 12px; border: 1px solid var(--c-line); border-radius: var(--r-md); background: rgba(5, 12, 24, .45); }
+.diag-list > div { display: flex; justify-content: space-between; gap: 14px; padding: 9px 0; border-bottom: 1px solid var(--c-line); font-size: var(--fs-sm); }
+.diag-list > div:last-child { border-bottom: 0; }
+.diag-list dt { color: var(--c-muted); }
+.diag-list dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; }
+.diag-title { margin: 6px 0 0; color: var(--c-muted); font-size: var(--fs-xs); letter-spacing: .12em; }
+
+/* Aviso de fotogramas lentos */
+.slow-prompt { position: absolute; z-index: var(--z-toast); left: 50%; bottom: calc(76px + var(--safe-b)); display: flex; max-width: calc(100% - 24px); flex-wrap: wrap; align-items: center; justify-content: center; gap: 8px 10px; padding: 10px 12px 10px 16px; border: 1px solid var(--c-line-strong); border-radius: var(--r-lg); background: rgba(12, 28, 52, .97); box-shadow: var(--sh-pop); font-size: var(--fs-sm); transform: translateX(-50%); animation: toast-in .32s var(--ease-out); }
+.slow-prompt .pill-btn { min-height: var(--tap); }

@@ -1,5 +1,7 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { pistas } from "./format";
+import SettingsDrawer, { type DiagnosticsInfo } from "./SettingsDrawer";
+import { startFpsWatch, stopFpsWatch } from "./fpsMonitor";
 import MemoryDialog, { type MemorySong } from "./MemoryDialog";
 import "./App.css";
 import "./skin.css";
@@ -915,6 +917,15 @@ export default function App() {
   useWakeLock(playing || click.running || padState.playing);
   useEffect(() => { setMetersActive(playing); }, [playing]);
   const [fx, setFx] = useFx();
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [slowPrompt, setSlowPrompt] = useState(false);
+  // Fotogramas lentos sostenidos (< 40 fps durante 5 s) con efectos Completos: se propone pasar a Reducidos (nunca se cambia en silencio).
+  const slowAsked = useRef(false);
+  useEffect(() => {
+    if (!playing) { stopFpsWatch(); return; }
+    startFpsWatch(fx === "full" && !slowAsked.current ? () => { slowAsked.current = true; setSlowPrompt(true); } : null);
+    return stopFpsWatch;
+  }, [playing, fx]);
 
   // Solo en desarrollo: inspección de las ganancias reales del grafo (para comprobar la normalización).
   useEffect(() => {
@@ -1035,6 +1046,18 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [queuedPlay, preparing]);
 
+  function getDiagnostics(): DiagnosticsInfo {
+    const context = contextRef.current;
+    return {
+      audio: context ? { state: context.state, sampleRate: context.sampleRate, baseLatency: context.baseLatency ?? 0, outputLatency: context.outputLatency ?? 0 } : null,
+      songs: playlistRef.current.length,
+      tracks: tracksRef.current.length,
+      memoryUsedBytes: playlistRef.current.reduce((sum, item) => sum + item.memoryBytes, 0),
+      memoryBudgetBytes: memoryBudget(),
+      playing: playingRef.current,
+    };
+  }
+
   const openLibrary = () => { setShowClick(false); setPadOpen(false); setShowLibrary(true); };
   const openClick = () => { setShowLibrary(false); setPadOpen(false); setShowClick(true); };
   // En pantalla ancha el panel va junto al mezclador; en celular se abre como cajón.
@@ -1141,18 +1164,8 @@ export default function App() {
         <div className="top-tools">
           <span className={`sync-chip ${playing ? "playing" : ready ? "ready" : ""}`} role="status" title={syncLabel} aria-label={syncLabel}><i /><b className="sync-label">{syncLabel}</b></span>
           <button className="glass-btn profile-top" onClick={() => setProfileOpen(true)} aria-label="Perfil de pistas">PERFIL</button>
-          <button
-            className={`glass-btn square fx-btn ${fx === "full" ? "is-on" : ""}`}
-            onClick={() => {
-              const next = fx === "full" ? "reduced" : "full";
-              setFx(next);
-              setStatusMessage(`Efectos visuales: ${next === "full" ? "Completos" : "Reducidos"}`);
-            }}
-            aria-pressed={fx === "full"}
-            aria-label={`Efectos visuales: ${fx === "full" ? "Completos" : "Reducidos"}`}
-            title={`Efectos visuales: ${fx === "full" ? "Completos" : "Reducidos"}`}
-          >
-            <Icon name="spark" />
+          <button className="glass-btn square settings-btn" onClick={() => setSettingsOpen(true)} aria-label="Ajustes" title="Ajustes">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 17h16" /><circle cx="9" cy="7" r="2" /><circle cx="15" cy="17" r="2" /></svg>
           </button>
           <button className="glass-btn restart-btn" onClick={() => void playAll()} disabled={resetting || tracks.length === 0} aria-label="Reiniciar desde el principio">
             <Icon name="restart" /><span>REINICIAR</span>
@@ -1336,6 +1349,24 @@ export default function App() {
           onConfirm={() => { addSong(memoryPrompt.name, memoryPrompt.files, { inMemory: true, force: true }); setMemoryPrompt(null); }}
           onCancel={() => { setMemoryPrompt(null); setStatusMessage("Canción no añadida."); }}
         />
+      )}
+
+      {settingsOpen && (
+        <SettingsDrawer
+          normMode={normMode}
+          onNormMode={setNormMode}
+          onOpenProfiles={() => { setSettingsOpen(false); setProfileOpen(true); }}
+          getDiagnostics={getDiagnostics}
+          onClose={() => setSettingsOpen(false)}
+        />
+      )}
+
+      {slowPrompt && (
+        <div className="slow-prompt" role="alertdialog" aria-label="Fotogramas lentos">
+          <span>La pantalla va lenta. ¿Pasar a efectos reducidos?</span>
+          <button className="pill-btn" onClick={() => setSlowPrompt(false)}>NO, GRACIAS</button>
+          <button className="pill-btn primary" onClick={() => { setFx("reduced"); setSlowPrompt(false); setStatusMessage("Efectos visuales: Reducidos"); }}>REDUCIR</button>
+        </div>
       )}
 
       {showClick && <Click metronome={metronome} onClose={() => setShowClick(false)} />}
