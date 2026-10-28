@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { pistas } from "./format";
+import { useWindowed } from "./windowed";
 import { audioExtensions, sortFiles, zipToFilesAsync } from "./archive";
 import { CloudIcon, LoadCard } from "./MegaBrowser";
 import { DRIVE_API_KEY, DRIVE_ROOT_ID } from "./cloudConfig";
@@ -298,6 +299,11 @@ export default function NubeBrowser({ onSongLoaded }: Props) {
         ? `Índice ${ageLabel(index.builtAt)} · ${index.songs.length} canciones${index.failed ? ` · ${index.failed} carpetas sin leer` : ""}`
         : "";
   const foundArtists: DriveFile[] = (result?.artists ?? quickArtists).map((a) => ({ id: a.id, name: a.name, mimeType: "folder" }));
+  // Listas por ventanas (la clave reinicia la ventana al cambiar de carpeta o de búsqueda)
+  const listKey = `${artist?.id ?? "raiz"}|${search}`;
+  const normalWin = useWindowed(items, listKey);
+  const foundArtistWin = useWindowed(foundArtists, listKey);
+  const foundSongWin = useWindowed(result?.songs ?? [], listKey);
 
   return (
     <>
@@ -397,13 +403,13 @@ export default function NubeBrowser({ onSongLoaded }: Props) {
             {foundArtists.length > 0 && (
               <>
                 <h3 className="result-title">ARTISTAS</h3>
-                <div className="library-items">{foundArtists.map((a, position) => artistRow(a, position))}</div>
+                <div className="library-items">{foundArtistWin.visible.map((a, position) => artistRow(a, position))}</div>{foundArtistWin.sentinel}
               </>
             )}
             {result && result.songs.length > 0 && (
               <>
                 <h3 className="result-title">CANCIONES{result.totalSongs > result.songs.length ? ` · ${result.songs.length} de ${result.totalSongs}` : ""}</h3>
-                <div className="library-items">{result.songs.map((s, position) => songRow(asSong(s), position, `${s.artist} · ${sizeLabel(s.size)}`))}</div>
+                <div className="library-items">{foundSongWin.visible.map((s, position) => songRow(asSong(s), position, `${s.artist} · ${sizeLabel(s.size)}`))}</div>{foundSongWin.sentinel}
               </>
             )}
             {!index && indexing && foundArtists.length > 0 && <p className="hint">Las canciones aparecerán cuando termine de indexar ({progress.done}/{progress.total || "…"}).</p>}
@@ -427,9 +433,10 @@ export default function NubeBrowser({ onSongLoaded }: Props) {
 
         {artists && !loading && !searching && items.length > 0 && (
           <div className="library-items">
-            {items.map((item, position) => (artist ? songRow(item, position, sizeLabel(item.size)) : artistRow(item, position)))}
+            {normalWin.visible.map((item, position) => (artist ? songRow(item, position, sizeLabel(item.size)) : artistRow(item, position)))}
           </div>
         )}
+        {artists && !loading && !searching && items.length > 0 && normalWin.sentinel}
       </div>
       {(adding || loadFail) && (
         <LoadCard
