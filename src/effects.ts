@@ -3,7 +3,7 @@ import { useSyncExternalStore } from "react";
 /**
  * Ajuste "Efectos visuales: Completos / Reducidos".
  * Se guarda en localStorage y se aplica como <html data-fx="full|reduced">; todo el CSS pesado cuelga de ese atributo
- * (ver skin.css). "Completos" es el valor por defecto. Además, `prefers-reduced-motion` apaga las animaciones por CSS.
+ * (ver styles/app.css). "Completos" es el valor por defecto. Además, `prefers-reduced-motion` apaga las animaciones por CSS.
  */
 export type FxMode = "full" | "reduced";
 

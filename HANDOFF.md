@@ -372,3 +372,66 @@ Lectura honesta: a 4x no hay diferencia; a 6x está dentro del ruido (±3 fps); 
 
 ## Pendiente de confirmar en el celular
 Fluidez real con 13–30 pistas; contraste bajo luz de tarima; descarga real (Cancelar/Reintentar); arranque nativo sin parpadeo; pulsación larga en la onda con el dedo; teclado del buscador.
+
+---
+
+# Colores (rama `colores`)
+
+Esta sección **sustituye** lo que arriba diga de `App.css`, `skin.css` y `skin-player.css`: ya no existen; todo el CSS de la interfaz está en `src/styles/app.css` (+ `tokens.css` y `base.css`).
+
+## Causa del problema (auditoría)
+1. **Paleta azul en los tokens**: `tokens.css` definía el fondo como azul marino (`#07162b`, `#0b1d38`, `#102846`) y los acentos de la interfaz como azul/celeste (`#4d9dff`, `#69d9f5`).
+2. **Tres capas de CSS apiladas** (`App.css` → `skin.css` → `skin-player.css`) sobre los mismos selectores: la capa nueva solo pisaba *algunas* propiedades, así que el azul de la capa vieja seguía asomando en bordes, vidrio, sombras y estados. Se quitaron 176 declaraciones muertas (misma regla, mismo contexto, redeclarada más abajo).
+3. **~300 colores escritos a mano** (rgba azulados `rgba(8,20,40,.6)`, `rgba(77,157,255,.14)`, `rgba(105,217,245,…)`…) repartidos por los tres CSS, más hex en `Waveform.tsx`, `BrandMark.tsx`, `trackFamilies.ts` y `markers.ts`, que no dependían de los tokens.
+4. Las variables de la maqueta (`--accent`, `--panel`, `--line`…) estaban definidas dos veces (en `App.css` y en `skin.css`) con valores distintos.
+
+## Qué se hizo
+- **Un solo archivo de colores**: `src/styles/tokens.css`. Fuera de él no queda ningún `#hex`, `rgb()`, `rgba()` ni `hsl()` escrito a mano en CSS ni en TS/TSX (comprobado con búsqueda). Las transparencias se escriben `color-mix(in srgb, var(--c-…) N%, transparent)` y los tonos de familia `rgb(var(--fam-…-rgb) / a)`.
+  - Excepciones inevitables, todas con el mismo valor que los tokens: `index.html` (logo de arranque y fondo, se pintan antes de que cargue el CSS), `android/…/colors.xml`, `capacitor.config.ts` (`#080B11`), el icono vectorial de arranque y el icono del launcher.
+- **Un solo CSS** (`src/styles/app.css`, 1184 líneas) en lugar de tres. Las reglas siguen en el orden de cascada original, con cabeceras `/* ===== origen: … ===== */`.
+- Reglas de color: azul medio, celeste y cian eliminados. Todo acento antes azul/celeste ahora es plata (`--c-silver`) o blanco con baja opacidad. El color solo vive en las familias de pistas (ritmo rojo, armonía azul eléctrico, guía/click morado, voces rosado), en los pads (neón morado suave) y en los estados (verde éxito, ámbar aviso, rojo peligro).
+- `Waveform` (canvas) lee los colores de `tokens.css` en tiempo de ejecución; `BrandMark`, `trackFamilies` y los marcadores usan `var(--…)`.
+- Splash: el primer fotograma es `--c-bg-1`; Android arranca con `splash_bg = #080B11` (antes `#07162B`), el icono de arranque sigue siendo la «C» plateada sin recuadro.
+- Modo demo (solo desarrollo): `npm run dev` y abrir `/?demo&nosplash` carga «Todo de nuevo» (10 pistas con nombres de la referencia), dos canciones más, medidores animados y Guitarra en mute. Todo está bajo `import.meta.env.DEV`; **verificado que `dist/` no contiene nada de esto**.
+
+## Tokens finales (`src/styles/tokens.css`)
+| Token | Valor | Uso |
+|---|---|---|
+| `--c-bg-0` / `--c-bg-1` / `--c-bg-2` | `#05080E` / `#080B11` / `#0A0D13` | fondo profundo / fondo de la app (= arranque Android) / parte alta |
+| `--c-panel` / `--c-panel-2` | `#0E1219` / `#11161D` | paneles, canales |
+| `--c-card` / `--c-card-2` | `#161A22` / `#1B2130` | tarjetas / tarjeta activa, MASTER |
+| `--c-edge` | `#232A38` | borde sólido gris azulado oscuro |
+| `--c-text` / `--c-text-2` / `--c-text-3` | `#E8ECF2` / `#8A93A3` / `#5B6475` | texto principal / secundario / terciario (decorativo) |
+| `--c-faint` / `--c-muted` | `#7A8394` / `#A1A9B6` | texto tenue legible (≥ 4,5:1) y secundario con más contraste para tarima |
+| `--c-metal-hi` / `--c-metal-lo` / `--grad-metal` | `#F2F4F7` / `#9AA2AE` | perillas, play, logo |
+| `--c-line` / `--c-line-strong` | blanco 9 % / 20 % | bordes neutros |
+| `--c-glass` / `--c-glass-strong` | blanco 4 % / 9 % | vidrio neutro |
+| `--fam-rhythm` / `harmony` / `guide` / `vocal` | `#FF3B4E` / `#2F6BFF` / `#9B5CFF` / `#FF4FA3` | familias de pistas (+ `-rgb`) |
+| `--pad-neon`, `--pad-deep-1/2` | `#9B5CFF`, `#533997`, `#191230` | pads |
+| `--c-success` / `--c-warn` / `--c-danger` (+ `-soft`) | `#62B88F` / `#D2AF72` / `#FF5C6C` | estados |
+| `--sh-card`, `--sh-pop`, `--sh-btn`, `--glow-silver` | compuestos | sombras y brillos |
+
+Nota: `--c-faint` y `--c-muted` son derivados (no están en la referencia) para que las etiquetas pequeñas se lean bajo luz de tarima; `--c-text-3` queda para lo decorativo o desactivado.
+
+## Medición de color (capturas con `?demo`, píxel más frecuente de un bloque de 15×15)
+Referencia: valores dados por el usuario, comprobados contra `referencia-reproductor-figma` (capturas pegadas: app `#060A0F–#080D17`, canal `#0F141E`, tarjeta activa `#1B202A`). **Las dos imágenes de `diseno/referencias/` no existían en el proyecto**, así que solo pude medir la captura pegada en el chat y usar los rangos que indicaste.
+
+| Elemento | Referencia | Obtenido (915×412 / 800×360 / 412×915 / 1280×800) | Dif. máx. por canal |
+|---|---|---|---|
+| Fondo de la app | `#05080E`–`#0A0D13` | `#0D1015` / `#0C0F14` / `#0B0E14` / `#0C0E14` | 3 |
+| Barra superior | fondo de la app | `#0B0D14` / `#0B0D14` / `#0E1118` / `#0D0F16` | 5 |
+| Panel (caja de canales) | `#0E1219`–`#11161D` | `#0A0D13` / `#0A0D13` / `#0C0F15` / `#0C0F15` | 6 (azul) |
+| Canal | `#0E1219`–`#11161D` | `#11161D` / `#11161D` / `#12171E` / `#11161D` | 1 |
+| Tarjeta inactiva | `#0E1219`–`#161A22` | `#0E1219` en los 4 | 0 |
+| Tarjeta activa | `#161A22`–`#1B2130` | `#1B2130` en los 4 | 0 |
+| Panel de la onda | `#0E1219`–`#11161D` | `#0E1219` en los 4 | 0 |
+| Barra de pestañas | `#0E1219`–`#11161D` | `#10141B` / `#10141B` / `#0E1219` / `#0D1118` | 1 |
+| Columna MASTER (arriba) | `#161A22`–`#1B2130` | `#1A202E` / `#1A202E` / `#1B2130` / `#1B2130` | 0 |
+
+Casi todo cae dentro del rango o a ≤ 4 niveles. El panel de la caja de canales está a 6 en el canal azul (es el mismo gris que el fondo, adrede: el canal es lo que se eleva). El muestreo es sensible a la geometría; `tools/capture-colors.mjs` + `tools/sample-colors.ps1` lo repiten (requiere Edge/Chrome con `--remote-debugging-port=9333`).
+
+## Estados revisados
+Se recorrieron en el navegador (vivo, Mezcla, Ajustes, Diagnóstico, Pads, Click, Perfil, Biblioteca, Nube) buscando cualquier color azul/celeste distinto del azul de la familia Armonía: no queda ninguno (solo el morado de Guía/pads y los grises azulados de `--c-edge`, `--c-faint` y `--c-text-2`). Hover/activo/deshabilitado/error pasan por las mismas variables; **la tarjeta de carga, el error con Reintentar y el aviso de memoria llena no se vieron en pantalla en esta ronda** (comparten clases con elementos que sí se revisaron).
+
+## Rendimiento
+Sin animaciones nuevas. Se quitó `filter` del `transition` de `.channel` (ya no se usaba). Las mediciones de la sección anterior no se repitieron tras este cambio de color.

@@ -1,10 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- Azul marino del primer fotograma de Splash.tsx (.splash en App.css): mismo valor en tema, WebView y capacitor.config.ts -->
-    <color name="splash_bg">#07162B</color>
-    <color name="redline_bg">#050C16</color>
-    <color name="redline_red">#4D9EFF</color>
-    <color name="colorPrimary">#4D9EFF</color>
-    <color name="colorPrimaryDark">#050C16</color>
-    <color name="colorAccent">#4D9EFF</color>
+    <!-- Fondo oscuro (igual a --c-bg-1 de tokens.css) del primer fotograma de Splash.tsx (.splash en App.css): mismo valor en tema, WebView y capacitor.config.ts -->
+    <color name="splash_bg">#080B11</color>
+    <color name="redline_bg">#05080E</color>
+    <color name="redline_red">#D3D7DC</color>
+    <color name="colorPrimary">#D3D7DC</color>
+    <color name="colorPrimaryDark">#05080E</color>
+    <color name="colorAccent">#D3D7DC</color>
 </resources>

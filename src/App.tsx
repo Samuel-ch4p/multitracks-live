@@ -5,9 +5,7 @@ import { startFpsWatch, stopFpsWatch } from "./fpsMonitor";
 import MarkerEditor from "./MarkerEditor";
 import { MARKER_COLORS, dismissHint, hintDismissed, loadMarkers, saveMarkers, type Marker } from "./markers";
 import MemoryDialog, { type MemorySong } from "./MemoryDialog";
-import "./App.css";
-import "./skin.css";
-import "./skin-player.css";
+import "./styles/app.css";
 import MegaBrowser from "./MegaBrowser";
 import NubeBrowser from "./NubeBrowser";
 import { CLOUD_SOURCE } from "./cloudConfig";
@@ -23,7 +21,7 @@ import Pan from "./Pan";
 import Waveform from "./Waveform";
 import BrandMark from "./BrandMark";
 import { FAMILY_COLORS, defaultPan, familyOf, isGuideOrClick } from "./trackFamilies";
-import { bindAnalyser, bindMeterElements, setMetersActive } from "./meters";
+import { bindAnalyser, bindMeterElements, setMetersActive, startDemoMeters } from "./meters";
 import { useFx } from "./effects";
 import ScrubBar from "./ScrubBar";
 import { HeaderClock, ElapsedText, RemainingText, getClock, setClock } from "./clock";
@@ -972,6 +970,29 @@ export default function App() {
       const { makeDemoSong } = await import("./devDemo");
       addSong(title, makeDemoSong(title, count, 60, fakeMB), { inMemory: fakeMB > 0 });
     };
+  }, [addSong]);
+
+  // Solo en desarrollo, con ?demo en la dirección: canciones falsas (la primera con 10 pistas), medidores animados y una pista en mute,
+  // para revisar el diseño con todo visible. Todo este bloque se elimina del APK de producción (import.meta.env.DEV).
+  useEffect(() => {
+    if (!import.meta.env.DEV || !new URLSearchParams(window.location.search).has("demo")) return;
+    let cancelled = false;
+    void (async () => {
+      const { makeDemoSong, DEMO_TRACK_NAMES } = await import("./devDemo");
+      if (cancelled) return;
+      addSong("Todo de nuevo", makeDemoSong("Todo de nuevo", 10, 30, 0, DEMO_TRACK_NAMES));
+      addSong("Despertar", makeDemoSong("Despertar", 9, 5, 0, DEMO_TRACK_NAMES));
+      addSong("Sin miedo", makeDemoSong("Sin miedo", 8, 5, 0, DEMO_TRACK_NAMES));
+      window.setTimeout(() => {
+        document.querySelectorAll<HTMLElement>(".channel").forEach((channel, index) => { channel.dataset.demoSeed = String(index); });
+        const guitar = tracksRef.current.find((track) => /guitarra/i.test(track.name));
+        if (guitar) changeTrack(guitar.id, { muted: true });
+        startDemoMeters();
+      }, 900);
+    })();
+    return () => { cancelled = true; };
+    // changeTrack solo usa refs y setters estables.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [addSong]);
 
   // Un solo AudioContext para toda la sesión; se despierta con el primer gesto del usuario (los celulares lo dejan dormido hasta entonces)

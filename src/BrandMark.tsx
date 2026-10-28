@@ -19,17 +19,17 @@ export default function BrandMark({ className = "", trace = false }: Props) {
     <svg aria-hidden="true" className={`brand-mark ${className}`} viewBox="-1.8 0 120 120">
       <defs>
         <linearGradient id={gradient} x1="0" x2="1" y1="0" y2="1">
-          <stop offset="0" stopColor="#8a929e" />
-          <stop offset=".42" stopColor="#f2f3f4" />
-          <stop offset=".68" stopColor="#adb3bb" />
-          <stop offset="1" stopColor="#f7f8f8" />
+          <stop offset="0" style={{ stopColor: "var(--c-text-2)" }} />
+          <stop offset=".42" style={{ stopColor: "var(--c-metal-hi)" }} />
+          <stop offset=".68" style={{ stopColor: "var(--c-grey-5)" }} />
+          <stop offset="1" style={{ stopColor: "var(--c-metal-hi)" }} />
         </linearGradient>
       </defs>
       {RINGS.map((ring) => (
         <path key={ring.id} className={`brand-ring ring-${ring.id}`} d={ring.d} fill="none" stroke={`url(#${gradient})`} strokeLinecap="round" strokeWidth={ring.width} />
       ))}
       {trace && RINGS.map((ring) => (
-        <path key={`t-${ring.id}`} className={`brand-trace trace-${ring.id}`} d={ring.d} pathLength={100} fill="none" stroke="#fff" strokeLinecap="round" strokeWidth={ring.width} />
+        <path key={`t-${ring.id}`} className={`brand-trace trace-${ring.id}`} d={ring.d} pathLength={100} fill="none" stroke="var(--c-white)" strokeLinecap="round" strokeWidth={ring.width} />
       ))}
     </svg>
   );

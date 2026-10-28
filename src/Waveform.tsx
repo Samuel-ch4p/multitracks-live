@@ -75,8 +75,10 @@ export default function Waveform({ peaks, playing, getProgress, loading, onSeek,
       }
     };
     // Plateados (diseño): la parte ya reproducida es más clara y luminosa que la que falta
-    paint(baseRef.current, "#c9d0d9", "#4b5666", 0.7);
-    paint(playedRef.current, "#f4f6f8", "#9aa4b2", 1);
+    // Los colores salen de tokens.css (el canvas necesita el valor ya resuelto)
+    const token = (name: string) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+    paint(baseRef.current, token("--c-silver"), token("--c-text-3"), 0.7);
+    paint(playedRef.current, token("--c-metal-hi"), token("--c-metal-lo"), 1);
   }, [peaks]);
 
   useEffect(() => {

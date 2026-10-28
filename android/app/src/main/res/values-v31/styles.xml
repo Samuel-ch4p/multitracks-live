@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- Android 12+: pantalla de arranque del sistema = azul marino liso + la "C" de anillos, sin recuadro y sin animación del sistema (la animación la hace la app) -->
+    <!-- Android 12+: pantalla de arranque del sistema = fondo oscuro liso + la "C" de anillos, sin recuadro y sin animación del sistema (la animación la hace la app) -->
     <style name="AppTheme.NoActionBarLaunch" parent="Theme.SplashScreen">
         <item name="android:windowSplashScreenBackground">@color/splash_bg</item>
         <item name="android:windowSplashScreenAnimatedIcon">@drawable/splash_icon</item>

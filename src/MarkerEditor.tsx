@@ -33,8 +33,8 @@ export default function MarkerEditor({ marker, isNew, duration, onSave, onDelete
           <input type="range" min={0} max={1000} value={Math.round(draft.position * 1000)} onChange={(event) => setDraft({ ...draft, position: Number(event.target.value) / 1000 })} />
         </label>
         <div className="marker-colors" role="radiogroup" aria-label="Color">
-          {MARKER_COLORS.map((color) => (
-            <button key={color} role="radio" aria-checked={draft.color === color} aria-label={`Color ${color}`} className={draft.color === color ? "active" : ""} style={{ background: color }} onClick={() => setDraft({ ...draft, color })} />
+          {MARKER_COLORS.map((color, index) => (
+            <button key={color} role="radio" aria-checked={draft.color === color} aria-label={`Color ${index + 1}`} className={draft.color === color ? "active" : ""} style={{ background: color }} onClick={() => setDraft({ ...draft, color })} />
           ))}
         </div>
         <div className="load-actions">

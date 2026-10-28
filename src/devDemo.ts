@@ -17,10 +17,13 @@ function wav(seconds: number, freq: number, rate = 22050): Blob {
 }
 
 /** fakeMB: aparenta que la canción ocupa ese tamaño en memoria (para probar el aviso de memoria llena). */
-export function makeDemoSong(title: string, trackCount: number, seconds = 60, fakeMB = 0): File[] {
-  return NAMES.slice(0, Math.min(trackCount, NAMES.length)).map((name, i) => {
+export function makeDemoSong(title: string, trackCount: number, seconds = 60, fakeMB = 0, names: string[] = NAMES): File[] {
+  return names.slice(0, Math.min(trackCount, names.length)).map((name, i) => {
     const file = new File([wav(seconds, 110 * (1 + i * 0.37))], `${title} - ${name}.wav`, { type: "audio/wav" });
     if (fakeMB > 0) Object.defineProperty(file, "size", { value: (fakeMB * 1048576) / trackCount });
     return file;
   });
 }
+
+/** Pistas del modo ?demo (nombres con tilde, como en la referencia). */
+export const DEMO_TRACK_NAMES = ["Batería", "Bajo", "Teclas", "Guitarra", "Coros", "Click", "Guía", "Pad", "Voz", "Percusión"];

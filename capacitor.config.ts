@@ -4,7 +4,7 @@ const config: CapacitorConfig = {
   appId: "com.redline.multitracks",
   appName: "Crescendo Live",
   webDir: "dist",
-  backgroundColor: "#07162B",
+  backgroundColor: "#080B11",
   android: {
     allowMixedContent: false,
     adjustMarginsForEdgeToEdge: "force",

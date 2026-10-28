@@ -16,7 +16,7 @@ html, body, #root {
 }
 
 body {
-  background: radial-gradient(120% 90% at 50% 0%, #0d2342 0%, #07162b 45%, #050c16 100%) fixed;
+  background: radial-gradient(120% 90% at 50% 0%, var(--c-bg-2) 0%, var(--c-bg-1) 55%, var(--c-bg-0) 100%) fixed;
 }
 
 button, input { font: inherit; }

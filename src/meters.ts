@@ -19,6 +19,13 @@ const entries = new Map<string, Entry>();
 let frame = 0;
 let active = false;
 let last = 0;
+/** Solo en desarrollo (?demo): niveles sintéticos para revisar el diseño sin audio. Se elimina del APK de producción. */
+let demo = false;
+export function startDemoMeters() {
+  if (!import.meta.env.DEV) return;
+  demo = true;
+  setMetersActive(true);
+}
 
 const entry = (key: string): Entry => {
   let e = entries.get(key);
@@ -67,7 +74,11 @@ function tick(now: number) {
 
   for (const e of entries.values()) {
     let target = 0;
-    if (active && e.analyser && e.buffer) {
+    if (import.meta.env.DEV && demo) {
+      const seed = e.root ? Number(e.root.dataset.demoSeed ?? 0) : 0;
+      const muted = !!e.root?.classList.contains("is-muted");
+      target = muted ? 0 : 0.3 + 0.55 * Math.abs(Math.sin(now / (380 + seed * 61) + seed));
+    } else if (active && e.analyser && e.buffer) {
       e.analyser.getFloatTimeDomainData(e.buffer);
       let peak = 0;
       for (let i = 0; i < e.buffer.length; i++) {
