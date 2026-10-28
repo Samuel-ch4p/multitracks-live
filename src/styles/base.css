@@ -21,3 +21,12 @@ body {
 
 button, input { font: inherit; }
 
+
+/* Rendimiento: los bloques repetidos (canales, tarjetas, paneles) no obligan a repintar el resto de la pantalla */
+.contain-paint { contain: paint; }
+.contain-layout { contain: layout paint; }
+
+/* Con la app en segundo plano se pausan las animaciones decorativas (ver visibility.ts); el audio no se toca */
+:root[data-hidden="true"] *, :root[data-hidden="true"] *::before, :root[data-hidden="true"] *::after {
+  animation-play-state: paused !important;
+}

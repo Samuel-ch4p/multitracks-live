@@ -20,7 +20,7 @@
   /* Texto y líneas */
   --c-text: #f2f4f6;
   --c-muted: #a3adba;
-  --c-faint: #6e7a8a;
+  --c-faint: #8996a8; /* contraste >= 5:1 sobre el fondo marino (luz de tarima) */
   --c-line: rgba(205, 213, 224, .13);
   --c-line-strong: rgba(222, 228, 236, .28);
   --c-glass: rgba(205, 213, 226, .06);
@@ -66,10 +66,35 @@
   --sh-pop: 0 30px 80px rgba(0, 0, 0, .6);
   --sh-btn: inset 0 1px rgba(255, 255, 255, .16), 0 6px 16px rgba(0, 4, 12, .24);
 
+  /* Tipografía: nunca menos de 11 px (--fs-xs) */
+  --fs-xs: 11px;
+  --fs-sm: 12px;
+  --fs-md: 14px;
+  --fs-lg: 18px;
+  --fs-xl: 24px;
+
+  /* Controles de uso en vivo (play, mute, solo, volumen): al menos 44x44 dp */
+  --tap: 44px;
+
+  /* Zonas seguras (muesca, barras del sistema) */
+  --safe-t: env(safe-area-inset-top, 0px);
+  --safe-r: env(safe-area-inset-right, 0px);
+  --safe-b: env(safe-area-inset-bottom, 0px);
+  --safe-l: env(safe-area-inset-left, 0px);
+
+  /* Capas */
+  --z-bar: 5;
+  --z-mini: 8;
+  --z-sheet: 20;
+  --z-modal: 30;
+  --z-toast: 40;
+  --z-splash: 100;
+
   /* Movimiento */
   --ease-out: cubic-bezier(.16, 1, .3, 1);
   --t-fast: .14s;
   --t-mid: .26s;
+  --t-slow: .6s;
 
   /* Efectos pesados: el ajuste "Efectos visuales: Completos / Reducidos" (src/effects.ts) pone <html data-fx="..."> */
   --fx-blur: 18px;

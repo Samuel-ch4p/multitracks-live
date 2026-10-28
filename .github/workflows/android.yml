@@ -25,7 +25,12 @@ jobs:
         with:
           packages: "platform-tools platforms;android-35 build-tools;35.0.0"
 
+      # La llave de la API y el ID de la carpeta raíz de la Nube salen de los "secrets" del repositorio
+      # (Settings > Secrets and variables > Actions): VITE_DRIVE_API_KEY y VITE_DRIVE_ROOT_ID. Nunca van en el código.
       - name: Instalar dependencias y compilar la web
+        env:
+          VITE_DRIVE_API_KEY: ${{ secrets.VITE_DRIVE_API_KEY }}
+          VITE_DRIVE_ROOT_ID: ${{ secrets.VITE_DRIVE_ROOT_ID }}
         run: |
           npm ci
           npm run build

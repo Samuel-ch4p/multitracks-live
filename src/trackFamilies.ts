@@ -1,6 +1,6 @@
 /**
  * Familias de color del mezclador. Para añadir o cambiar nombres, edita SOLO las listas KEYWORDS de abajo.
- * Los colores salen de las variables --fam-* de theme.css (aquí se repiten como respaldo para el estilo en línea).
+ * Los colores salen de las variables --fam-* de styles/tokens.css (aquí se repiten como respaldo para el estilo en línea).
  *
  * Cómo se reconoce: el nombre de la pista se pasa a minúsculas sin tildes, se parte en palabras y cada palabra
  * (sin los números del final) se compara con las listas. Palabras de 4+ letras: basta con que EMPIECEN igual
@@ -61,5 +61,8 @@ export function familyOf(name: string): Family {
  * Es solo el valor inicial: el usuario puede moverlo.
  */
 export function defaultPan(name: string): number {
-  return familyOf(name) === "guide" ? -1 : 0;
+  return isGuideOrClick(name) ? -1 : 0;
 }
+
+/** Click y Guía (familia "guide" de las listas de arriba): quedan fuera de la normalización y arrancan a la izquierda. */
+export const isGuideOrClick = (name: string) => familyOf(name) === "guide";

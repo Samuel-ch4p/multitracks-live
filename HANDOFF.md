@@ -225,3 +225,150 @@ Probado y revertido por decisión del usuario.
   - `archive.ts` `computePeaks(files, buckets, isCancelled, shouldWait, …)`: el análisis (decodificar/leer cada pista) se PAUSA mientras suena la canción (antes competía con el audio por CPU y memoria, sobre todo con FLAC). Efecto: en canciones pesadas la normalización y la forma de onda terminan cuando se detiene/pausa; los WAV casi siempre terminan antes de pulsar Play.
   - `trackGraph.ts`: pista estéreo en el centro = matriz de paneo identidad → se salta (entrada → normalización directo) y el separador, 4 ganancias y unión dejan de procesarse (de ~11 a ~5 nodos por pista). Al mover el paneo vuelve la cadena completa (comprobado: audio sigue al mover y regresar).
 - Pendiente si sigue mal: leer los FLAC a un formato más liviano al cargar, reducir medidores por pista cuando hay >16, o `adb logcat` para ver el motivo exacto del cierre.
+
+## Nube Crescendo sobre Google Drive + Play rápido + normalización nueva + buscador + perfiles (oct 2026)
+Archivos nuevos: `cloudConfig.ts`, `driveSource.ts`, `NubeBrowser.tsx`, `searchIndex.ts`, `songTags.ts`, `normConfig.ts`, `normalizer.ts`, `trackProfiles.ts`, `ProfileDrawer.tsx`, `perf.ts`, `.env.example`, pruebas `tools/verify-{drive,search,profiles}.ts` (todas dentro de `npm run verify`). La fuente anterior (`MegaBrowser.tsx`) sigue ahí como respaldo.
+
+### 0) Drive como fuente de la Nube
+- Configuración: `.env` (NO se sube; ver `.env.example`) con `VITE_DRIVE_API_KEY` (llave de Google restringida a "Google Drive API") y `VITE_DRIVE_ROOT_ID` (carpeta raíz compartida: "Cualquier persona con el enlace · Lector"). Estructura: Raíz/<Artista>/<Canción>.zip.
+- GitHub Actions: crear dos secrets del repositorio (Settings › Secrets and variables › Actions › New repository secret): `VITE_DRIVE_API_KEY` y `VITE_DRIVE_ROOT_ID`. `android.yml` los pasa como variables de entorno al `npm run build`. Sin ellos la app compila, pero la Nube muestra "aún no está configurada". OJO: la llave queda dentro del JS del APK (como el enlace anterior): restringirla SOLO a Drive API y, si se puede, a la app/origen (en Android el origen es `https://localhost`; si se pone restricción por referente, incluir `https://localhost/*`).
+- Respaldo: `VITE_CLOUD_SOURCE=mega` en `.env` (o `DEFAULT_SOURCE` en `cloudConfig.ts`) vuelve a la fuente anterior.
+- `driveSource.ts`: `listChildren` (q = carpeta padre y `trashed=false`, `fields=nextPageToken,files(id,name,mimeType,size,modifiedTime)`, `pageSize=1000`, paginación completa), `listArtists` (SOLO carpetas; ignora .rar/.zip sueltos de la raíz), `listSongs` (SOLO .zip), orden sin mayúsculas/acentos; NO fusiona ni renombra variantes ("Bethel"/"Bethel MUSIC"…). `downloadFile`: `files/{id}?alt=media&key=…` con Range, trozos de 4 MB, 8 conexiones (Drive limita por usuario), reintentos con espera creciente, parada tras 20 s sin datos, progreso real; cada trozo es parte de un Blob (sin bloque gigante ni copia final) y el ZIP se lee por tramos (`zipToFilesAsync(Blob)`). Si el servidor no admite Range cae a descarga continua. 403 de cuota / 429 / 5xx se reintentan; 404 y otros 403 no. Mensaje al usuario: "No se pudo descargar ahora, intenta en unos minutos." (nunca nombra el servicio).
+- Hallazgo: el progreso del `LoadCard` de `MegaBrowser.tsx` nunca mostraba porcentaje (las expresiones regulares no tenían `\d`); corregido y reutilizado por `NubeBrowser`.
+- NO verificado contra el Drive real (no hay `.env` aquí): se probó con un Drive simulado (paginación de 2 424 elementos, filtrado, Range, cuota, 404, sin Range). Pendiente en el celular/real: que Drive acepte la petición con cabecera `Range` desde el WebView (si el navegador bloqueara el preflight CORS el código solo cae a descarga continua cuando recibe 200; si falla de red, muestra el mensaje amable) y la cuota diaria de la llave.
+- FLAC en Android: el celular ya decodificó y reprodujo un ZIP de FLAC (29 pistas) en pruebas anteriores; no se puede reconfirmar desde aquí.
+
+### 1) Retraso de ~15 s al dar Play
+- CAUSA RAÍZ: al pulsar Play, `playAll` esperaba el análisis de niveles (decodificar CADA pista completa, de a una) con un tope de 15 s, y después reiniciaba cada pista a 0, creaba los nodos y recién entonces llamaba a `play()`. En un celular la decodificación de 12-15 FLAC dura más que ese tope, así que Play tardaba justo 15 s.
+- Ahora todo ocurre al CARGAR la canción (`prepareTracks` en `App.tsx`): se crea el grafo de audio de cada pista, se espera a que cada `<audio>` tenga datos para sonar sin cortes (`readyState ≥ 3`) y se mide nivel/tipo de cada pista (2 a la vez, `computePeaks` con `concurrency`). Estado visible "Preparando pistas… 8/13" (píldora superior + barra con botón TOCAR YA). Si se pulsa Play antes, queda en espera visible y arranca solo al terminar; TOCAR YA fuerza el arranque sin esperar (sin normalizar).
+- Al pulsar Play: `resume()` solo si el contexto no está activo, se reinician únicamente las pistas que no están en 0, y los `play()` de todas se lanzan en la misma vuelta del programa (el corrector de desfase mantiene la alineación). Tras Detener las pistas vuelven a quedar listas.
+- No se pasó a `AudioBufferSourceNode`/`start(when)`: decodificar todas las pistas completas ocuparía ~100 MB por pista de 5 min en estéreo (13 pistas ≈ 1,4 GB) y no cabe en un celular. Se mantiene `<audio>` + `MediaElementSource`.
+- Un solo AudioContext por sesión (`getContext`), despertado con el primer gesto (`pointerdown`/`keydown` en captura) y de nuevo si el sistema lo suspende.
+- Memoria: `statsRef` ahora es `WeakMap` (antes retenía los archivos de canciones quitadas); presupuesto de memoria para canciones descargadas (`memoryBudget()`: 20 % de `navigator.deviceMemory`, entre 0,6 y 1,5 GB): al añadir otra se quitan del repertorio las más antiguas que no suenan (también la activa si está parada). Motivo medido: con 335 MB + 1,7 GB de Blobs en la página, Chromium dejó ilegibles los archivos (`NotReadableError`) y la canción grande quedó sin forma de onda. Con el presupuesto la canción grande carga y se analiza normal.
+- Tiempos medidos en PC (Chromium, 13 pistas FLAC estéreo de 4,5 min, 335 MB, Drive simulado local; el celular será 5-10 veces más lento en decodificar):
+
+| Etapa | Antes | Ahora |
+|---|---|---|
+| Descarga 335 MB (localhost) + extracción ZIP | 1,5 s | 1,5 s |
+| Decodificar + medir cada pista | 0,65 s (8,4 s las 13, en serie) | 0,65 s c/u, de a 2: listas en 5,3 s con progreso n/13 |
+| Crear nodos de audio | dentro de Play | 3 ms, al cargar |
+| `AudioContext.resume()` | 40 ms, en Play | 0 ms (ya activo) |
+| Espera del análisis dentro de Play | hasta el resto de 8,4 s (tope 15 s) | 0 (ya terminó) |
+| Reiniciar pistas a 0 (seek) | 184 ms | 12 ms (solo las que no están en 0) |
+| Esperar pistas en 0 | 50 ms | 0 |
+| `play()` de todas | 1 ms | 5 ms |
+| TOTAL desde pulsar Play | 1,36 s medido con el análisis casi listo; ~8 s en el peor caso en PC; 15 s en el celular (el tope) | 17 ms |
+
+  Canción de 10 WAV (1,7 GB, ZIP sin compresión): descarga y extracción 29 s en PC (disco local), preparación 0,8 s tras elegirla, pico de heap de JS 205 MB (los Blobs no cuentan ahí).
+
+### 2) Normalización rehecha
+- QUÉ ESTABA MAL: (a) nivelaba pista por pista al mismo nivel (-18 dB de potencia) y destruía el balance de la mezcla original (bombo = platillo = pad); (b) subía hasta +12 dB las pistas flojas, incluidas casi vacías (el ruido de fondo se hacía audible); (c) cambiaba Click (a -6 dBFS de pico) y Guía (a -20 dB) en vez de dejarlas; (d) el plan se recalculaba cada vez que llegaba la medición de una pista, también con la canción sonando (cambios de volumen a media canción / bombeo); (e) el tope de mezcla era una reducción global que dependía de qué pistas ya estuvieran medidas.
+- AHORA (`normConfig.ts` = todos los umbrales con comentarios; `normalizer.ts` = plan puro): UNA sola ganancia por canción = referencia (-16 dBFS RMS por canal) menos el nivel de la mezcla de las pistas musicales (potencias sumadas ventana a ventana de 0,4 s, con compuerta de silencio absoluta -50 dB y relativa -20 dB), limitada a ±6 dB y a lo que permita el techo de pico (estimación -1 dBFS). Se aplica en el nodo `norm` de cada pista musical (etapa propia, separada del fader). Click y Guía (familia "Guía y Click" de `trackFamilies.ts`, `isGuideOrClick`) quedan fuera: ganancia exactamente 1, y van directo al master (no pasan por el limitador). Las musicales pasan por un bus con limitador suave (WaveShaper: idéntico hasta -3 dBFS, tanh hasta -1,3 dBFS; medido en Chromium: por debajo de -1,1 dBFS hasta +10 dB de sobrecarga; con entradas absurdas de +26 dB sobrepasa ~0,3 dB).
+- Modos (botón NORM del master, alterna en vivo; se guarda en `crescendo-norm-mode-v2`; migra el interruptor anterior): Apagado / Suave (por defecto) / Nivelar pistas (Suave + corrige ±6 dB solo las pistas a más de 9 dB de la mediana; no sube las que están bajo -55 dB).
+- El plan se calcula solo cuando TODAS las pistas musicales están medidas (si no, ganancia 1) y queda fijo mientras suena; solo cambia si se cambia el modo (rampa de 0,12 s).
+- Click/Guía siguen midiéndose solo para saber si son mono o de un lado (necesario para el paneo), no para nivel.
+
+### 3) Buscador de la Nube
+- Campo fijo arriba de la biblioteca. Busca en vivo (retardo 200 ms), sin mayúsculas/acentos, guiones/puntos/guiones bajos = espacio, todas las palabras deben coincidir, en artistas y canciones ("Artista Canción" se busca junto). Resultados agrupados ARTISTAS / CANCIONES; tocar un artista abre su carpeta; tocar una canción la SELECCIONA y muestra "＋ AÑADIR" (así no se inician descargas grandes por error; poner `SEARCH_TAP_LOADS = true` en `NubeBrowser.tsx` para que baje al tocar).
+- Índice (`searchIndex.ts`): solo metadatos (id, nombre, artista, tamaño). Se construye en segundo plano la primera vez (una consulta por artista, 6 a la vez, progreso "Indexando biblioteca… n/N"), se guarda en IndexedDB (`crescendo-meta` › `kv` › `nube-index-v1`, con fecha y `rootId`) y el botón "ACTUALIZAR ÍNDICE" lo reconstruye. Si IndexedDB falla queda en memoria. Mientras se indexa, los artistas ya se buscan con la lista cargada. Estados: indexando, sin resultados, error (REINTENTAR). `--kb` (visualViewport) reserva la altura del teclado al final de la lista.
+- Etiquetas de tono/BPM (`songTags.ts`): "…-D-145bpm", "Ab 130,00 bpm", "Bb 105", "C#m - 72 BPM", "Canción - Em"; una "A" suelta en medio del nombre NO es tono; si no se puede extraer, no se muestra nada.
+
+### 4) Perfiles de pistas
+- Botón PERFIL (pestaña Mezcla y barra de la pestaña Live) abre el cajón: GUARDAR COMO PREDETERMINADO, GUARDAR SOLO PARA ESTA CANCIÓN, RESTABLECER VALORES DE FÁBRICA (pide un segundo toque), EXPORTAR / IMPORTAR (texto JSON visible y copiado al portapapeles; archivo o texto pegado). Indicador del perfil activo en el cajón, en la pestaña Mezcla y en la barra Live ("CANCIÓN CARGADA · PERFIL …").
+- Guarda por tipo de pista (nombre sin el prefijo común, sin acentos ni número final: "Keys 1" y "Keys 2" = "keys"; si hay varias del mismo tipo manda la primera): volumen de fader, paneo, mute, solo y la familia; más el master. Por canción: por nombre de archivo exacto, con clave nº de pistas + hash de `nombre|tamaño` (`crescendo-profile-song-v1:<clave>`); general en `crescendo-profile-general-v1`. localStorage envuelto en try/catch.
+- Prioridad al cargar: lo movido en esta sesión › esta canción › predeterminado › fábrica (fader 80, centro, Click y Guía a la izquierda; master 85, que solo se toca si algún perfil lo trae). Se aplica antes de que se pueda dar Play, así que no hay saltos. No incluye la ganancia de normalización.
+- Guardar predeterminado fusiona (conserva los tipos de pista que no están en la canción actual). Restablecer borra el predeterminado Y el de la canción actual.
+
+### Qué quedó verificado y qué no
+- Por pruebas automáticas (`npm run verify`): paginación, filtrado, orden, Range y errores de Drive (simulado), búsqueda (acentos, varias palabras, concurrencia 6, fallos, sin IndexedDB), etiquetas, normalización (Click/Guía exactamente 0 dB, balance conservado, ±6 dB, techo de pico, silencios, modos, datos incompletos), limitador (en Node y renderizado real en Chromium), perfiles (prioridad, validación, almacenamiento, exportar/importar), WAV directo, paneo.
+- En Chromium contra un Drive simulado: listado de artistas, descarga con Range y extracción de 335 MB y de 1,7 GB, búsqueda con IndexedDB, progreso "Preparando pistas… n/13", Play de 17 ms, ganancias reales (música +3,5 dB igual para todas, Click/Guía 0,00 dB), modo NORM rotando, perfiles guardados, aplicados y restablecidos tras recargar.
+- SOLO en el celular: Drive real (llave, cuota, preflight de `Range`), tiempos reales de decodificación y preparación en el teléfono, que el audio no se entrecorte con 13-29 pistas, el teclado sobre el buscador, el sonido real de la normalización y del limitador, memoria con canciones grandes.
+
+---
+
+# Rediseño visual (rama `rediseno`)
+
+La maqueta de Figma Make (`diseno/rediseno/`, no versionada; ver `.gitignore`) es **solo referencia visual**. La app real ya tenía casi toda la estructura de esa maqueta (pestañas, mezclador con medidores por refs, mini reproductor, tarjeta de carga), así que el trabajo fue llevar sus tokens y detalles, y añadir lo que faltaba. Sin Tailwind: todo es CSS normal.
+
+## Mapa maqueta → componentes reales
+| Maqueta | App real |
+|---|---|
+| `SplashScreen` | `Splash.tsx` + `BrandMark.tsx` (vectorial, sin recuadro) + arranque nativo (`values-v31`, `splash_icon.xml`, fondo `#07162B`) |
+| `app-header`, `tempo-block`, `PlayButton` | `.topbar` en `App.tsx`; reloj en `clock.tsx` (`HeaderClock`) |
+| `song-deck`, `deck-card` | `songDeck` en `App.tsx` |
+| `waveform-panel`, marcadores | `Waveform.tsx` + `markers.ts` + `MarkerEditor.tsx` (marcadores nuevos) |
+| `channel`, `master-column`, `master-card` | `ChannelStrip`, `MasterStrip`, `MasterCard`, `Fader.tsx`, `Pan.tsx`, `meters.ts` |
+| `mini-player` | bloque `.mini-player` en `App.tsx` (`skin-player.css`) |
+| `LibraryPanel` | `NubeBrowser.tsx`, `MegaBrowser.tsx` (respaldo), `LocalImport.tsx` |
+| `load-card` | `LoadCard` en `MegaBrowser.tsx` (la usa `NubeBrowser`), `MemoryDialog.tsx` |
+| `utility-panel` Pads / Click / Perfiles | `Pads.tsx`, `Click.tsx`, `ProfileDrawer.tsx` |
+| Ajustes (+ Diagnóstico, nuevo) | `SettingsDrawer.tsx`, `fpsMonitor.ts`, `motion.ts` |
+| `app-toast` | `.app-toast` (aviso de estado de `App.tsx`, se oculta solo a los 5 s) |
+
+## Tokens y estilos
+- `src/styles/tokens.css`: colores (fondo marino, plateados, familias de pista), radios, espacios, sombras, tipografía (`--fs-xs` = 11 px mínimo), `--tap` = 44 px, zonas seguras `--safe-*`, capas `--z-*`, movimiento. `--c-faint` subió a `#8996a8` (contraste ≥ 5:1).
+- `src/styles/base.css`: reset, fondo, utilidades `contain-*`, pausa de animaciones con la app en segundo plano (`visibility.ts` pone `data-hidden`).
+- Disposición: `App.css`; aspecto: `skin.css` y `skin-player.css` (las reglas de cada etapa están al final, con su cabecera). Pendiente de orden: la maqueta separa estilos por pantalla; aquí siguen en 3 archivos grandes.
+
+## Qué se adaptó y por qué
+- Etapa 2: la atmósfera del splash usaba `filter: blur(100px)` y el trazo de luz `drop-shadow`; ahora son degradados radiales estáticos (se ven igual y no pintan filtros).
+- Etapa 3: el reloj salió de `App` (`clock.tsx`, `useSyncExternalStore`): el segundero repinta solo los textos de tiempo, la onda y la barra del reproductor. Controles de 44 dp. Quité los desenfoques de pantalla completa (`library-scrim`, `load-layer`) y puse fondos más oscuros.
+- **Excepción medida**: `.topbar` conserva `backdrop-filter: blur(12px)` solo en «Completos». Quitarlo bajó ~10 % los fotogramas con la CPU 8x más lenta (la franja deja de tener su propia capa de composición).
+- Etapa 4: el mini reproductor ahora **también se ve en horizontal** (antes se ocultaba): ocupa su propia fila bajo el contenido. «1 pista» en singular (`format.ts`). En horizontal bajo el botón PERFIL va en la barra superior; en vertical queda en la fila «Canción cargada».
+- Etapa 5: M y S de 44×44; el brillo del fader pasó de `blur(7px)` a un degradado radial; los canales atenuados solo cambian opacidad (sin `filter`).
+- Etapa 6: **Cancelar** (AbortController real en la descarga), **Reintentar** en errores, y el **aviso de memoria llena** deja elegir qué quitar del repertorio (antes quitaba canciones en silencio). «Preparando pistas 8/13» con barra de progreso. Avisos flotantes.
+- Etapa 7: listas de artistas/canciones por ventanas (`windowed.tsx`, 40 filas y otras 40 al llegar al final).
+- Etapa 8: nuevo panel **Ajustes** (normalización, efectos visuales, «El sistema pidió menos animaciones» con interruptor, perfiles, Diagnóstico). Si hay < 40 fps durante 5 s con «Completos», se **propone** pasar a «Reducidos» (nunca en silencio).
+- Etapa 9: marcadores de sección (pulsación larga en la onda; nombre, posición y color; un toque salta; pulsación larga en el marcador lo edita). Guardados por canción en `localStorage` (con try/catch); sin marcadores no aparece la barra.
+- Herramientas de desarrollo: `window.__demo(nombre, pistas, MBsimulados)` (solo en `npm run dev`) crea canciones sintéticas; `tools/measure-fps.mjs` mide fotogramas (ver su cabecera).
+
+## Animaciones y efectos pesados (inventario)
+Animadas solo con `transform`/`opacity` salvo lo indicado. «Reducidos» (`data-fx="reduced"`) apaga: partículas/atmósfera/destello del splash (`.fx-heavy`), aura giratoria de la tarjeta de carga, `.fader-glow`, brillo del cabezal, desenfoque de la barra superior, respiración de las órbitas de las carátulas, ondas del mini reproductor, pulso de los pads.
+- `backdrop-filter`: 1 (barra superior, solo Completos). Antes: 4 (barra, `library-scrim`, `load-layer` y otros).
+- `filter`: ya no hay `blur` ni `drop-shadow` animados. Queda `filter: brightness` al arrastrar un fader (un solo elemento).
+- Medidores: un solo `requestAnimationFrame` (`meters.ts`), `transform: scaleY`, ≈40 fps en Completos / ≈20 en Reducidos; se detiene sin señal.
+- Con la app en segundo plano: `animation-play-state: paused` (el audio sigue).
+- `contain: content` en tarjetas del repertorio, filas de canciones y de biblioteca. En `.channel` se probó `contain: layout style` y **no mejoró** (medido), por eso no está.
+
+## Medición de rendimiento
+Edge sin cabeza (`tools/measure-fps.mjs`), 915×412 @2x móvil, 13 pistas sonando, compilación de producción, CPU ralentizada por CDP. Pantalla a ~75 Hz. «Antes» = commit `e112748`.
+
+| Ralentización | Pantalla | Antes | Después |
+|---|---|---|---|
+| 4x | En vivo (mezclador) | 74,4 fps | 74,6 fps |
+| 4x | Mezcla | 74,9 fps | 74,9 fps |
+| 6x | En vivo | 57,2 fps | 56,2 fps |
+| 6x | Mezcla | 72,0 fps | 67,7 fps |
+| 8x | En vivo | 31,4 fps | 29,5–32,8 fps |
+| 8x | Mezcla | 57,8 fps | 41–48 fps |
+
+Lectura honesta: a 4x no hay diferencia; a 6x está dentro del ruido (±3 fps); a 8x (extremo) la pestaña Mezcla cae porque **ahora el mini reproductor se ve en horizontal** (pedido; quitarlo devolvía ~6 fps) y los botones M/S son más grandes. Las repeticiones varían ±5 fps. No se midió en un celular real.
+
+## Lista de paridad
+| Función | Dónde está ahora | Verificada |
+|---|---|---|
+| Logo, BPM y compás, CLICK, PAD | `.topbar` (`.tempo`, `.click-btn`, `.pad-btn`) | Sí: 915×412, 412×915, 1280×800 |
+| Tiempo transcurrido/total | `HeaderClock` | Sí |
+| Transporte (anterior, play/pausa, stop, siguiente) | `.transport` | Sí (play/pausa probado) |
+| Efectos visuales | Ajustes › Efectos visuales (ya no es botón suelto) | Sí (se abre; el cambio no se pulsó) |
+| REINICIAR | `.restart-btn` (solo icono en pantalla compacta) | Visual; no se pulsó |
+| Indicador «En vivo» | `.sync-chip` y pastilla «SESIÓN EN VIVO» | Sí |
+| Setlist: tarjetas, quitar, «+», activa resaltada | `songDeck` | Sí |
+| Forma de onda con posición (tocar mueve) | `Waveform.tsx` | Parcial: se ve y sigue al sonar; el salto por toque no se pulsó |
+| Mezclador: M, S, fader, medidor, paneo, nombre, valor | `ChannelStrip` | Sí (medidores vivos con la canción sonando) |
+| MASTER: normalización (Apagado/Suave/Nivelar), volumen, «Salida principal» | `MasterStrip`, `MasterCard`, Ajustes | Visual; el cambio de modo no se pulsó |
+| PERFIL (fábrica/predeterminado/canción; guardar, restablecer, exportar, importar) | `ProfileDrawer`, botón PERFIL | Solo existe y abre; guardar/importar no se pulsaron (`npm run verify` cubre la lógica) |
+| Mini reproductor «Reproduciendo» | `.mini-player` (Mezcla y Biblioteca, también horizontal) | Sí en Mezcla 800×360 |
+| Tarjeta de carga + progreso + Cancelar | `LoadCard` | **No** probada con red (no hay llaves de la nube); compila |
+| Error con Reintentar | `LoadCard` modo error | **No** probada con red |
+| Aviso de memoria llena + qué quitar | `MemoryDialog` | Sí (simulado con `__demo`: quitar y añadir) |
+| Biblioteca: selector de fuente, «Este dispositivo» | `.library-panel`, `LocalImport` | Sí (visual) |
+| Biblioteca Nube: buscador, artistas/canciones, tamaño/tono/BPM, Añadir, Actualizar, índice | `NubeBrowser` | **No** probada con datos reales (sin llaves); las ventanas de lista no se ejercitaron |
+| Pads (notas, menor, sostenido, volumen) | `Pads.tsx` en cajón | Sí (visual) |
+| Panel de Click (BPM, compás, volumen) | `Click.tsx` | Sin cambios de lógica; no se abrió esta sesión |
+| Ajustes y Diagnóstico | `SettingsDrawer` | Sí |
+| Toasts y splash | `.app-toast`, `Splash.tsx` | Toast sí; el splash no se vio en pantalla tras los cambios |
+| Marcadores de sección | `MarkerEditor`, `.marker-bar` | Sí (crear, guardar, persistir, saltar) |
+
+## Pendiente de confirmar en el celular
+Fluidez real con 13–30 pistas; contraste bajo luz de tarima; descarga real (Cancelar/Reintentar); arranque nativo sin parpadeo; pulsación larga en la onda con el dedo; teclado del buscador.

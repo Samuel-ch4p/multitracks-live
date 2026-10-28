@@ -1,12 +1,14 @@
 import { useCallback, useEffect, useRef } from "react";
+import { useProgress } from "./clock";
 
 type Props = {
   peaks: Float32Array | null; // valores 0..1
-  progress: number; // 0..1, se actualiza poco a poco (sirve en pausa y para accesibilidad)
   playing: boolean;
   getProgress: () => number; // lectura en vivo (0..1): la barra la consulta en cada fotograma mientras suena
   loading: boolean;
   onSeek: (fraction: number) => void;
+  /** Mantener pulsada la onda (sin mover el dedo) añade un marcador en ese punto. */
+  onLongPress?: (fraction: number) => void;
   disabled?: boolean;
 };
 
@@ -18,7 +20,10 @@ const GAP = 4;
  * encendida. Mientras suena solo se mueve una variable CSS (--p) en cada fotograma: la capa encendida se recorta
  * y la línea se desplaza con transform, sin volver a pintar nada ni tocar React.
  */
-export default function Waveform({ peaks, progress, playing, getProgress, loading, onSeek, disabled }: Props) {
+export default function Waveform({ peaks, playing, getProgress, loading, onSeek, onLongPress, disabled }: Props) {
+  const holdRef = useRef<{ timer: number; x: number; y: number } | null>(null);
+  const cancelHold = () => { if (holdRef.current) window.clearTimeout(holdRef.current.timer); holdRef.current = null; };
+  const progress = useProgress(); // 0..1; solo este componente se repinta cuando cambia el segundo
   const wrapRef = useRef<HTMLDivElement>(null);
   const baseRef = useRef<HTMLCanvasElement>(null);
   const playedRef = useRef<HTMLCanvasElement>(null);
@@ -128,19 +133,34 @@ export default function Waveform({ peaks, progress, playing, getProgress, loadin
         event.currentTarget.setPointerCapture(event.pointerId);
         dragRef.current = fractionAt(event.clientX);
         apply(dragRef.current);
+        if (onLongPress) {
+          const fraction = dragRef.current;
+          holdRef.current = {
+            x: event.clientX, y: event.clientY,
+            timer: window.setTimeout(() => {
+              holdRef.current = null;
+              dragRef.current = null; // el gesto fue una pulsación larga: no mueve la canción
+              apply(playingRef.current ? getProgress() : progress);
+              onLongPress(fraction);
+            }, 520),
+          };
+        }
       }}
       onPointerMove={(event) => {
+        if (holdRef.current && Math.hypot(event.clientX - holdRef.current.x, event.clientY - holdRef.current.y) > 8) cancelHold();
         if (dragRef.current === null) return;
         dragRef.current = fractionAt(event.clientX);
         apply(dragRef.current);
       }}
       onPointerUp={(event) => {
+        cancelHold();
         const target = dragRef.current;
         if (target === null) return;
         dragRef.current = null;
         onSeek(fractionAt(event.clientX));
       }}
       onPointerCancel={() => {
+        cancelHold();
         dragRef.current = null;
         apply(playingRef.current ? getProgress() : progress);
       }}

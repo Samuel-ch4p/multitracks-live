@@ -1,7 +1,7 @@
 import { useEffect, useRef } from "react";
+import { useProgress } from "./clock";
 
 type Props = {
-  progress: number; // 0..1 (estado, para pausa y accesibilidad)
   playing: boolean;
   getProgress: () => number; // lectura en vivo mientras suena
   onSeek: (fraction: number) => void;
@@ -12,7 +12,8 @@ type Props = {
  * Barra de progreso arrastrable del reproductor ampliado. Mientras suena se mueve con requestAnimationFrame escribiendo una
  * variable CSS (sin re-renders). Igual que la forma de onda: al arrastrar sigue al dedo y el audio salta una sola vez al soltar.
  */
-export default function ScrubBar({ progress, playing, getProgress, onSeek, disabled }: Props) {
+export default function ScrubBar({ playing, getProgress, onSeek, disabled }: Props) {
+  const progress = useProgress(); // 0..1; solo este componente se repinta cuando cambia el segundo
   const ref = useRef<HTMLDivElement>(null);
   const drag = useRef<number | null>(null);
   const playingRef = useRef(playing);

@@ -1,4 +1,5 @@
 import { useState, type CSSProperties, type ReactNode } from "react";
+import { pistas } from "./format";
 import { File as MEGAFile } from "megajs";
 import { audioExtensions, rarToFiles, sortFiles, zipToFilesAsync } from "./archive";
 import BrandMark from "./BrandMark";
@@ -27,7 +28,7 @@ type MegaFolder = MegaNode & {
 };
 
 type Props = {
-  onSongLoaded: (name: string, files: File[]) => void;
+  onSongLoaded: (name: string, files: File[], options?: { inMemory?: boolean }) => void;
 };
 
 // Carpeta de la Nube Crescendo. No se muestra ni se puede editar en la pantalla.
@@ -122,16 +123,42 @@ function friendlyError(err: unknown, fallback: string): string {
   return clean || fallback;
 }
 
+type LoadCardProps = {
+  status: string;
+  fileName: string;
+  /** Mensaje de error: la tarjeta pasa a modo error (con REINTENTAR y CERRAR). */
+  error?: string | null;
+  onCancel?: () => void;
+  onRetry?: () => void;
+  onClose?: () => void;
+};
+
 /** Tarjeta de progreso: lee el avance del texto de estado (solo presentación; la descarga no se toca). */
-function LoadCard({ status, fileName }: { status: string; fileName: string }) {
+export function LoadCard({ status, fileName, error, onCancel, onRetry, onClose }: LoadCardProps) {
   const percent = status.match(/(d+)%/);
   const tracks = status.match(/(d+) de (d+)/);
   const stage = /extra/i.test(status) ? "extract" : /descifr/i.test(status) ? "decrypt" : "download";
   let pct: number | null = null;
   if (percent) pct = Number(percent[1]);
   else if (tracks && Number(tracks[2]) > 0) pct = Math.round((Number(tracks[1]) / Number(tracks[2])) * 100);
-  const title = stage === "download" ? "Descargando canción" : stage === "decrypt" ? "Preparando el audio" : "Extrayendo pistas";
-  const detail = stage === "download" ? status.split("·").slice(1).join("·").trim() : stage === "extract" && tracks ? `pista ${tracks[1]} de ${tracks[2]}` : "";
+  const title = stage === "download" ? "Descargando canción" : stage === "decrypt" ? "Preparando el audio" : "Preparando pistas";
+  const detail = stage === "download" ? status.split("·").slice(1).join("·").trim() : stage === "extract" && tracks ? `Preparando pistas ${tracks[1]}/${tracks[2]}` : "";
+  if (error) {
+    return (
+      <div className="load-layer" role="alertdialog" aria-live="assertive" aria-label="No se pudo cargar la canción">
+        <div className="load-card is-error">
+          <BrandMark />
+          <span className="eyebrow">NO SE PUDO CARGAR</span>
+          <h2>{fileName || "Multitrack"}</h2>
+          <p className="load-error-text">{error}</p>
+          <div className="load-actions">
+            {onClose && <button className="pill-btn" onClick={onClose}>CERRAR</button>}
+            {onRetry && <button className="pill-btn primary" onClick={onRetry}>REINTENTAR</button>}
+          </div>
+        </div>
+      </div>
+    );
+  }
   return (
     <div className="load-layer" role="status" aria-live="polite">
       <div className="load-card">
@@ -141,12 +168,13 @@ function LoadCard({ status, fileName }: { status: string; fileName: string }) {
         <p>{fileName}</p>
         <div className={`load-progress ${pct === null ? "is-indeterminate" : ""}`} style={{ "--pct": pct === null ? 0 : pct / 100 } as CSSProperties}><span /></div>
         <div className="load-meta"><strong>{pct === null ? "…" : `${pct}%`}</strong><span>{detail || "Conexión segura"}</span></div>
+        {onCancel && <div className="load-actions"><button className="pill-btn" onClick={onCancel}>CANCELAR</button></div>}
       </div>
     </div>
   );
 }
 
-function CloudIcon({ name }: { name: "cloud" | "folder" | "archive" | "back" | "refresh" }) {
+export function CloudIcon({ name }: { name: "cloud" | "folder" | "archive" | "back" | "refresh" }) {
   const paths: Record<typeof name, ReactNode> = {
     cloud: <path d="M7 18h11a4 4 0 0 0 .5-8A6.5 6.5 0 0 0 6 8.2 4.9 4.9 0 0 0 7 18Z" />,
     folder: <path d="M3 7.5h7l2-2h9v13H3v-11Z" />,
@@ -273,9 +301,9 @@ export default function MegaBrowser({ onSongLoaded }: Props) {
 
       const songName = item.name.replace(/\.(zip|rar)$/i, "");
 
-      onSongLoaded(songName, files);
+      onSongLoaded(songName, files, { inMemory: true });
       setSelected(null);
-      setStatus(`Añadida: ${songName} · ${files.length} pistas.`);
+      setStatus(`Añadida: ${songName} · ${pistas(files.length)}.`);
     } catch (err) {
       console.error("Error al extraer multitrack:", err);
       setError(friendlyError(err, "No se pudo extraer el archivo."));
