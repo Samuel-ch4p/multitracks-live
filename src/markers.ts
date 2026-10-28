@@ -5,7 +5,8 @@
 export type Marker = { id: number; name: string; position: number; color: string };
 
 export const MARKER_NAMES = ["Intro", "Verso", "Pre-coro", "Coro", "Puente", "Final"];
-export const MARKER_COLORS = ["#ff3b4e", "#2f6bff", "#9b5cff", "#ff4fa3", "#62b88f", "#d2af72"];
+/** Referencias a tokens.css (los marcadores guardados antes con hex siguen funcionando). */
+export const MARKER_COLORS = ["var(--fam-rhythm)", "var(--fam-harmony)", "var(--fam-guide)", "var(--fam-vocal)", "var(--c-success)", "var(--c-warn)"];
 
 const keyOf = (songKey: string) => `crescendo-markers-v1:${songKey}`;
 const HINT_KEY = "crescendo-marker-hint-v1";

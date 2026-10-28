@@ -1,37 +1,58 @@
 /* =====================================================================
-   Crescendo Live · TOKENS DE DISEÑO (un solo lugar para ajustar colores, radios, sombras y espacios)
-   Fondo azul marino profundo + acentos plateados. El azul eléctrico solo aparece como color de la familia "Armonía".
+   Crescendo Live · TOKENS DE DISEÑO — ÚNICO archivo donde se escriben colores (hex / rgb).
+   El resto de CSS y de TSX solo usa var(--…) o color-mix(… var(--…) …). Prohibido en fondos y paneles: azul medio, celeste, cian.
+   Referencia: casi negro con tinte azul grafito muy leve, metal plateado, color SOLO en las familias de pistas.
+   (index.html y los recursos nativos de Android repiten --c-bg-1 porque se pintan antes de que cargue el CSS.)
    ===================================================================== */
 :root {
-  /* Fondos (azul marino). --c-bg-1 es EL MISMO color del arranque de Android (colors.xml: splash_bg) */
-  --c-bg-0: #050c16;
-  --c-bg-1: #07162b;
-  --c-bg-2: #0b1d38;
-  --c-bg-3: #102846;
-  --c-panel: rgba(9, 24, 44, .72);
+  /* ---- Superficies (de más oscura a más clara) ---- */
+  --c-bg-0: #05080e;      /* fondo profundo (fuera de la app, extremos de degradados) */
+  --c-bg-1: #080b11;      /* fondo de la app · arranque de Android (colors.xml: splash_bg) */
+  --c-bg-2: #0a0d13;      /* parte alta del fondo */
+  --c-panel: #0e1219;     /* paneles y canales */
+  --c-panel-2: #11161d;   /* paneles elevados */
+  --c-card: #161a22;      /* tarjetas */
+  --c-card-2: #1b2130;    /* tarjeta activa / superficie alta */
+  --c-edge: #232a38;      /* borde sólido gris azulado oscuro */
+  --c-grey-1: #2a323e;
+  --c-grey-2: #3a4350;
 
-  /* Plateados */
-  --c-silver-100: #f4f5f7;
-  --c-silver-200: #d3d7dc;
-  --c-silver-300: #a9afb8;
-  --c-silver-400: #7f8794;
-  --c-silver-500: #5a6270;
+  /* ---- Texto y grises ---- */
+  --c-text: #e8ecf2;      /* principal */
+  --c-text-2: #8a93a3;    /* secundario */
+  --c-text-3: #5b6475;    /* terciario (decorativo / desactivado) */
+  --c-faint: #7a8394;     /* texto tenue legible: etiquetas pequeñas (≥ 4,5:1 sobre --c-bg-1) */
+  --c-muted: #a1a9b6;     /* secundario con más contraste para luz de tarima */
+  --c-grey-4: #747c87;
+  --c-grey-5: #9ea6b1;
 
-  /* Texto y líneas */
-  --c-text: #f2f4f6;
-  --c-muted: #a3adba;
-  --c-faint: #8996a8; /* contraste >= 5:1 sobre el fondo marino (luz de tarima) */
-  --c-line: rgba(205, 213, 224, .13);
-  --c-line-strong: rgba(222, 228, 236, .28);
-  --c-glass: rgba(205, 213, 226, .06);
-  --c-glass-strong: rgba(205, 213, 226, .12);
+  /* ---- Metal plateado (perillas, botón de play, logo) ---- */
+  --c-metal-hi: #f2f4f7;
+  --c-metal-lo: #9aa2ae;
+  --c-silver: #d3d7dc;
+  --c-white: #ffffff;
+  --c-black: #000000;
+  --c-silver-100: var(--c-metal-hi);
+  --c-silver-200: var(--c-silver);
+  --c-silver-300: var(--c-grey-5);
+  --c-silver-400: var(--c-grey-4);
+  --c-silver-500: var(--c-text-3);
+  --grad-metal: linear-gradient(145deg, var(--c-metal-hi), var(--c-metal-lo));
 
-  /* Estados */
+  /* ---- Líneas y vidrio: SIEMPRE neutros (blanco con baja opacidad) ---- */
+  --c-line: rgb(255 255 255 / .09);
+  --c-line-strong: rgb(255 255 255 / .2);
+  --c-glass: rgb(255 255 255 / .04);
+  --c-glass-strong: rgb(255 255 255 / .09);
+
+  /* ---- Estados ---- */
   --c-success: #62b88f;
   --c-warn: #d2af72;
+  --c-warn-soft: #ffd98a;
   --c-danger: #ff5c6c;
+  --c-danger-soft: #ffd5da;
 
-  /* Familias de pistas (el mapa de nombres está en src/trackFamilies.ts) */
+  /* ---- Familias de pistas (el mapa de nombres está en src/trackFamilies.ts) ---- */
   --fam-rhythm: #ff3b4e;
   --fam-rhythm-rgb: 255 59 78;
   --fam-harmony: #2f6bff;
@@ -40,33 +61,38 @@
   --fam-guide-rgb: 155 92 255;
   --fam-vocal: #ff4fa3;
   --fam-vocal-rgb: 255 79 163;
-  --fam-neutral: #d3d7dc;
+  --fam-neutral: var(--c-silver);
   --fam-neutral-rgb: 211 215 220;
+  --fam-ok: var(--c-success);
+  --fam-warn: var(--c-warn);
 
-  /* Pads: neón morado */
+  /* ---- Pads: neón morado suave ---- */
   --pad-neon: #9b5cff;
   --pad-neon-rgb: 155 92 255;
+  --pad-deep-1: #533997;
+  --pad-deep-2: #191230;
 
-  /* Radios */
+  /* ---- Sombras y brillos (compuestos con los tokens de arriba) ---- */
+  --sh-card: inset 0 1px color-mix(in srgb, var(--c-white) 7%, transparent), 0 10px 26px color-mix(in srgb, var(--c-black) 30%, transparent);
+  --sh-pop: 0 30px 80px color-mix(in srgb, var(--c-black) 65%, transparent);
+  --sh-btn: inset 0 1px color-mix(in srgb, var(--c-white) 14%, transparent), 0 6px 16px color-mix(in srgb, var(--c-black) 32%, transparent);
+  --glow-silver: 0 0 18px color-mix(in srgb, var(--c-silver) 22%, transparent);
+
+  /* ---- Radios ---- */
   --r-xs: 8px;
   --r-sm: 11px;
   --r-md: 15px;
   --r-lg: 20px;
   --r-xl: 28px;
 
-  /* Espacios */
+  /* ---- Espacios ---- */
   --sp-1: 4px;
   --sp-2: 8px;
   --sp-3: 12px;
   --sp-4: 16px;
   --sp-5: 24px;
 
-  /* Sombras */
-  --sh-card: inset 0 1px rgba(255, 255, 255, .07), 0 10px 26px rgba(0, 4, 12, .22);
-  --sh-pop: 0 30px 80px rgba(0, 0, 0, .6);
-  --sh-btn: inset 0 1px rgba(255, 255, 255, .16), 0 6px 16px rgba(0, 4, 12, .24);
-
-  /* Tipografía: nunca menos de 11 px (--fs-xs) */
+  /* ---- Tipografía: nunca menos de 11 px (--fs-xs) ---- */
   --fs-xs: 11px;
   --fs-sm: 12px;
   --fs-md: 14px;
@@ -100,5 +126,5 @@
   --fx-blur: 18px;
 }
 
-/* Efectos "Reducidos": sin desenfoques de fondo, sin partículas ni brillos grandes (ver skin.css) */
+/* Efectos "Reducidos": sin desenfoques de fondo, sin partículas ni brillos grandes (ver styles/app.css) */
 :root[data-fx="reduced"] { --fx-blur: 0px; }

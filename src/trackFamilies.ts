@@ -1,6 +1,6 @@
 /**
  * Familias de color del mezclador. Para añadir o cambiar nombres, edita SOLO las listas KEYWORDS de abajo.
- * Los colores salen de las variables --fam-* de styles/tokens.css (aquí se repiten como respaldo para el estilo en línea).
+ * Los colores salen de las variables --fam-* de styles/tokens.css (aquí solo se referencian: ningún color se escribe fuera de tokens.css).
  *
  * Cómo se reconoce: el nombre de la pista se pasa a minúsculas sin tildes, se parte en palabras y cada palabra
  * (sin los números del final) se compara con las listas. Palabras de 4+ letras: basta con que EMPIECEN igual
@@ -10,11 +10,11 @@
 export type Family = "guide" | "vocal" | "rhythm" | "harmony" | "neutral";
 
 export const FAMILY_COLORS: Record<Family, { color: string; rgb: string }> = {
-  rhythm: { color: "#FF3B4E", rgb: "255 59 78" },
-  harmony: { color: "#2F6BFF", rgb: "47 107 255" },
-  guide: { color: "#9B5CFF", rgb: "155 92 255" },
-  vocal: { color: "#FF4FA3", rgb: "255 79 163" },
-  neutral: { color: "#D3D7DC", rgb: "211 215 220" },
+  rhythm: { color: "var(--fam-rhythm)", rgb: "var(--fam-rhythm-rgb)" },
+  harmony: { color: "var(--fam-harmony)", rgb: "var(--fam-harmony-rgb)" },
+  guide: { color: "var(--fam-guide)", rgb: "var(--fam-guide-rgb)" },
+  vocal: { color: "var(--fam-vocal)", rgb: "var(--fam-vocal-rgb)" },
+  neutral: { color: "var(--fam-neutral)", rgb: "var(--fam-neutral-rgb)" },
 };
 
 const KEYWORDS: Record<Exclude<Family, "neutral">, string[]> = {

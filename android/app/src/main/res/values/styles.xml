@@ -19,7 +19,7 @@
         <item name="android:navigationBarColor">@color/redline_bg</item>
     </style>
 
-    <!-- Arranque del sistema: azul marino liso + la "C" de anillos (sin recuadro ni fondo de icono).
+    <!-- Arranque del sistema: fondo oscuro liso + la "C" de anillos (sin recuadro ni fondo de icono).
          Android 12+ lo dibuja el sistema (ver values-v31); Android 11 y menos, el tema compatible de androidx. -->
     <style name="AppTheme.NoActionBarLaunch" parent="Theme.SplashScreen">
         <item name="windowSplashScreenBackground">@color/splash_bg</item>
