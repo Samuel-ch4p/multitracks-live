@@ -20,6 +20,7 @@ import { FAMILY_COLORS, defaultPan, familyOf, isGuideOrClick } from "./trackFami
 import { bindAnalyser, bindMeterElements, setMetersActive } from "./meters";
 import { useFx } from "./effects";
 import ScrubBar from "./ScrubBar";
+import { HeaderClock, ElapsedText, RemainingText, getClock, setClock } from "./clock";
 import Click from "./Click";
 import Splash from "./Splash";
 import Pads from "./Pads";
@@ -151,18 +152,6 @@ function pickLead(active: Track[]): HTMLAudioElement {
     if (Number.isFinite(length) && (!Number.isFinite(lead.duration) || length > lead.duration)) lead = track.audio;
   }
   return lead;
-}
-
-function formatTime(seconds: number) {
-  if (!Number.isFinite(seconds) || seconds < 0) return "00:00";
-  const minutes = Math.floor(seconds / 60);
-  const remaining = Math.floor(seconds % 60);
-  return `${String(minutes).padStart(2, "0")}:${String(remaining).padStart(2, "0")}`;
-}
-
-function shortTime(seconds: number) {
-  if (!Number.isFinite(seconds) || seconds < 0) return "0:00";
-  return `${Math.floor(seconds / 60)}:${String(Math.floor(seconds % 60)).padStart(2, "0")}`;
 }
 
 /** Quita de los nombres de pista el prefijo que comparten todas ("Jubilo - Bajo" → "Bajo"). */
@@ -369,8 +358,7 @@ export default function App() {
   const [resetting, setResetting] = useState(false);
   const [statusMessage, setStatusMessage] = useState("");
   const [songName, setSongName] = useState("Añade una canción");
-  const [currentTime, setCurrentTime] = useState(0);
-  const [duration, setDuration] = useState(0);
+  // El tiempo y la duración viven en clock.tsx (fuera de React) para que el segundero no repinte el mezclador.
   const [masterVolume, setMasterVolume] = useState(85);
   const [showLibrary, setShowLibrary] = useState(false);
   const [source, setSource] = useState<"local" | "cloud">("local");
@@ -547,8 +535,7 @@ export default function App() {
     tracksRef.current = [];
     setTracks([]);
     setPlayState(false, false);
-    setCurrentTime(0);
-    setDuration(0);
+    setClock(0, 0);
     setPeaks(null);
   }
 
@@ -803,7 +790,7 @@ export default function App() {
     try {
       await Promise.all(tracksRef.current.map((track) => resetAudio(track.audio)));
       await Promise.all(tracksRef.current.map((track) => waitCanPlay(track.audio, 8000))); // listas para que el próximo Play sea inmediato
-      setCurrentTime(0);
+      setClock(0, getClock().duration);
       setStatusMessage("Detenido. Las pistas están en cero.");
     } catch (error) {
       console.error("Error al detener:", error);
@@ -816,6 +803,7 @@ export default function App() {
 
   async function seekTo(fraction: number) {
     const list = tracksRef.current;
+    const duration = getClock().duration;
     if (busyRef.current || !list.length || duration <= 0) return;
     busyRef.current = true;
     const wasPlaying = playingRef.current;
@@ -826,7 +814,7 @@ export default function App() {
         try { track.audio.currentTime = Math.min(target, track.audio.duration || target); } catch { /* aún cargando */ }
       });
       await Promise.all(list.map((track) => waitForSeek(track.audio)));
-      setCurrentTime(target);
+      setClock(target, duration);
       if (wasPlaying) await Promise.all(list.map((track) => track.audio.play()));
     } catch (error) {
       console.error("Error al mover la posición:", error);
@@ -874,8 +862,7 @@ export default function App() {
     const timer = window.setInterval(() => {
       const active = tracksRef.current;
       if (!active.length) {
-        setCurrentTime(0);
-        setDuration(0);
+        setClock(0, 0);
         return;
       }
       // La pista de referencia es la más larga: si fuera una corta, su reloj se congelaría al terminar
@@ -888,13 +875,13 @@ export default function App() {
       if (shownSecond !== lastSecondRef.current || (!playingRef.current && Math.abs(now - lastTimeRef.current) > 0.02)) {
         lastSecondRef.current = shownSecond;
         lastTimeRef.current = now;
-        setCurrentTime(now);
+        setClock(now, getClock().duration);
       }
       const known = active.map((track) => track.audio.duration).filter(Number.isFinite);
       const longest = known.length ? Math.max(...known) : 0;
       if (longest !== lastDurationRef.current) {
         lastDurationRef.current = longest;
-        setDuration(longest);
+        setClock(getClock().time, longest);
       }
 
       if (!playingRef.current || busyRef.current) return;
@@ -1004,7 +991,6 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const progress = duration > 0 ? Math.min(1, currentTime / duration) : 0;
   const activeIndex = playlist.findIndex((song) => song.id === activeSongId);
   const hasSolo = tracks.some((track) => track.solo);
   const displayNames = trackDisplayNames(tracks.map((track) => track.name));
@@ -1110,10 +1096,7 @@ export default function App() {
           >
             PAD
           </button>
-          <div className="clock">
-            <strong>{formatTime(currentTime)}</strong>
-            <span>{shortTime(currentTime)} / {shortTime(duration)}</span>
-          </div>
+          <HeaderClock />
         </div>
 
         <div className="transport">
@@ -1139,7 +1122,7 @@ export default function App() {
         </div>
 
         <div className="top-tools">
-          <span className={`sync-chip ${playing ? "playing" : ready ? "ready" : ""}`}><i />{syncLabel}</span>
+          <span className={`sync-chip ${playing ? "playing" : ready ? "ready" : ""}`} role="status" title={syncLabel} aria-label={syncLabel}><i /><b className="sync-label">{syncLabel}</b></span>
           <button
             className={`glass-btn square fx-btn ${fx === "full" ? "is-on" : ""}`}
             onClick={() => {
@@ -1194,17 +1177,16 @@ export default function App() {
           <div className="wave-panel" aria-label="Forma de onda">
             <Waveform
               peaks={peaks}
-              progress={progress}
               playing={playing}
               getProgress={getProgress}
               loading={peaksLoading && !peaks}
-              disabled={tracks.length === 0 || duration <= 0}
+              disabled={tracks.length === 0}
               onSeek={(fraction) => void seekTo(fraction)}
             />
             <div className="wave-meta">
-              <span>{shortTime(currentTime)}</span>
+              <ElapsedText />
               <strong><i className={`state-dot ${playing ? "is-playing" : ""}`} />{playing ? "REPRODUCIENDO" : paused ? "EN PAUSA" : "DETENIDO"}</strong>
-              <span>-{shortTime(Math.max(0, duration - currentTime))}</span>
+              <RemainingText />
             </div>
           </div>
           <div className="mixer-row">
@@ -1269,8 +1251,8 @@ export default function App() {
               <p>{tracks.length} pistas</p>
             </div>
             <div className="player-progress">
-              <ScrubBar progress={progress} playing={playing} getProgress={getProgress} disabled={tracks.length === 0 || duration <= 0} onSeek={(fraction) => void seekTo(fraction)} />
-              <div className="player-times"><span>{shortTime(currentTime)}</span><span>-{shortTime(Math.max(0, duration - currentTime))}</span></div>
+              <ScrubBar playing={playing} getProgress={getProgress} disabled={tracks.length === 0} onSeek={(fraction) => void seekTo(fraction)} />
+              <div className="player-times"><ElapsedText /><RemainingText /></div>
             </div>
             <div className="player-controls">
               <button className="icon-btn" onClick={() => stepSong(-1)} disabled={resetting || activeIndex <= 0} aria-label="Canción anterior"><svg viewBox="0 0 24 24"><path d="M6 5h2v14H6zM20 5v14L9 12z" /></svg></button>

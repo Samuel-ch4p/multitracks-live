@@ -65,13 +65,11 @@
   color: #fff; border-color: rgba(231, 234, 239, .5); background: rgba(205, 213, 226, .16);
   box-shadow: inset 0 1px rgba(255, 255, 255, .18), 0 0 16px rgba(205, 213, 226, .1);
 }
-.click-btn.is-running svg { filter: drop-shadow(0 0 4px rgba(255, 255, 255, .5)); }
 .clock strong { color: #f6f7f8; }
 
 /* ---------- Cabecera ---------- */
 .topbar { background: linear-gradient(180deg, rgba(14, 30, 54, .8), rgba(5, 12, 24, .74)); border-bottom-color: var(--c-line); box-shadow: inset 0 1px rgba(255, 255, 255, .06); }
-:root[data-fx="full"] .topbar { -webkit-backdrop-filter: blur(var(--fx-blur)) saturate(120%); backdrop-filter: blur(var(--fx-blur)) saturate(120%); } /* [PESADO] */
-.brand-logo { width: 40px; height: 40px; border-radius: 0; box-shadow: none; filter: drop-shadow(0 4px 10px rgba(0, 0, 0, .4)); }
+.brand-logo { width: 40px; height: 40px; border-radius: 0; box-shadow: none; }
 .brand-text strong { color: #eceff3; }
 .sync-chip.playing i { background: #fff; box-shadow: 0 0 8px rgba(255, 255, 255, .7); }
 .session-pill, .loaded-song small { color: var(--c-muted); }
@@ -214,7 +212,6 @@
 .song-row, .library-item, .library-skeleton { background: linear-gradient(145deg, rgba(212, 218, 228, .075), rgba(80, 90, 104, .025)); }
 .song-row.selected, .library-item.selected { border-color: var(--c-line-strong); background: rgba(190, 200, 216, .13); }
 .library-scrim { background: rgba(1, 5, 12, .66); }
-:root[data-fx="full"] .library-scrim { -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px); } /* [PESADO] */
 .library-panel {
   border-right-color: rgba(218, 224, 232, .24);
   background: radial-gradient(circle at 15% 0%, rgba(192, 200, 212, .1), transparent 36%), linear-gradient(150deg, #0e2240, #07162b 55%, #050c16);
@@ -242,7 +239,6 @@
 
 /* Carga de un multitrack: tarjeta con progreso real */
 .load-layer { position: absolute; z-index: 5; inset: 0; display: grid; place-items: center; padding: 20px; background: rgba(2, 6, 14, .86); animation: load-fade .2s ease-out; }
-:root[data-fx="full"] .load-layer { -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); } /* [PESADO] */
 @keyframes load-fade { from { opacity: 0; } }
 .load-card { position: relative; width: min(380px, 100%); overflow: hidden; padding: 26px 24px; border: 1px solid var(--c-line-strong); border-radius: var(--r-lg); background: linear-gradient(155deg, #12233e, #07101f); box-shadow: 0 26px 60px rgba(0, 0, 0, .5); animation: load-card-in .5s var(--ease-out); }
 @keyframes load-card-in { from { opacity: 0; transform: translateY(16px) scale(.95); } }
@@ -392,4 +388,19 @@
   .play-btn { height: 48px; }
   .chip { width: 32px; height: 36px; }
   .channel-meter { left: calc(50% - 36px); width: 6px; }
+}
+
+/* ---------- Etapa 3: barra superior · controles en vivo de al menos 44x44 dp, sin desenfoques de pantalla completa ---------- */
+.glass-btn { min-height: var(--tap); }
+.glass-btn.square { width: var(--tap); }
+.restart-btn { min-height: var(--tap); }
+.icon-btn, .play-btn { min-height: var(--tap); }
+.play-btn { min-width: 56px; }
+.library-scrim { background: rgba(2, 8, 18, .72); }
+
+/* Pantalla compacta: el indicador de estado se queda como punto y solo muestra "En vivo" mientras suena */
+.sync-label { font-weight: 600; }
+@media (max-width: 820px), (max-height: 520px) {
+  .sync-chip { display: flex; }
+  .sync-chip:not(.playing) .sync-label { display: none; }
 }

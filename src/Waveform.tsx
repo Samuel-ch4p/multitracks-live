@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useRef } from "react";
+import { useProgress } from "./clock";
 
 type Props = {
   peaks: Float32Array | null; // valores 0..1
-  progress: number; // 0..1, se actualiza poco a poco (sirve en pausa y para accesibilidad)
   playing: boolean;
   getProgress: () => number; // lectura en vivo (0..1): la barra la consulta en cada fotograma mientras suena
   loading: boolean;
@@ -18,7 +18,8 @@ const GAP = 4;
  * encendida. Mientras suena solo se mueve una variable CSS (--p) en cada fotograma: la capa encendida se recorta
  * y la línea se desplaza con transform, sin volver a pintar nada ni tocar React.
  */
-export default function Waveform({ peaks, progress, playing, getProgress, loading, onSeek, disabled }: Props) {
+export default function Waveform({ peaks, playing, getProgress, loading, onSeek, disabled }: Props) {
+  const progress = useProgress(); // 0..1; solo este componente se repinta cuando cambia el segundo
   const wrapRef = useRef<HTMLDivElement>(null);
   const baseRef = useRef<HTMLCanvasElement>(null);
   const playedRef = useRef<HTMLCanvasElement>(null);
