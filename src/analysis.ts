@@ -1,8 +1,7 @@
 import type { Layout } from "./panLaw.ts";
+import { BLOCK_SECONDS, SILENCE_ABS_POWER, SILENCE_REL_DB } from "./normConfig.ts";
 
-/** Análisis de nivel de cada pista (se hace una vez al cargar la canción) y cálculo de la ganancia de normalización. */
-
-export type TrackKind = "click" | "guide" | "music";
+/** Medición de cada pista (una vez al cargar la canción). El plan de normalización vive en normalizer.ts. */
 
 export type TrackStats = {
   layout: Layout;
@@ -10,29 +9,11 @@ export type TrackStats = {
   peak: number;
   /** Potencia media con compuerta (lineal). Es la potencia que sale por el centro del paneo. 0 = pista en silencio. */
   power: number;
+  /** Potencia por ventana de BLOCK_SECONDS (la misma cuadrícula de tiempo en todas las pistas), para medir la mezcla. */
+  blocks: Float32Array;
 };
 
-// Objetivos (dBFS). Ver HANDOFF.md para la razón de cada uno.
-export const TARGET_DB = -18; // instrumentos: potencia media de cada pista
-export const GUIDE_DB = -20; // guía de voz: 2 dB por debajo de los instrumentos
-export const CLICK_PEAK_DB = -6; // click: se iguala por pico (suena en ráfagas cortas)
-export const MAX_UP_DB = 12;
-export const MAX_DOWN_DB = -30;
-export const PEAK_CEILING_DB = -1; // techo de pico por pista
-export const MIX_POWER_DB = -14; // potencia estimada de toda la mezcla (faders a tope)
-export const MIX_PEAK_DB = -1; // pico estimado de la mezcla
-const PEAK_COINCIDENCE_DB = 3; // los picos de pistas distintas rara vez coinciden
-
 const db = (x: number) => 20 * Math.log10(x);
-const lin = (d: number) => Math.pow(10, d / 20);
-
-/** Click y Guía se reconocen por el nombre de la pista (sin importar mayúsculas ni tildes). */
-export function trackKind(name: string): TrackKind {
-  const n = name.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
-  if (/(^|[^a-z0-9])(click|clic|metronomo|metronome)s?(?![a-z0-9])/.test(n)) return "click";
-  if (/(^|[^a-z0-9])(guia|guide|cue)s?(?![a-z0-9])/.test(n)) return "guide";
-  return "music";
-}
 
 type PcmLike = { numberOfChannels: number; length: number; sampleRate: number; getChannelData(channel: number): Float32Array };
 
@@ -56,7 +37,7 @@ export class StatsAccumulator {
   private count = 0;
 
   constructor(sampleRate: number, stereo: boolean) {
-    this.blockLen = Math.max(1, Math.round(sampleRate * 0.4));
+    this.blockLen = Math.max(1, Math.round(sampleRate * BLOCK_SECONDS));
     this.stereo = stereo;
   }
 
@@ -100,13 +81,13 @@ export class StatsAccumulator {
 
     // Potencia de salida por el centro del paneo (ver panLaw.ts): un canal si es mono-like, la suma si es estéreo.
     const power = blockL.map((l, i) => (layout === "stereo" ? l + blockR[i] : layout === "right" ? blockR[i] : l));
-    const audible = power.filter((p) => p > 1e-5); // compuerta absoluta -50 dB
+    const audible = power.filter((p) => p > SILENCE_ABS_POWER); // compuerta absoluta -50 dB
     let mean = audible.length ? audible.reduce((s, p) => s + p, 0) / audible.length : 0;
     if (mean > 0) {
-      const kept = audible.filter((p) => p >= mean * 0.01); // compuerta relativa -20 dB
+      const kept = audible.filter((p) => p >= mean * Math.pow(10, SILENCE_REL_DB / 10)); // compuerta relativa
       mean = kept.reduce((s, p) => s + p, 0) / kept.length;
     }
-    return { layout, peak: this.peak, power: mean };
+    return { layout, peak: this.peak, power: mean, blocks: Float32Array.from(power) };
   }
 }
 
@@ -128,40 +109,6 @@ export async function measureBuffer(buffer: PcmLike, isCancelled: () => boolean 
     if (end < n) await rest();
   }
   return acc.finish();
-}
-
-export type PlanItem = { kind: TrackKind; stats: TrackStats | null };
-
-/**
- * Ganancia de normalización de cada pista (en el mismo orden que `items`).
- * 1) Cada pista se lleva a su objetivo (con tope de subida y techo de pico).
- * 2) Si la mezcla estimada pasa de MIX_POWER_DB o su pico estimado de MIX_PEAK_DB, TODAS bajan por igual.
- */
-export function planGains(items: PlanItem[]): { gains: number[]; global: number } {
-  const per = items.map(({ kind, stats }) => {
-    if (!stats || stats.peak <= 0) return 1;
-    let g: number;
-    if (kind === "click") g = lin(CLICK_PEAK_DB) / stats.peak;
-    else if (stats.power > 0) g = lin((kind === "guide" ? GUIDE_DB : TARGET_DB) - 10 * Math.log10(stats.power));
-    else return 1;
-    // En estéreo, al llevar el paneo a un extremo ese lado sube hasta +3 dB (ver panLaw.ts): se deja ese margen.
-    const headroom = stats.layout === "stereo" ? Math.SQRT2 : 1;
-    g = Math.min(g, lin(MAX_UP_DB), lin(PEAK_CEILING_DB) / (stats.peak * headroom));
-    return Math.max(g, lin(MAX_DOWN_DB));
-  });
-
-  let sumPower = 0;
-  let sumPeak = 0;
-  items.forEach(({ stats }, i) => {
-    if (!stats) return;
-    sumPower += stats.power * per[i] * per[i];
-    sumPeak += stats.peak * per[i] * (stats.peak * per[i]);
-  });
-  let reduction = 0;
-  if (sumPower > 0) reduction = Math.min(reduction, MIX_POWER_DB - 10 * Math.log10(sumPower));
-  if (sumPeak > 0) reduction = Math.min(reduction, MIX_PEAK_DB - (10 * Math.log10(sumPeak) - PEAK_COINCIDENCE_DB));
-  const global = lin(reduction);
-  return { gains: per.map((g) => g * global), global };
 }
 
 export { db as toDb };

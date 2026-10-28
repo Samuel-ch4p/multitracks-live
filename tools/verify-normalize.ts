@@ -1,7 +1,10 @@
 // Verificación de la normalización y del reparto de paneo (sin navegador).
 // Uso:  node tools/verify-normalize.ts      (Node 22.6+ con --experimental-strip-types, o Node 24)
-import { measureBuffer, planGains, toDb, trackKind, type TrackStats } from "../src/analysis.ts";
+import { measureBuffer, toDb, type TrackStats } from "../src/analysis.ts";
+import { gatedMeanPower, limiterCurve, mixLevelDb, planNormalization, type PlanTrack } from "../src/normalizer.ts";
+import { LIMITER_KNEE_DB, MAX_GAIN_DB, MIN_GAIN_DB, PEAK_CEILING_DB, REFERENCE_DB } from "../src/normConfig.ts";
 import { panTaps, type Layout } from "../src/panLaw.ts";
+import { isGuideOrClick } from "../src/trackFamilies.ts";
 
 let failed = 0;
 const check = (name: string, ok: boolean, detail = "") => {
@@ -25,40 +28,119 @@ check("Guía solo en L → left", (await stats(left, silent)).layout === "left")
 check("Guía solo en R → right", (await stats(silent, left)).layout === "right");
 check("estéreo real → stereo", (await stats(noise(4, 0.3), noise(4, 0.3))).layout === "stereo");
 
-// --- Nombres ---
-check("Click/Guía por nombre", trackKind("Jubilo - Click") === "click" && trackKind("GUÍA") === "guide" && trackKind("Guia voz") === "guide" &&
-  trackKind("Guitarra") === "music" && trackKind("Bajo") === "music" && trackKind("Clicker Keys") === "music");
+// --- Nombres: Click y Guía = familia "Guía y Click" ---
+check("Click/Guía por nombre (click, clic, metrónomo, cue, guía, guide…)",
+  ["Click", "Click Track", "clic", "Metrónomo", "metronomo", "Cue", "Cues", "Guía", "GUIDE", "Voz Guía", "Jubilo - Click"].every(isGuideOrClick) &&
+  ["Bajo", "Drums", "Keys 1", "Lead Vox", "Pad", "Electric Guitar"].every((n) => !isGuideOrClick(n)));
 
-// --- Normalización ---
-const mk = async (amp: number, secs = 6) => await stats(noise(secs, amp));
-const quiet = await mk(0.02);
-const mid = await mk(0.1);
-const loud = await mk(0.8);
-const items = [quiet, mid, loud].map((s) => ({ kind: "music" as const, stats: s }));
-const plan = planGains(items);
-const outDb = items.map((it, i) => toDb(Math.sqrt(it.stats.power) * (plan.gains[i] / plan.global)));
-check("pistas dispares quedan al mismo nivel (±0,5 dB, salvo tope +12 dB / pico)", Math.max(...outDb) - Math.min(...outDb) < 0.5 || toDb(plan.gains[0] / plan.global) >= 11.9,
-  outDb.map((d) => d.toFixed(1)).join(" / ") + " dB");
-check("subida máxima +12 dB", plan.gains.every((g) => toDb(g / plan.global) <= 12.01), plan.gains.map((g) => toDb(g / plan.global).toFixed(1)).join(" / "));
-check("pico por pista ≤ -1 dBFS", items.every((it, i) => toDb(it.stats.peak * (plan.gains[i] / plan.global)) <= -0.99));
-const hot = await stats(noise(4, 0.2), noise(4, 0.2));
-check("estéreo: deja +3 dB de margen para el paneo extremo (pico ≤ -1 dBFS con el lado a √2)", toDb(hot.peak * planGains([{ kind: "music", stats: hot }]).gains[0] * Math.SQRT2) <= -0.99);
+// --- Ventana de silencios ---
+const burst = (seconds: number, amp: number, activeFrom: number, activeTo: number) =>
+  Float32Array.from({ length: Math.round(SR * seconds) }, (_, i) => (i / SR >= activeFrom && i / SR < activeTo ? (rand() * amp) : 0));
+const continuous = await stats(noise(20, 0.1));
+const withSilences = await stats(burst(20, 0.1, 0, 8)); // suena 8 s y calla 12 s
+check("pista con silencios largos: el nivel medido es el de las partes que suenan (no baja por los silencios)", Math.abs(10 * Math.log10(withSilences.power / continuous.power)) < 0.7,
+  `${(10 * Math.log10(withSilences.power / continuous.power)).toFixed(2)} dB de diferencia`);
+check("las ventanas quedan guardadas (0,4 s cada una)", withSilences.blocks.length === 50, `${withSilences.blocks.length}`);
 
-const many = Array.from({ length: 14 }, () => ({ kind: "music" as const, stats: mid }));
-const bigPlan = planGains(many);
-const mixPower = toDb(Math.sqrt(many.reduce((s, it, i) => s + it.stats.power * bigPlan.gains[i] ** 2, 0)));
-check("14 pistas: baja todo por igual y la mezcla no pasa de -14 dB de potencia", bigPlan.global < 1 && mixPower <= -13.99 && new Set(bigPlan.gains.map((g) => g.toFixed(6))).size === 1,
-  `global ${toDb(bigPlan.global).toFixed(1)} dB, mezcla ${mixPower.toFixed(1)} dB`);
-const fewPlan = planGains(many.slice(0, 2));
-check("2 pistas: sin reducción global", fewPlan.global === 1);
+// --- Plan de normalización ---
+const mk = async (amp: number, secs = 20) => await stats(noise(secs, amp));
+const names = ["Drums", "Bass", "Keys", "Lead Vox", "Pad", "Click Track", "Guide"];
+const amps = [0.3, 0.2, 0.08, 0.12, 0.05, 0.4, 0.15];
+const trackStats = await Promise.all(amps.map((a) => mk(a)));
+const tracks: PlanTrack[] = names.map((n, i) => ({ excluded: isGuideOrClick(n), stats: trackStats[i] }));
+const isMusic = (i: number) => !tracks[i].excluded;
+const musicIdx = tracks.map((_, i) => i).filter(isMusic);
 
-const clickStats = await stats(Float32Array.from({ length: SR * 4 }, (_, i) => (i % 11025 < 50 ? 0.3 : 0)));
-const guideStats = await mk(0.05);
-const mixed = planGains([{ kind: "music", stats: mid }, { kind: "click", stats: clickStats }, { kind: "guide", stats: guideStats }]);
-const clickOut = toDb(clickStats.peak * mixed.gains[1] / mixed.global);
-const guideOut = toDb(Math.sqrt(guideStats.power) * mixed.gains[2] / mixed.global);
-check("Click a -6 dBFS de pico y Guía a -20 dB (fijos, sin ser como los instrumentos)", Math.abs(clickOut + 6) < 0.1 && Math.abs(guideOut + 20) < 0.1, `click ${clickOut.toFixed(1)} · guía ${guideOut.toFixed(1)}`);
-check("pista en silencio / sin medir → ganancia 1", planGains([{ kind: "music", stats: null }, { kind: "music", stats: { layout: "mono", peak: 0, power: 0 } }]).gains.every((g) => g === 1));
+const soft = planNormalization(tracks, "soft");
+check("Click y Guía: ganancia EXACTAMENTE 1 (0 dB) en los tres modos", (["off", "soft", "level"] as const).every((m) => {
+  const p = planNormalization(tracks, m);
+  return p.gains[5] === 1 && p.gains[6] === 1;
+}));
+check("Click y Guía no influyen: cambiar su nivel no cambia el plan de la música", (() => {
+  const loud = tracks.map((t, i) => (i === 5 || i === 6 ? { ...t, stats: { ...trackStats[0], peak: 1, power: 0.9, blocks: trackStats[0].blocks.map((b) => b * 100) } } : t));
+  const p = planNormalization(loud, "soft");
+  return musicIdx.every((i) => p.gains[i] === soft.gains[i]);
+})());
+check("Suave: UNA sola ganancia para todas las pistas musicales", new Set(musicIdx.map((i) => soft.gains[i].toFixed(9))).size === 1, `${soft.songGainDb.toFixed(2)} dB`);
+check("el balance original se conserva (diferencias relativas iguales antes y después)", musicIdx.every((i) => musicIdx.every((j) => {
+  const before = 10 * Math.log10(trackStats[i].power / trackStats[j].power);
+  const after = 10 * Math.log10((trackStats[i].power * soft.gains[i] ** 2) / (trackStats[j].power * soft.gains[j] ** 2));
+  return Math.abs(before - after) < 1e-9;
+})));
+check("la ganancia respeta ±6 dB", soft.songGainDb <= MAX_GAIN_DB + 1e-9 && soft.songGainDb >= MIN_GAIN_DB - 1e-9);
+check("Apagado: todo exactamente 1", planNormalization(tracks, "off").gains.every((g) => g === 1));
+
+// El nivel de la mezcla medido coincide con el de la mezcla real (suma de muestras)
+const mixSamples = (list: Float32Array[], gains: number[]) => Float32Array.from(list[0], (_, i) => list.reduce((s, ch, k) => s + ch[i] * gains[k], 0));
+const raw = amps.map((a) => noise(20, a));
+const rawStats = await Promise.all(raw.map((r) => stats(r)));
+const musicRaw = musicIdx.map((i) => raw[i]);
+const realMix = mixSamples(musicRaw, musicRaw.map(() => 1));
+const realDb = toDb(Math.sqrt(realMix.reduce((s, v) => s + v * v, 0) / realMix.length));
+const estDb = mixLevelDb(musicIdx.map((i) => rawStats[i]));
+const realPowerDb = 10 * Math.log10(realMix.reduce((s, v) => s + v * v, 0) / realMix.length);
+// La mezcla real de pistas mono sale por los dos lados a 0,707: por canal es la mitad de energía (-3 dB), igual que la estimación.
+check("nivel de la mezcla estimado = real (±1 dB RMS por canal)", estDb !== null && Math.abs(estDb - (realPowerDb - 10 * Math.log10(2))) < 1, `estimado ${estDb?.toFixed(2)} · real ${(realPowerDb - 3.01).toFixed(2)} dBFS RMS`);
+
+// Techo de pico -1 dBFS en la mezcla musical
+const curve = limiterCurve();
+const hotAmps = [0.9, 0.9, 0.8, 0.8, 0.7];
+const hotRaw = hotAmps.map((a) => noise(20, a));
+const hotStats = await Promise.all(hotRaw.map((r) => stats(r)));
+const hotPlan = planNormalization(hotStats.map((s) => ({ excluded: false, stats: s })), "soft");
+const hotMix = mixSamples(hotRaw, hotPlan.gains);
+const peakOf = (x: Float32Array) => { let m = 0; for (const v of x) if (Math.abs(v) > m) m = Math.abs(v); return m; };
+const hotPeakDb = toDb(peakOf(hotMix));
+// Mezcla realista (pistas independientes que sumadas llegan cerca de plena escala): el plan solo ya cumple el techo.
+const realAmps = [0.35, 0.3, 0.25, 0.25, 0.2];
+const realRaw = realAmps.map((a) => noise(20, a));
+const realPlan = planNormalization(await Promise.all(realRaw.map(async (r) => ({ excluded: false, stats: await stats(r) }))), "soft");
+const realPeak = toDb(peakOf(mixSamples(realRaw, realPlan.gains)));
+check("mezcla realista: el pico de la mezcla no supera -1 dBFS solo con la ganancia", realPeak <= PEAK_CEILING_DB + 1e-6, `pico ${realPeak.toFixed(2)} dBFS, ganancia ${realPlan.songGainDb.toFixed(2)} dB`);
+// Mezcla absurdamente cargada (suma muy por encima de 0 dBFS): el limitador suave del audio sostiene el techo.
+const shaped = Float32Array.from(hotMix, (v) => {
+  const idx = Math.min(curve.length - 1, Math.max(0, Math.round(((Math.max(-1, Math.min(1, v)) + 1) / 2) * (curve.length - 1))));
+  return curve[idx];
+});
+check("mezcla extrema: con la ganancia (−6 dB) y el limitador suave, el pico nunca pasa de -1 dBFS", toDb(peakOf(shaped)) <= PEAK_CEILING_DB + 1e-6, `sin limitador ${hotPeakDb.toFixed(1)} dBFS → con limitador ${toDb(peakOf(shaped)).toFixed(2)} dBFS`);
+const quietMix = planNormalization([{ excluded: false, stats: await mk(0.002) }, { excluded: false, stats: await mk(0.002) }], "soft");
+check("mezcla muy baja: sube como máximo +6 dB (no infla el ruido sin límite)", quietMix.songGainDb <= MAX_GAIN_DB + 1e-9, `${quietMix.songGainDb.toFixed(2)} dB`);
+
+// Limitador suave de seguridad (la curva ya se usó arriba)
+const knee = Math.pow(10, LIMITER_KNEE_DB / 20);
+const ceiling = Math.pow(10, PEAK_CEILING_DB / 20);
+let identityOk = true, ceilingOk = true, monotonic = true;
+for (let i = 0; i < curve.length; i++) {
+  const x = (i / (curve.length - 1)) * 2 - 1;
+  if (Math.abs(x) <= knee && Math.abs(curve[i] - x) > 1e-6) identityOk = false;
+  if (Math.abs(curve[i]) > ceiling + 1e-6) ceilingOk = false;
+  if (i > 0 && curve[i] < curve[i - 1] - 1e-9) monotonic = false;
+}
+check("limitador: idéntico por debajo de -3 dBFS (no toca la mezcla normal)", identityOk);
+check("limitador: nunca supera -1 dBFS ni con la entrada a tope", ceilingOk && toDb(Math.abs(curve[curve.length - 1])) <= PEAK_CEILING_DB + 1e-6, `techo ${toDb(Math.abs(curve[curve.length - 1])).toFixed(3)} dBFS`);
+check("limitador: curva creciente (sin inversiones)", monotonic);
+
+// Datos a medias: no se normaliza
+const partial = planNormalization(tracks.map((t, i) => (i === 2 ? { ...t, stats: null } : t)), "soft");
+check("si falta medir una pista musical no se aplica nada (ganancia 1)", partial.gains.every((g) => g === 1) && partial.reason === "incomplete");
+check("sin pistas musicales (solo Click/Guía) → ganancia 1", planNormalization([tracks[5], tracks[6]], "soft").gains.every((g) => g === 1));
+
+// Nivelar pistas: solo pistas MUY fuera de rango, ±6 dB
+const levelStats = await Promise.all([0.1, 0.11, 0.09, 0.1, 0.9, 0.0006].map((a) => mk(a)));
+const levelTracks: PlanTrack[] = levelStats.map((s) => ({ excluded: false, stats: s }));
+levelTracks.push({ excluded: true, stats: await mk(0.5) });
+const lvl = planNormalization(levelTracks, "level");
+const sft = planNormalization(levelTracks, "soft");
+const rel = (i: number) => toDb(lvl.gains[i] / lvl.gains[0]); // respecto de una pista normal del mismo plan (la ganancia común se aplica a todas)
+check("Nivelar: pistas normales no se tocan (más allá de la ganancia común)", [0, 1, 2, 3].every((i) => Math.abs(rel(i)) < 1e-6), [0, 1, 2, 3].map((i) => rel(i).toFixed(2)).join(" / "));
+check("Suave vs Nivelar: Suave no corrige ninguna pista", new Set([0, 1, 2, 3, 4, 5].map((i) => sft.gains[i].toFixed(9))).size === 1);
+check("Nivelar: la pista muy fuerte baja respecto de las demás, con tope de 6 dB", rel(4) < -0.5 && rel(4) >= -MAX_GAIN_DB - 1e-9, `${rel(4).toFixed(2)} dB`);
+check("Nivelar: una pista casi en silencio (ruido) NO se sube", Math.abs(rel(5)) < 1e-6, `${rel(5).toFixed(2)} dB`);
+check("Nivelar: Click/Guía siguen en 1 exacto", lvl.gains[6] === 1);
+check("Nivelar: ninguna ganancia total pasa de ±6 dB", lvl.gains.every((g, i) => i === 6 || (toDb(g) <= MAX_GAIN_DB + 1e-9 && toDb(g) >= MIN_GAIN_DB - 1e-9)));
+check("referencia de la mezcla = " + REFERENCE_DB + " dBFS RMS: tras la ganancia la mezcla queda ahí o limitada por ±6 / techo",
+  (() => { const g = soft.songGainDb; const target = REFERENCE_DB - (soft.mixDb ?? 0); return Math.abs(g - target) < 1e-9 || g === MAX_GAIN_DB || g === MIN_GAIN_DB || g < target; })());
+check("compuerta: ventanas en silencio no cuentan", gatedMeanPower([0, 0, 0.01, 0.01, 0]) === 0.01);
 
 // --- Paneo: potencia de salida total vs posición ---
 const power = (layout: Layout, pan: number, L: Float32Array, R: Float32Array) => {

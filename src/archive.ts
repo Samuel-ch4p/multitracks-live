@@ -2,6 +2,7 @@ import { unzipSync } from "fflate";
 import { Archive } from "libarchive.js";
 import { measureBuffer, type TrackStats } from "./analysis.ts";
 import { analyzeWav } from "./wavAnalysis.ts";
+import { perfTimed } from "./perf.ts";
 
 export const audioExtensions = /\.(wav|mp3|ogg|m4a|aac|flac|aiff|aif)$/i;
 
@@ -325,72 +326,96 @@ function commonName(files: File[]): string {
   return cleaned.length >= 3 ? cleaned : "Canción local";
 }
 
+export type PeaksOptions = {
+  isCancelled: () => boolean;
+  /** Mientras devuelva true (suena la canción) el análisis espera: el audio tiene prioridad sobre el procesador y la memoria. */
+  shouldWait?: () => boolean;
+  onProgress?: (peaks: Float32Array) => void;
+  onStats?: (file: File, stats: TrackStats) => void;
+  /** Se llama una vez por pista al terminar de procesarla (con éxito, con error o saltada): sirve para contar el avance. */
+  onSettled?: (file: File) => void;
+  /** Pistas que se miden (nivel/tipo) pero NO suman a la forma de onda (Click y Guía). */
+  excludeFromPeaks?: (file: File) => boolean;
+  /** Pistas procesadas a la vez (decodificar es lo que más memoria usa: 2 es lo prudente en un celular). */
+  concurrency?: number;
+};
+
 /**
  * Calcula la forma de onda combinada de varias pistas (picos normalizados 0..1) y, en la misma pasada,
  * mide el nivel de cada pista (`onStats`, para normalizar volúmenes y detectar mono/estéreo).
- * Decodifica una pista a la vez para no saturar la memoria.
+ * Procesa hasta `concurrency` pistas a la vez (por defecto 2) para no saturar la memoria.
  */
-export async function computePeaks(
-  files: File[],
-  buckets: number,
-  isCancelled: () => boolean,
-  /** Mientras devuelva true (suena la canción) el análisis espera: el audio tiene prioridad sobre el procesador y la memoria. */
-  shouldWait: () => boolean,
-  onProgress?: (peaks: Float32Array) => void,
-  onStats?: (file: File, stats: TrackStats) => void
-): Promise<Float32Array | null> {
+export async function computePeaks(files: File[], buckets: number, options: PeaksOptions): Promise<Float32Array | null> {
+  const { isCancelled, shouldWait, onProgress, onStats, onSettled, excludeFromPeaks } = options;
   const total = new Float32Array(buckets);
   let decodedAny = false;
+  let cancelled = false;
   // A 22,05 kHz cada pista ocupa la mitad de memoria que a 44,1 kHz y el nivel (RMS) se mide igual de bien;
   // el pico de muestra puede quedar algo por debajo del real en sonidos muy agudos (hay margen: techo de -1 dBFS).
   const decoder = new OfflineAudioContext(1, 1, 22050);
+  let next = 0;
 
-  for (const file of files) {
-    while (shouldWait() && !isCancelled()) await new Promise((resolve) => setTimeout(resolve, 400));
-    if (isCancelled()) return null;
-    try {
-      // WAV: se lee directo por tandas (sin decodificar, sin límite de tamaño, casi sin memoria).
-      if (/.wav$/i.test(file.name)) {
-        const direct = await analyzeWav(file, buckets, isCancelled);
-        if (direct === "cancelled") return null;
-        if (direct) {
-          onStats?.(file, direct.stats);
-          for (let b = 0; b < buckets; b++) total[b] += direct.peaks[b];
-          decodedAny = true;
-          if (onProgress) onProgress(normalize(total));
-          continue;
-        }
-      }
-      if (file.size > 150 * 1024 * 1024) continue; // el resto de formatos se decodifica entero: se salta lo muy grande
-      const decoded = await decoder.decodeAudioData(await file.arrayBuffer());
-      if (onStats) {
-        const stats = await measureBuffer(decoded, isCancelled);
-        if (!stats) return null; // cancelado
-        onStats(file, stats);
-      }
-      const trackPeaks = new Float32Array(buckets);
-      const per = decoded.length / buckets;
-      for (let c = 0; c < decoded.numberOfChannels; c++) {
-        const data = decoded.getChannelData(c);
-        for (let b = 0; b < buckets; b++) {
-          const start = Math.floor(b * per);
-          const end = Math.min(data.length, Math.floor((b + 1) * per));
-          const step = Math.max(1, Math.floor((end - start) / 64));
-          let max = 0;
-          for (let i = start; i < end; i += step) {
-            const v = Math.abs(data[i]);
-            if (v > max) max = v;
-          }
-          if (max > trackPeaks[b]) trackPeaks[b] = max;
-        }
-      }
-      for (let b = 0; b < buckets; b++) total[b] += trackPeaks[b];
+  const addPeaks = (file: File, peaks: Float32Array) => {
+    if (!excludeFromPeaks?.(file)) {
+      for (let b = 0; b < buckets; b++) total[b] += peaks[b];
       decodedAny = true;
       if (onProgress) onProgress(normalize(total));
-    } catch {
-      // Un formato que el navegador no decodifica no debe romper la forma de onda.
     }
-  }
+  };
+
+  const processFile = async (file: File) => {
+    // WAV: se lee directo por tandas (sin decodificar, sin límite de tamaño, casi sin memoria).
+    if (/\.wav$/i.test(file.name)) {
+      const direct = await analyzeWav(file, buckets, isCancelled);
+      if (direct === "cancelled") { cancelled = true; return; }
+      if (direct) {
+        onStats?.(file, direct.stats);
+        addPeaks(file, direct.peaks);
+        return;
+      }
+    }
+    if (file.size > 150 * 1024 * 1024) return; // el resto de formatos se decodifica entero: se salta lo muy grande
+    const decoded = await perfTimed("carga", "decodificar pista (" + file.name + ")", async () => decoder.decodeAudioData(await file.arrayBuffer()));
+    if (onStats) {
+      const stats = await perfTimed("carga", "analizar nivel (" + file.name + ")", () => measureBuffer(decoded, isCancelled));
+      if (!stats) { cancelled = true; return; }
+      onStats(file, stats);
+    }
+    const trackPeaks = new Float32Array(buckets);
+    const per = decoded.length / buckets;
+    for (let c = 0; c < decoded.numberOfChannels; c++) {
+      const data = decoded.getChannelData(c);
+      for (let b = 0; b < buckets; b++) {
+        const start = Math.floor(b * per);
+        const end = Math.min(data.length, Math.floor((b + 1) * per));
+        const step = Math.max(1, Math.floor((end - start) / 64));
+        let max = 0;
+        for (let i = start; i < end; i += step) {
+          const v = Math.abs(data[i]);
+          if (v > max) max = v;
+        }
+        if (max > trackPeaks[b]) trackPeaks[b] = max;
+      }
+    }
+    addPeaks(file, trackPeaks);
+  };
+
+  const worker = async () => {
+    while (next < files.length && !cancelled) {
+      const file = files[next++];
+      while (shouldWait?.() && !isCancelled()) await new Promise((resolve) => setTimeout(resolve, 400));
+      if (isCancelled()) { cancelled = true; return; }
+      try {
+        await processFile(file);
+      } catch (error) {
+        // Un formato que el navegador no decodifica no debe romper la forma de onda.
+        console.warn("No se pudo analizar la pista", file.name, error);
+      }
+      if (!cancelled) onSettled?.(file);
+    }
+  };
+  await Promise.all(Array.from({ length: Math.max(1, Math.min(options.concurrency ?? 2, files.length)) }, worker));
+  if (cancelled || isCancelled()) return null;
   return decodedAny ? normalize(total) : null;
 }
 

@@ -533,3 +533,40 @@
   .pad-btn { min-width: 0; min-height: 36px; padding: 0 10px; }
 }
 .pad-mod:disabled, .pad-key:disabled { opacity: .45; cursor: default; }
+
+/* ---------- Preparación de la canción al cargarla ---------- */
+.prepare-bar { flex: 0 0 auto; display: flex; align-items: center; justify-content: center; gap: 10px; padding: 6px 18px; color: var(--c-silver-200); font-size: 11px; }
+.prepare-bar strong { font-weight: 600; letter-spacing: .04em; font-variant-numeric: tabular-nums; }
+.prepare-bar .spinner { width: 14px; height: 14px; border-color: rgba(205, 213, 226, .25); border-top-color: #e6eaf0; }
+.prepare-bar .pill-btn { min-height: 32px; padding: 0 12px; }
+
+/* ---------- Buscador de la Nube ---------- */
+.library-search { position: relative; display: flex; align-items: center; margin-top: 10px; }
+.library-search input { width: 100%; min-height: 44px; padding: 0 44px 0 14px; border: 1px solid var(--c-line-strong); border-radius: 12px; background: rgba(8, 20, 40, .6); color: var(--c-text); font-size: 14px; outline: none; user-select: text; -webkit-user-select: text; }
+.library-search input:focus { border-color: rgba(244, 245, 247, .5); }
+.library-search input::placeholder { color: var(--c-faint); }
+.library-search input::-webkit-search-cancel-button { display: none; }
+.search-clear { position: absolute; right: 5px; width: 36px; height: 36px; border: 0; border-radius: 50%; background: rgba(205, 213, 226, .12); color: var(--c-silver-200); font-size: 20px; line-height: 1; touch-action: manipulation; }
+.index-note { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 2px 0; color: var(--c-faint); font-size: 10px; }
+.index-note button { min-height: 28px; padding: 0 8px; border: 1px solid var(--c-line); border-radius: 8px; background: rgba(205, 213, 226, .06); color: var(--c-muted); font-size: 9px; font-weight: 700; letter-spacing: .08em; touch-action: manipulation; }
+.result-title { margin: 12px 0 8px; color: var(--c-muted); font-size: 10px; font-weight: 700; letter-spacing: 1.2px; }
+.song-tags { display: flex; gap: 5px; margin-top: 3px; }
+.tag { padding: 1px 7px; border: 1px solid var(--c-line-strong); border-radius: 999px; background: rgba(205, 213, 226, .08); color: var(--c-silver-200); font-size: 9px; font-style: normal; font-weight: 700; letter-spacing: .04em; }
+/* El teclado del celular no debe tapar los resultados (--kb lo fija NubeBrowser con visualViewport). */
+.library-scroll { padding-bottom: calc(max(22px, env(safe-area-inset-bottom)) + var(--kb, 0px)); }
+
+/* ---------- Perfil de pistas ---------- */
+.profile-chip { flex: none; min-height: 34px; padding: 0 12px; font-size: 9px; letter-spacing: .1em; white-space: nowrap; }
+.profile-drawer { gap: 12px; }
+.profile-active { margin: 0; color: var(--c-muted); font-size: 12px; }
+.profile-active strong { margin-left: 6px; padding: 2px 10px; border: 1px solid var(--c-line-strong); border-radius: 999px; background: rgba(211, 216, 223, .14); color: #fff; font-size: 11px; letter-spacing: .06em; }
+.profile-big { width: 100%; min-height: 56px; border: 1px solid var(--c-line-strong); border-radius: 12px; background: rgba(205, 213, 226, .07); color: var(--c-silver-100); font-size: 12px; font-weight: 700; letter-spacing: .7px; touch-action: manipulation; }
+.profile-big:disabled, .profile-small:disabled { opacity: .45; }
+.profile-big.danger { border-color: rgba(255, 92, 108, .35); background: rgba(133, 44, 53, .28); color: #ffc9cf; }
+.profile-big.danger.is-armed { background: rgba(160, 50, 62, .65); color: #fff; }
+.profile-io { display: flex; flex-direction: column; gap: 8px; }
+.profile-io-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.profile-small { min-height: 44px; padding: 0 6px; border: 1px solid var(--c-line-strong); border-radius: 10px; background: rgba(205, 213, 226, .07); color: var(--c-silver-200); font-size: 10px; font-weight: 700; letter-spacing: .06em; touch-action: manipulation; }
+.profile-text { width: 100%; min-height: 90px; padding: 10px; border: 1px solid var(--c-line); border-radius: 10px; background: rgba(8, 20, 40, .6); color: var(--c-silver-200); font: 11px/1.4 ui-monospace, monospace; resize: vertical; user-select: text; -webkit-user-select: text; }
+.profile-download { color: var(--c-silver-200); font-size: 11px; text-decoration: underline; }
+.profile-message { margin: 0; padding: 10px 12px; border: 1px solid var(--c-line-strong); border-radius: 10px; background: rgba(211, 216, 223, .1); color: #fff; font-size: 12px; }

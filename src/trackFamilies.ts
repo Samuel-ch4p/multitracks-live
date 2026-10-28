@@ -61,5 +61,8 @@ export function familyOf(name: string): Family {
  * Es solo el valor inicial: el usuario puede moverlo.
  */
 export function defaultPan(name: string): number {
-  return familyOf(name) === "guide" ? -1 : 0;
+  return isGuideOrClick(name) ? -1 : 0;
 }
+
+/** Click y Guía (familia "guide" de las listas de arriba): quedan fuera de la normalización y arrancan a la izquierda. */
+export const isGuideOrClick = (name: string) => familyOf(name) === "guide";

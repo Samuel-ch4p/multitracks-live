@@ -15,3 +15,8 @@ android/app/build
 android/build
 android/.gradle
 android/local.properties
+
+# Llaves locales (nunca al repositorio; ver .env.example)
+.env
+.env.*
+!.env.example

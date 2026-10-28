@@ -27,7 +27,7 @@ type MegaFolder = MegaNode & {
 };
 
 type Props = {
-  onSongLoaded: (name: string, files: File[]) => void;
+  onSongLoaded: (name: string, files: File[], options?: { inMemory?: boolean }) => void;
 };
 
 // Carpeta de la Nube Crescendo. No se muestra ni se puede editar en la pantalla.
@@ -123,9 +123,9 @@ function friendlyError(err: unknown, fallback: string): string {
 }
 
 /** Tarjeta de progreso: lee el avance del texto de estado (solo presentación; la descarga no se toca). */
-function LoadCard({ status, fileName }: { status: string; fileName: string }) {
-  const percent = status.match(/(d+)%/);
-  const tracks = status.match(/(d+) de (d+)/);
+export function LoadCard({ status, fileName }: { status: string; fileName: string }) {
+  const percent = status.match(/(\d+)%/);
+  const tracks = status.match(/(\d+) de (\d+)/);
   const stage = /extra/i.test(status) ? "extract" : /descifr/i.test(status) ? "decrypt" : "download";
   let pct: number | null = null;
   if (percent) pct = Number(percent[1]);
@@ -146,7 +146,7 @@ function LoadCard({ status, fileName }: { status: string; fileName: string }) {
   );
 }
 
-function CloudIcon({ name }: { name: "cloud" | "folder" | "archive" | "back" | "refresh" }) {
+export function CloudIcon({ name }: { name: "cloud" | "folder" | "archive" | "back" | "refresh" }) {
   const paths: Record<typeof name, ReactNode> = {
     cloud: <path d="M7 18h11a4 4 0 0 0 .5-8A6.5 6.5 0 0 0 6 8.2 4.9 4.9 0 0 0 7 18Z" />,
     folder: <path d="M3 7.5h7l2-2h9v13H3v-11Z" />,
@@ -273,7 +273,7 @@ export default function MegaBrowser({ onSongLoaded }: Props) {
 
       const songName = item.name.replace(/\.(zip|rar)$/i, "");
 
-      onSongLoaded(songName, files);
+      onSongLoaded(songName, files, { inMemory: true });
       setSelected(null);
       setStatus(`Añadida: ${songName} · ${files.length} pistas.`);
     } catch (err) {
