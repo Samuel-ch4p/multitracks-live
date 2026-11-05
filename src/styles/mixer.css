@@ -82,7 +82,7 @@
 .fader:focus-visible { outline: 2px solid var(--c-accent); outline-offset: -2px; border-radius: 8px; }
 .fader-rail { position: relative; width: 30px; margin: 12px 0; }
 .fader-groove { position: absolute; top: -6px; bottom: -6px; left: 50%; width: 4px; transform: translateX(-50%); border-radius: 2px; background: var(--c-bg-0); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--c-white) 6%, transparent); }
-.fader-fill { position: absolute; bottom: 0; left: 50%; width: 2px; transform: translateX(-50%); border-radius: 1px; background: linear-gradient(to top, var(--c-metal-lo), var(--c-accent)); opacity: .85; }
+.fader-fill { position: absolute; bottom: 0; left: 50%; width: 2px; transform: translateX(-50%); border-radius: 1px; background: linear-gradient(to top, color-mix(in srgb, var(--c-fader-fill) 65%, var(--c-bg-0)), var(--c-fader-fill)); opacity: .9; }
 .fader-cap {
   position: absolute; left: 50%; width: 30px; height: 12px; transform: translate(-50%, 50%); border-radius: 6px;
   background: linear-gradient(180deg, var(--c-text) 0%, var(--c-silver) 100%); background-color: var(--c-silver);
@@ -119,7 +119,7 @@
 .pan-bar { position: relative; height: 22px; cursor: pointer; touch-action: none; }
 .pan-track { position: absolute; top: 50%; right: 0; left: 0; height: 4px; transform: translateY(-50%); border-radius: 2px; background: var(--c-bg-0); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--c-white) 6%, transparent); }
 .pan-center { position: absolute; top: 50%; left: 50%; display: block; width: 1px; height: 10px; transform: translate(-50%, -50%); background: var(--c-line-strong); }
-.pan-fill { position: absolute; top: 50%; height: 2px; transform: translateY(-50%); border-radius: 1px; background: var(--c-accent); opacity: .85; }
+.pan-fill { position: absolute; top: 50%; height: 2px; transform: translateY(-50%); border-radius: 1px; background: var(--c-fader-fill); opacity: .85; }
 .pan-thumb { position: absolute; top: 50%; width: 14px; height: 14px; transform: translate(-50%, -50%); border-radius: 50%; background: var(--c-silver); border: 1px solid color-mix(in srgb, var(--c-white) 55%, transparent); box-shadow: 0 1px 3px color-mix(in srgb, var(--c-black) 55%, transparent); transition: box-shadow .15s ease; }
 .pan-bar.is-dragging .pan-thumb { box-shadow: 0 0 0 5px color-mix(in srgb, var(--c-accent) 20%, transparent), 0 1px 3px color-mix(in srgb, var(--c-black) 55%, transparent); }
 .pan-bar:focus-visible { border-radius: 8px; outline: 2px solid var(--c-accent); outline-offset: 0; }
@@ -149,6 +149,26 @@
 }
 .wave-section i { width: 6px; height: 6px; border-radius: 50%; background: var(--marker-color, var(--c-accent)); }
 .wave-meta { height: 22px; }
+/* Línea de canción (nombre, sección y perfil): solo en pantallas bajas; en las altas se ven las pestañas del repertorio */
+.wave-songline { display: contents; }
+.wave-songname, .wave-profile { display: none; }
+@media (max-height: 380px) {
+  .song-deck { display: none; }
+  .wave-panel .waveform { height: 44px; }
+  .wave-songline { position: absolute; z-index: 3; top: 4px; right: 8px; left: 8px; display: flex; align-items: center; gap: 8px; pointer-events: none; }
+  .wave-songname {
+    display: block; min-width: 0; max-width: 55%; overflow: hidden; padding: 1px 8px; border-radius: 6px; background: color-mix(in srgb, var(--c-panel) 85%, transparent);
+    font-family: var(--font-serif); font-size: 14px; font-weight: 500; line-height: 1.3; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .wave-section { position: static; }
+  .wave-profile {
+    position: relative; display: grid; width: 36px; height: 26px; margin-left: auto; place-items: center; padding: 0; pointer-events: auto;
+    border: 1px solid var(--c-line); border-radius: 8px; background: color-mix(in srgb, var(--c-panel) 85%, transparent); color: var(--c-muted); touch-action: manipulation;
+  }
+  .wave-profile::after { content: ""; position: absolute; inset: -6px -4px; }
+  .wave-profile svg { width: 16px; height: 16px; }
+  .wave-profile:active { color: var(--c-accent-strong); border-color: var(--accent-line); }
+}
 
 /* ---------- Play: relleno cobre y halo mientras suena (solo transform y opacity) ---------- */
 .play-btn { position: relative; border-color: transparent; background: var(--grad-metal); color: var(--c-bg-1); box-shadow: 0 2px 8px color-mix(in srgb, var(--c-black) 40%, transparent); }

@@ -43,6 +43,8 @@
   --c-accent: #e7a06a;
   --c-accent-strong: #f3b37f;
   --c-accent-rgb: 231 160 106;
+  /* Relleno de los faders (la parte iluminada del carril): cambia solo esta línea para recolorearlos */
+  --c-fader-fill: var(--c-accent);
 
   /* ---- Líneas y vidrio: SIEMPRE neutros (blanco con baja opacidad) ---- */
   --c-line: rgb(255 255 255 / .09);

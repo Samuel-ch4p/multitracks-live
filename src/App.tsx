@@ -1282,7 +1282,11 @@ export default function App() {
               onSeek={(fraction) => void seekTo(fraction)}
               onLongPress={addMarkerAt}
             />
-            <SectionName markers={markers} />
+            <div className="wave-songline">
+              <span className="wave-songname">{songName}</span>
+              <SectionName markers={markers} />
+              <button className="wave-profile" onClick={() => setProfileOpen(true)} aria-label={`Perfil de pistas (${PROFILE_LABEL[profileSource]})`} title={`Perfil de pistas · ${PROFILE_LABEL[profileSource]}`}><Icon name="profile" /></button>
+            </div>
             {markers.length > 0 && (
               <div className="wave-marks" aria-hidden="true">
                 {markers.map((marker) => <i key={marker.id} style={{ left: `${marker.position * 100}%`, background: marker.color }} />)}
