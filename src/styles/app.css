@@ -1182,3 +1182,6 @@ button.loaded-song:active { transform: scale(.98); }
   .mini-main .artwork { width: 36px; height: 36px; }
   .mini-player .play-btn { height: var(--tap); }
 }
+
+/* Canciones que aún no se pueden abrir (RAR / 7z) */
+.library-item.soon { opacity: .55; }

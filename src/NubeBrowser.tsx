@@ -1,168 +1,89 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { pistas } from "./format";
 import { useWindowed } from "./windowed";
-import { audioExtensions, sortFiles, zipToFilesAsync } from "./archive";
-import { CloudIcon, LoadCard } from "./MegaBrowser";
-import { DRIVE_API_KEY, DRIVE_ROOT_ID } from "./cloudConfig";
-import { DriveError, downloadFile, friendlyDriveMessage, listArtists, listSongs, type DriveConfig, type DriveFile } from "./driveSource";
-import { ageLabel, buildIndex, foldQuery, loadIndex, matchesAll, queryTokens, saveIndex, searchIndex, type IndexData, type IndexSong } from "./searchIndex";
+import { CloudIcon, LoadCard } from "./CloudParts";
+import { CloudError, friendlyCloudMessage } from "./cloud/errors";
+import { fetchSongFiles, loadCatalog, type SongProgress } from "./cloud/cloudSource";
+import { isPlayable, type CatalogArtist } from "./cloud/catalog";
+import { buildIndex, foldQuery, searchIndex, type IndexData, type IndexSong } from "./searchIndex";
 import { parseSongTags } from "./songTags";
 
 type Props = {
   onSongLoaded: (name: string, files: File[], options?: { inMemory?: boolean }) => void;
 };
 
-const cfg: DriveConfig = { apiKey: DRIVE_API_KEY };
-
 /** Tocar una canción en los resultados de búsqueda: false = la selecciona y muestra "AÑADIR" (evita descargas grandes por error). */
 const SEARCH_TAP_LOADS = false;
 const SEARCH_DELAY_MS = 200;
 
-// Caché en memoria de la sesión (solo nombres): al cerrar y reabrir el panel no se vuelve a consultar.
-let artistsCache: DriveFile[] | null = null;
-const songsCache = new Map<string, DriveFile[]>();
+// Caché en memoria de la sesión (el catálogo es solo texto): al cerrar y reabrir el panel no se vuelve a consultar.
 let indexCache: IndexData | null = null;
-let indexJob: Promise<IndexData> | null = null;
-let indexProgress = { done: 0, total: 0 };
 let downloadInFlight = false;
 
+const sizeLabel = (size?: number) => (size ? `${Math.round(size / 1048576)} MB` : "Multitrack");
 const mb = (bytes: number) => (bytes / 1048576).toFixed(bytes >= 10485760 ? 0 : 1);
-const asSong = (song: IndexSong): DriveFile => ({ id: song.id, name: song.name, mimeType: "application/zip", size: song.size });
-const sizeLabel = (size?: number) => (typeof size === "number" ? `${(size / 1048576).toFixed(0)} MB` : "Multitrack");
+const isAbort = (e: unknown) => e instanceof CloudError ? e.kind === "cancelled" : e instanceof DOMException && e.name === "AbortError";
 
-/**
- * Descarga y extrae una canción. Nada se guarda en el teléfono: vive solo en memoria mientras la app está abierta.
- * Una sola a la vez (el panel se desmonta al cerrarse: sin esta guarda se podía iniciar una segunda descarga grande).
- */
-const cancelled = () => new DOMException("Descarga cancelada", "AbortError");
-
-async function fetchSong(item: DriveFile, onStatus: (text: string) => void, signal: AbortSignal): Promise<{ songName: string; files: File[] }> {
-  downloadInFlight = true;
-  try {
-    onStatus("Conectando para descargar...");
-    const started = performance.now();
-    let lastShown = 0;
-    const blob = await downloadFile(item, (received, total) => {
-      const now = performance.now();
-      if (now - lastShown < 250) return;
-      lastShown = now;
-      const speed = received / 1048576 / Math.max((now - started) / 1000, 0.1);
-      onStatus(`Descargando ${Math.round((received / total) * 100)}% · ${mb(received)} de ${mb(total)} MB · ${speed.toFixed(1)} MB/s`);
-    }, cfg, { signal });
-    if (signal.aborted) throw cancelled();
-
-    onStatus("Extrayendo pistas...");
-    const files = sortFiles(
-      (await zipToFilesAsync(blob, (done, total) => onStatus(`Extrayendo pistas · ${done} de ${total}...`))).filter((file) => audioExtensions.test(file.name))
-    );
-    if (signal.aborted) throw cancelled();
-    if (files.length === 0) throw new Error("No se encontraron pistas de audio compatibles en este archivo.");
-    return { songName: item.name.replace(/\.zip$/i, ""), files };
-  } finally {
-    downloadInFlight = false;
-  }
-}
-
-function Tags({ name }: { name: string }) {
-  const { tone, bpm } = parseSongTags(name);
+function Tags({ song }: { song: IndexSong }) {
+  const parsed = parseSongTags(song.title);
+  const tone = song.tone ?? parsed.tone;
+  const bpm = song.bpm ?? parsed.bpm;
   if (!tone && !bpm) return null;
   return (
     <span className="song-tags">
       {tone && <i className="tag">{tone}</i>}
-      {bpm && <i className="tag">{bpm} BPM</i>}
+      {bpm && <i className="tag">{Math.round(bpm)} BPM</i>}
     </span>
   );
 }
 
+type Load = { stage: "download" | "extract"; percent: number | null; detail: string };
+
 export default function NubeBrowser({ onSongLoaded }: Props) {
-  const [artists, setArtists] = useState<DriveFile[] | null>(artistsCache);
-  const [artist, setArtist] = useState<DriveFile | null>(null);
-  const [songs, setSongs] = useState<DriveFile[]>([]);
-  const [loading, setLoading] = useState(() => !artistsCache && !!DRIVE_API_KEY && !!DRIVE_ROOT_ID);
+  const [index, setIndex] = useState<IndexData | null>(indexCache);
+  const [offline, setOffline] = useState(false);
+  const [artist, setArtist] = useState<CatalogArtist | null>(null);
+  const [loading, setLoading] = useState(() => !indexCache);
   const [adding, setAdding] = useState(false);
-  const [selected, setSelected] = useState<DriveFile | null>(null);
-  const [error, setError] = useState(() => (!DRIVE_API_KEY || !DRIVE_ROOT_ID ? friendlyDriveMessage(new DriveError("config", 0, "sin configurar")) : ""));
+  const [selected, setSelected] = useState<IndexSong | null>(null);
+  const [error, setError] = useState("");
   const [status, setStatus] = useState("");
+  const [load, setLoad] = useState<Load>({ stage: "download", percent: null, detail: "" });
   const [loadFail, setLoadFail] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
-  // Buscador
   const [query, setQuery] = useState("");
   const [search, setSearch] = useState("");
-  const [index, setIndex] = useState<IndexData | null>(indexCache);
-  const [indexing, setIndexing] = useState(() => !!indexJob);
-  const [indexError, setIndexError] = useState(false);
-  const [progress, setProgress] = useState(indexProgress);
   const mounted = useRef(true);
 
   const busy = loading || adding;
-  const configured = !!DRIVE_API_KEY && !!DRIVE_ROOT_ID;
 
-  const fetchArtists = useCallback(async () => {
+  const fetchCatalog = useCallback(async () => {
     try {
-      const list = await listArtists(DRIVE_ROOT_ID, cfg);
-      artistsCache = list;
-      if (mounted.current) { setArtists(list); setError(""); }
+      const { catalog, offline: isOffline } = await loadCatalog();
+      indexCache = buildIndex(catalog);
+      if (mounted.current) { setIndex(indexCache); setOffline(isOffline); setError(""); }
     } catch (e) {
-      console.error("Nube: no se pudo listar los artistas", e);
-      if (mounted.current) setError(friendlyDriveMessage(e));
+      console.error("Nube: no se pudo cargar el catálogo");
+      if (mounted.current) setError(friendlyCloudMessage(e));
     } finally {
       if (mounted.current) setLoading(false);
     }
   }, []);
 
-  /** Índice de búsqueda: de IndexedDB si existe; si no (o al pedir "Actualizar"), se construye en segundo plano. */
-  const runIndex = useCallback(async (force: boolean) => {
-    if (!configured) return;
-    if (!force && indexCache) { setIndex(indexCache); return; }
-    if (!indexJob) {
-      indexJob = (async () => {
-        if (!force) {
-          const saved = await loadIndex(DRIVE_ROOT_ID);
-          if (saved) return saved;
-        }
-        const data = await buildIndex(
-          DRIVE_ROOT_ID,
-          async () => (artistsCache ?? (await listArtists(DRIVE_ROOT_ID, cfg))).map((a) => ({ id: a.id, name: a.name })),
-          async (a) => (await listSongs(a.id, cfg)).map((s) => ({ id: s.id, name: s.name, size: s.size })),
-          { concurrency: 6, onProgress: (done, total) => { indexProgress = { done, total }; if (mounted.current) setProgress({ done, total }); } }
-        );
-        void saveIndex(data); // si IndexedDB falla, sigue en memoria
-        return data;
-      })();
-    }
-    setIndexing(true);
-    setIndexError(false);
-    try {
-      const data = await indexJob;
-      indexCache = data;
-      if (mounted.current) setIndex(data);
-    } catch (e) {
-      console.error("Nube: no se pudo construir el índice de búsqueda", e);
-      if (mounted.current) setIndexError(true);
-    } finally {
-      indexJob = null;
-      if (mounted.current) setIndexing(false);
-    }
-  }, [configured]);
-
-  /** Botón CONECTAR / ACTUALIZAR / REINTENTAR. */
-  function reloadArtists() {
-    if (!configured) { setError(friendlyDriveMessage(new DriveError("config", 0, "sin configurar"))); return; }
+  function reload() {
     setLoading(true);
     setError("");
-    void fetchArtists();
+    void fetchCatalog();
   }
 
-  // Al abrir el panel se conecta solo (la primera vez de la sesión; luego sale de la caché en memoria) y prepara el índice.
   useEffect(() => {
     mounted.current = true;
-    // Los setState de estas dos llamadas ocurren después de la red o de IndexedDB, no de forma síncrona.
+    // Los setState ocurren después de la red, no de forma síncrona.
     /* oxlint-disable react/set-state-in-effect */
-    if (!artistsCache && configured) void fetchArtists();
-    if (configured && !indexCache) void runIndex(false);
+    void fetchCatalog();
     /* oxlint-enable react/set-state-in-effect */
     return () => { mounted.current = false; };
-  }, [configured, fetchArtists, runIndex]);
+  }, [fetchCatalog]);
 
   // Búsqueda en vivo con un pequeño retardo para no recalcular en cada tecla.
   useEffect(() => {
@@ -185,64 +106,62 @@ export default function NubeBrowser({ onSongLoaded }: Props) {
 
   const searching = foldQuery(search).length > 0;
   const result = useMemo(() => (index && searching ? searchIndex(index, search) : null), [index, search, searching]);
-  // Mientras el índice se construye, los artistas ya se pueden buscar con la lista que ya está cargada.
-  const quickArtists = useMemo(() => {
-    if (!searching || index || !artists) return [];
-    const tokens = queryTokens(search);
-    return artists.filter((a) => matchesAll(foldQuery(a.name), tokens)).slice(0, 60);
-  }, [artists, index, search, searching]);
-
-  async function openArtist(item: DriveFile) {
+  function openArtist(item: CatalogArtist) {
     setQuery("");
     setSearch("");
     setArtist(item);
     setSelected(null);
     setError("");
     setStatus("");
-    const cached = songsCache.get(item.id);
-    if (cached) { setSongs(cached); return; }
-    setSongs([]);
-    setLoading(true);
-    try {
-      const list = await listSongs(item.id, cfg);
-      songsCache.set(item.id, list);
-      if (mounted.current) setSongs(list);
-    } catch (e) {
-      console.error("Nube: no se pudo abrir la carpeta", e);
-      if (mounted.current) setError(friendlyDriveMessage(e));
-    } finally {
-      if (mounted.current) setLoading(false);
-    }
   }
 
   function goBack() {
     setArtist(null);
-    setSongs([]);
     setSelected(null);
     setError("");
     setStatus("");
   }
 
-  async function addSong(item: DriveFile) {
+  async function addSong(item: IndexSong) {
+    if (!isPlayable(item)) return;
     if (downloadInFlight) { setError("Ya hay una canción descargándose. Espera a que termine."); return; }
+    downloadInFlight = true;
     const controller = new AbortController();
     abortRef.current = controller;
     setSelected(item);
     setAdding(true);
     setError("");
     setLoadFail(null);
+    setLoad({ stage: "download", percent: null, detail: "" });
+    const started = performance.now();
+    let lastShown = 0;
+    const onProgress = (p: SongProgress) => {
+      const now = performance.now();
+      if (now - lastShown < 250 && p.stage === "download") return;
+      lastShown = now;
+      if (p.stage === "download") {
+        const speed = p.received / 1048576 / Math.max((now - started) / 1000, 0.1);
+        setLoad({ stage: "download", percent: p.total ? Math.min(100, Math.round((p.received / p.total) * 100)) : null, detail: `${mb(p.received)} de ${mb(p.total)} MB · ${speed.toFixed(1)} MB/s` });
+      } else {
+        setLoad({ stage: "extract", percent: p.total ? Math.round((p.done / p.total) * 100) : null, detail: `Pista ${p.done} de ${p.total}` });
+      }
+    };
     try {
-      const { songName, files } = await fetchSong(item, setStatus, controller.signal);
-      onSongLoaded(songName, files, { inMemory: true });
+      const files = await fetchSongFiles(item, onProgress, controller.signal);
+      if (controller.signal.aborted) throw new CloudError("cancelled");
+      onSongLoaded(item.title, files, { inMemory: true });
       setSelected(null);
-      setStatus(`Añadida: ${songName} · ${pistas(files.length)}.`);
+      setStatus(`Añadida: ${item.title} · ${pistas(files.length)}.`);
     } catch (e) {
-      if (controller.signal.aborted) { if (mounted.current) setStatus("Descarga cancelada."); return; }
-      console.error("Nube: error al descargar o extraer", e);
-      // Los errores de extracción ya vienen en español ("El ZIP está dañado…"); los de red o cuota usan el mensaje amable.
-      if (mounted.current) setLoadFail(e instanceof Error && !(e instanceof DriveError) && !(e instanceof RangeError) && !/fetch|network|abort/i.test(e.message) ? e.message : friendlyDriveMessage(e));
+      if (controller.signal.aborted || isAbort(e)) { if (mounted.current) setStatus("Descarga cancelada."); return; }
+      console.error("Nube: error al descargar o extraer");
+      // Los errores de extracción ya vienen en español ("El ZIP está dañado…"); los de la nube usan su mensaje amable.
+      if (mounted.current) setLoadFail(e instanceof CloudError || e instanceof RangeError || !(e instanceof Error) || /fetch|network|abort/i.test(e.message)
+        ? (e instanceof RangeError ? "Este multitrack es demasiado grande para la memoria del dispositivo. Cierra otras apps e inténtalo de nuevo." : friendlyCloudMessage(e))
+        : e.message);
       setStatus("");
     } finally {
+      downloadInFlight = false;
       abortRef.current = null;
       setAdding(false);
     }
@@ -250,60 +169,60 @@ export default function NubeBrowser({ onSongLoaded }: Props) {
 
   function cancelAdd() { abortRef.current?.abort(); }
 
-  function pickSong(file: DriveFile) {
-    if (SEARCH_TAP_LOADS) { setSelected(file); void addSong(file); return; }
-    setSelected(selected?.id === file.id ? null : file);
+  function pickSong(song: IndexSong) {
+    if (!isPlayable(song)) return;
+    if (SEARCH_TAP_LOADS) { setSelected(song); void addSong(song); return; }
+    setSelected(selected?.id === song.id ? null : song);
   }
 
-  const items = artist ? songs : artists ?? [];
-  const connectionLabel = loading ? "Consultando biblioteca…" : error && !artists ? "Error de conexión" : artists ? "Biblioteca conectada" : "Sin conectar";
-  const connectionClass = loading ? "loading" : error && !artists ? "error" : artists ? "connected" : "idle";
-  const refreshLabel = loading ? "CONECTANDO…" : error && !artists ? "REINTENTAR" : "ACTUALIZAR";
+  const artistSongs = artist ? index?.byArtist.get(artist.id) ?? [] : [];
+  const artists = index?.artists ?? [];
+  const connectionLabel = loading ? "Consultando biblioteca…" : error && !index ? "Error de conexión" : offline ? "Sin conexión · lista guardada" : index ? "Biblioteca conectada" : "Sin conectar";
+  const connectionClass = loading ? "loading" : error && !index ? "error" : index ? "connected" : "idle";
+  const refreshLabel = loading ? "CONECTANDO…" : error && !index ? "REINTENTAR" : "ACTUALIZAR";
 
-  const songRow = (file: DriveFile, position: number, subtitle: string) => {
-    const isSelected = selected?.id === file.id;
+  const songRow = (song: IndexSong, position: number, subtitle: string) => {
+    const playable = isPlayable(song);
+    const isSelected = selected?.id === song.id;
     return (
-      <div className={`library-item archive ${isSelected ? "selected" : ""}`} key={file.id} style={{ "--i": Math.min(position, 12) } as CSSProperties}>
-        <button className="library-item-main" disabled={busy} onClick={() => pickSong(file)}>
+      <div className={`library-item archive ${isSelected ? "selected" : ""} ${playable ? "" : "soon"}`} key={song.id} style={{ "--i": Math.min(position, 12) } as CSSProperties}>
+        <button className="library-item-main" disabled={busy || !playable} onClick={() => pickSong(song)}>
           <span className="item-icon"><CloudIcon name="archive" /></span>
           <span className="item-copy">
-            <strong>{file.name.replace(/\.zip$/i, "")}</strong>
-            <small>{subtitle}</small>
-            <Tags name={file.name} />
+            <strong>{song.title}</strong>
+            <small>{playable ? subtitle : `${subtitle} · Próximamente`}</small>
+            <Tags song={song} />
           </span>
-          {!isSelected && <span className="file-kind">ZIP</span>}
+          {!isSelected && <span className="file-kind">{playable ? "ZIP" : "PRONTO"}</span>}
         </button>
         {isSelected && (
-          <button className="add-song-button" disabled={busy} onClick={() => void addSong(file)}>
+          <button className="add-song-button" disabled={busy} onClick={() => void addSong(song)}>
             {adding ? "PROCESANDO…" : "＋ AÑADIR"}
           </button>
         )}
       </div>
     );
   };
-  const artistRow = (item: DriveFile, position: number) => (
+  const artistRow = (item: CatalogArtist, position: number) => (
     <div className="library-item folder" key={item.id} style={{ "--i": Math.min(position, 12) } as CSSProperties}>
-      <button className="library-item-main" disabled={busy} onClick={() => void openArtist(item)}>
+      <button className="library-item-main" disabled={busy} onClick={() => openArtist(item)}>
         <span className="item-icon"><CloudIcon name="folder" /></span>
-        <span className="item-copy"><strong>{item.name}</strong><small>Artista</small></span>
+        <span className="item-copy"><strong>{item.name}</strong><small>{index?.byArtist.get(item.id)?.length ?? 0} canciones</small></span>
         <span className="item-chevron">›</span>
       </button>
     </div>
   );
 
-  const indexNote = indexing
-    ? `Indexando biblioteca… ${progress.done}/${progress.total || "…"}`
-    : indexError
-      ? "No se pudo preparar la búsqueda de canciones."
-      : index
-        ? `Índice ${ageLabel(index.builtAt)} · ${index.songs.length} canciones${index.failed ? ` · ${index.failed} carpetas sin leer` : ""}`
-        : "";
-  const foundArtists: DriveFile[] = (result?.artists ?? quickArtists).map((a) => ({ id: a.id, name: a.name, mimeType: "folder" }));
+  const indexNote = index ? `${index.songs.length} canciones · ${index.artists.length} artistas` : "";
+  const foundArtists: CatalogArtist[] = result?.artists ?? [];
   // Listas por ventanas (la clave reinicia la ventana al cambiar de carpeta o de búsqueda)
   const listKey = `${artist?.id ?? "raiz"}|${search}`;
-  const normalWin = useWindowed(items, listKey);
+  const artistListWin = useWindowed(artists, listKey);
+  const songListWin = useWindowed(artistSongs, listKey);
+  const normalWin = artist ? songListWin : artistListWin;
   const foundArtistWin = useWindowed(foundArtists, listKey);
   const foundSongWin = useWindowed(result?.songs ?? [], listKey);
+  const items = artist ? artistSongs : artists;
 
   return (
     <>
@@ -316,19 +235,13 @@ export default function NubeBrowser({ onSongLoaded }: Props) {
               {connectionLabel}
             </span>
           </div>
-          <button
-            className="refresh-library"
-            disabled={busy}
-            onClick={() => {
-              if (artist) { songsCache.delete(artist.id); void openArtist(artist); } else reloadArtists();
-            }}
-          >
+          <button className="refresh-library" disabled={busy} onClick={reload}>
             <CloudIcon name="refresh" />
             <span>{refreshLabel}</span>
           </button>
         </div>
 
-        {artists && (
+        {index && (
           <div className="library-search" role="search">
             <input
               type="search"
@@ -345,16 +258,11 @@ export default function NubeBrowser({ onSongLoaded }: Props) {
             {query && <button className="search-clear" aria-label="Limpiar búsqueda" onClick={() => { setQuery(""); setSearch(""); }}>×</button>}
           </div>
         )}
-        {artists && indexNote && (
-          <div className="index-note">
-            <span>{indexNote}</span>
-            {!indexing && (
-              <button disabled={busy} onClick={() => void runIndex(true)}>{indexError ? "REINTENTAR" : "ACTUALIZAR ÍNDICE"}</button>
-            )}
-          </div>
+        {index && indexNote && (
+          <div className="index-note"><span>{indexNote}</span></div>
         )}
 
-        {artists && !searching && (
+        {index && !searching && (
           <div className="library-location">
             <button aria-label="Volver a la lista de artistas" disabled={!artist || busy} onClick={goBack}>
               <CloudIcon name="back" />
@@ -368,14 +276,14 @@ export default function NubeBrowser({ onSongLoaded }: Props) {
       </div>
 
       <div className="library-scroll">
-        {(status || error) && artists && (
+        {(status || error) && index && (
           <div className="library-notes">
             {status && <p className="status-message">{status}</p>}
             {error && <p className="error-message">{error}</p>}
           </div>
         )}
 
-        {!artists && !loading && (
+        {!index && !loading && (
           <div className={`library-state ${error ? "error" : "empty"}`}>
             <span className="state-icon"><CloudIcon name="cloud" /></span>
             <strong>{error ? "No pudimos conectar con la Nube Crescendo" : "Biblioteca Crescendo"}</strong>
@@ -395,11 +303,8 @@ export default function NubeBrowser({ onSongLoaded }: Props) {
         )}
 
         {/* ---- Resultados de búsqueda ---- */}
-        {artists && !loading && searching && (
+        {index && !loading && searching && (
           <div className="library-results" aria-live="polite">
-            {!index && indexing && foundArtists.length === 0 && (
-              <div className="library-state empty"><span className="state-icon"><CloudIcon name="refresh" /></span><strong>Preparando la búsqueda…</strong><span>{indexNote}</span></div>
-            )}
             {foundArtists.length > 0 && (
               <>
                 <h3 className="result-title">ARTISTAS</h3>
@@ -409,21 +314,17 @@ export default function NubeBrowser({ onSongLoaded }: Props) {
             {result && result.songs.length > 0 && (
               <>
                 <h3 className="result-title">CANCIONES{result.totalSongs > result.songs.length ? ` · ${result.songs.length} de ${result.totalSongs}` : ""}</h3>
-                <div className="library-items">{foundSongWin.visible.map((s, position) => songRow(asSong(s), position, `${s.artist} · ${sizeLabel(s.size)}`))}</div>{foundSongWin.sentinel}
+                <div className="library-items">{foundSongWin.visible.map((s, position) => songRow(s, position, `${s.artist} · ${sizeLabel(s.size)}`))}</div>{foundSongWin.sentinel}
               </>
             )}
-            {!index && indexing && foundArtists.length > 0 && <p className="hint">Las canciones aparecerán cuando termine de indexar ({progress.done}/{progress.total || "…"}).</p>}
-            {indexError && !index && (
-              <div className="library-state error"><span className="state-icon"><CloudIcon name="cloud" /></span><strong>La búsqueda de canciones no está lista</strong><span>Revisa tu conexión y toca REINTENTAR.</span></div>
-            )}
-            {((result && result.artists.length === 0 && result.songs.length === 0) || (!index && !indexing && !indexError && foundArtists.length === 0)) && (
+            {result && result.artists.length === 0 && result.songs.length === 0 && (
               <div className="library-state empty"><span className="state-icon"><CloudIcon name="folder" /></span><strong>Sin resultados</strong><span>Prueba con otras palabras o menos letras.</span></div>
             )}
           </div>
         )}
 
         {/* ---- Navegación normal ---- */}
-        {artists && !loading && !searching && items.length === 0 && (
+        {index && !loading && !searching && items.length === 0 && (
           <div className="library-state empty">
             <span className="state-icon"><CloudIcon name="folder" /></span>
             <strong>{artist ? "Este artista no tiene canciones" : "La biblioteca está vacía"}</strong>
@@ -431,17 +332,21 @@ export default function NubeBrowser({ onSongLoaded }: Props) {
           </div>
         )}
 
-        {artists && !loading && !searching && items.length > 0 && (
+        {index && !loading && !searching && items.length > 0 && (
           <div className="library-items">
-            {normalWin.visible.map((item, position) => (artist ? songRow(item, position, sizeLabel(item.size)) : artistRow(item, position)))}
+            {artist
+              ? artistSongs.length > 0 && songListWin.visible.map((song, position) => songRow(song, position, sizeLabel(song.size)))
+              : artistListWin.visible.map((item, position) => artistRow(item, position))}
           </div>
         )}
-        {artists && !loading && !searching && items.length > 0 && normalWin.sentinel}
+        {index && !loading && !searching && items.length > 0 && normalWin.sentinel}
       </div>
       {(adding || loadFail) && (
         <LoadCard
-          status={status}
-          fileName={(selected?.name ?? "").replace(/\.zip$/i, "")}
+          stage={load.stage}
+          percent={load.percent}
+          detail={load.detail}
+          fileName={selected?.title ?? ""}
           error={loadFail}
           onCancel={adding ? cancelAdd : undefined}
           onRetry={loadFail && selected ? () => void addSong(selected) : undefined}
