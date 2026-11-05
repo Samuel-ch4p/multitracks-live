@@ -9,6 +9,7 @@ import { CONTACTO_SOPORTE } from "./cloud/config";
 import { isPlayable, type CatalogArtist } from "./cloud/catalog";
 import { buildIndex, foldQuery, searchIndex, type IndexData, type IndexSong } from "./searchIndex";
 import { parseSongTags } from "./songTags";
+import { libraryCache } from "./libraryCache";
 
 type Props = {
   onSongLoaded: (name: string, files: File[], options?: { inMemory?: boolean; tone?: string | null; bpm?: number | null }) => void;
@@ -18,8 +19,7 @@ type Props = {
 const SEARCH_TAP_LOADS = false;
 const SEARCH_DELAY_MS = 200;
 
-// Caché en memoria de la sesión (el catálogo es solo texto): al cerrar y reabrir el panel no se vuelve a consultar.
-let indexCache: IndexData | null = null;
+
 
 const sizeLabel = (size?: number) => (size ? `${Math.round(size / 1048576)} MB` : "Multitrack");
 const mb = (bytes: number) => (bytes / 1048576).toFixed(bytes >= 10485760 ? 0 : 1);
@@ -51,10 +51,10 @@ type Load = { stage: "download" | "extract"; percent: number | null; detail: str
 type Filter = "all" | "available";
 
 export default function NubeBrowser({ onSongLoaded }: Props) {
-  const [index, setIndex] = useState<IndexData | null>(indexCache);
+  const [index, setIndex] = useState<IndexData | null>(libraryCache.index);
   const [offline, setOffline] = useState(false);
   const [artist, setArtist] = useState<CatalogArtist | null>(null);
-  const [loading, setLoading] = useState(() => !indexCache);
+  const [loading, setLoading] = useState(() => !libraryCache.index);
   const [adding, setAdding] = useState(false);
   const [selected, setSelected] = useState<IndexSong | null>(null);
   const [error, setError] = useState("");
@@ -74,8 +74,8 @@ export default function NubeBrowser({ onSongLoaded }: Props) {
   const fetchCatalog = useCallback(async () => {
     try {
       const { catalog, offline: isOffline } = await loadCatalog();
-      indexCache = buildIndex(catalog);
-      if (mounted.current) { setIndex(indexCache); setOffline(isOffline); setError(""); }
+      libraryCache.index = buildIndex(catalog);
+      if (mounted.current) { setIndex(libraryCache.index); setOffline(isOffline); setError(""); }
     } catch (e) {
       console.error("Nube: no se pudo cargar el catálogo");
       if (mounted.current) setError(friendlyCloudMessage(e));

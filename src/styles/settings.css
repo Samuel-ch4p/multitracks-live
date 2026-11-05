@@ -1,0 +1,51 @@
+/* =====================================================================
+   Diseño nuevo · Ajustes (pantalla completa con tarjetas por sección). Solo variables de tokens.css.
+   ===================================================================== */
+.settings-screen .settings-scroll { gap: var(--sp-3); padding-bottom: var(--sp-4); }
+.settings-card { display: flex; flex: none; flex-direction: column; gap: 2px; padding: var(--sp-3) var(--sp-4); border: 1px solid var(--c-line); border-radius: var(--r-md); background: var(--c-panel); }
+.settings-card h2 { margin: 0 0 var(--sp-1); color: var(--c-faint); font-size: var(--fs-xs); font-weight: 700; letter-spacing: .14em; text-transform: uppercase; }
+
+.setting-row { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-4); min-height: 56px; padding: 8px 0; }
+.setting-row + .setting-row, .setting-fact + .setting-fact, .setting-row + .setting-fact { border-top: 1px solid var(--c-line); }
+.setting-row.stacked { flex-direction: column; align-items: stretch; gap: var(--sp-2); }
+.setting-copy { display: flex; min-width: 0; flex: 1; flex-direction: column; gap: 3px; }
+.setting-copy strong { font-size: var(--fs-md); font-weight: 600; }
+.setting-copy small { color: var(--c-muted); font-size: var(--fs-xs); line-height: 1.4; }
+.setting-control { display: flex; flex: none; align-items: center; }
+.setting-row.stacked .setting-control { width: 100%; }
+.setting-fact { display: flex; align-items: baseline; justify-content: space-between; gap: var(--sp-4); min-height: 40px; padding: 8px 0; }
+.setting-fact span { color: var(--c-muted); font-size: var(--fs-sm); }
+.setting-fact strong { min-width: 0; overflow: hidden; font-size: var(--fs-md); font-weight: 600; text-align: right; text-overflow: ellipsis; white-space: nowrap; }
+
+.settings-action {
+  min-height: 44px; padding: 0 var(--sp-4); border: 1px solid var(--accent-line); border-radius: var(--r-sm); background: var(--accent-bg); color: var(--c-accent-strong);
+  font-size: var(--fs-sm); font-weight: 700; touch-action: manipulation; transition: transform var(--t-fast) var(--ease-out), background-color .15s ease;
+}
+.settings-action:active { transform: scale(.97); }
+.settings-action.danger { align-self: flex-start; margin-top: var(--sp-2); border-color: color-mix(in srgb, var(--c-danger) 45%, transparent); background: color-mix(in srgb, var(--c-danger) 12%, transparent); color: var(--c-danger-soft); }
+.settings-screen > .settings-scroll > .settings-action { align-self: flex-start; }
+
+.segmented-setting { display: flex; gap: 4px; padding: 4px; border: 1px solid var(--c-line); border-radius: var(--r-sm); background: var(--c-bg-2); }
+.segmented-setting button { min-height: 44px; flex: 1; padding: 0 8px; border: 1px solid transparent; border-radius: 9px; background: none; color: var(--c-muted); font-size: var(--fs-sm); font-weight: 600; touch-action: manipulation; transition: background-color .15s ease, color .15s ease, border-color .15s ease; }
+.segmented-setting button.active { border-color: var(--accent-line); background: var(--accent-bg); color: var(--c-accent-strong); }
+
+.setting-slider { display: flex; align-items: center; gap: var(--sp-3); width: min(280px, 46vw); }
+.setting-slider output { min-width: 44px; color: var(--c-accent-strong); font-size: var(--fs-md); font-weight: 700; font-variant-numeric: tabular-nums; text-align: right; }
+.setting-slider input { flex: 1; min-width: 0; height: 44px; margin: 0; background: none; appearance: none; -webkit-appearance: none; touch-action: pan-y; }
+.setting-slider input::-webkit-slider-runnable-track { height: 6px; border-radius: 3px; background: linear-gradient(to right, var(--c-fader-fill) var(--v), var(--c-bg-0) var(--v)); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--c-white) 12%, transparent); }
+.setting-slider input::-webkit-slider-thumb { width: 28px; height: 20px; margin-top: -7px; border: 1px solid color-mix(in srgb, var(--c-white) 55%, transparent); border-radius: 10px; background: var(--c-silver); appearance: none; -webkit-appearance: none; box-shadow: 0 1px 3px color-mix(in srgb, var(--c-black) 55%, transparent); }
+.setting-slider input::-moz-range-track { height: 6px; border-radius: 3px; background: var(--c-bg-0); }
+.setting-slider input::-moz-range-progress { height: 6px; border-radius: 3px; background: var(--c-fader-fill); }
+.setting-slider input::-moz-range-thumb { width: 28px; height: 20px; border: 1px solid var(--c-line-strong); border-radius: 10px; background: var(--c-silver); }
+
+.diag-list { display: grid; margin: 0; }
+.diag-list > div { display: flex; justify-content: space-between; gap: var(--sp-4); padding: 8px 0; }
+.diag-list > div + div { border-top: 1px solid var(--c-line); }
+.diag-list dt { color: var(--c-muted); font-size: var(--fs-sm); }
+.diag-list dd { margin: 0; font-size: var(--fs-sm); font-weight: 600; text-align: right; font-variant-numeric: tabular-nums; }
+
+@media (max-height: 420px) {
+  .settings-screen .lib-head { display: none; }
+  .settings-card { padding: var(--sp-2) var(--sp-3); }
+}
+.setting-control > .segmented-setting { flex: 1; }

@@ -1,6 +1,6 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { pistas } from "./format";
-import SettingsDrawer, { type DiagnosticsInfo } from "./SettingsDrawer";
+import SettingsScreen, { type DiagnosticsInfo } from "./SettingsScreen";
 import { startFpsWatch, stopFpsWatch } from "./fpsMonitor";
 import MarkerEditor from "./MarkerEditor";
 import { MARKER_COLORS, dismissHint, hintDismissed, loadMarkers, saveMarkers, type Marker } from "./markers";
@@ -1350,13 +1350,11 @@ export default function App() {
       )}
 
       {tab === "settings" && (
-        <SettingsDrawer
-          embedded
+        <SettingsScreen
           normMode={normMode}
           onNormMode={setNormMode}
           onOpenProfiles={() => setProfileOpen(true)}
           getDiagnostics={getDiagnostics}
-          onClose={() => setTab("mixer")}
         />
       )}
 
