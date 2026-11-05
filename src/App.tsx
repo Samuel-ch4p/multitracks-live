@@ -8,7 +8,9 @@ import MemoryDialog, { type MemorySong } from "./MemoryDialog";
 import "./styles/app.css";
 import "./styles/nav.css";
 import "./styles/mixer.css";
+import "./styles/library.css";
 import ChannelScroll from "./ChannelScroll";
+import SetlistScreen from "./SetlistScreen";
 import NubeBrowser from "./NubeBrowser";
 import { perfBegin, perfEnd, perfStep } from "./perf";
 import ProfileDrawer from "./ProfileDrawer";
@@ -54,6 +56,9 @@ type Song = {
   files: File[];
   /** Bytes que esta canción ocupa en la memoria del dispositivo (descargas de la nube). 0 si sus archivos están en disco. */
   memoryBytes: number;
+  /** Tono y BPM que informa el catálogo de la nube (si no vienen, se leen del nombre). */
+  tone?: string | null;
+  bpm?: number | null;
 };
 
 /**
@@ -587,10 +592,10 @@ export default function App() {
     setStatusMessage(`${song.name} · ${pistas(song.files.length)}`);
   }
 
-  const [memoryPrompt, setMemoryPrompt] = useState<{ name: string; files: File[] } | null>(null);
+  const [memoryPrompt, setMemoryPrompt] = useState<{ name: string; files: File[]; tone?: string | null; bpm?: number | null } | null>(null);
   const [, setMemoryVersion] = useState(0);
 
-  const addSong = useCallback((name: string, files: File[], options?: { inMemory?: boolean; force?: boolean }) => {
+  const addSong = useCallback((name: string, files: File[], options?: { inMemory?: boolean; force?: boolean; tone?: string | null; bpm?: number | null }) => {
     if (!Array.isArray(files) || files.length === 0) {
       setStatusMessage(`No se pudo añadir ${name}: no contiene pistas válidas.`);
       return;
@@ -599,11 +604,11 @@ export default function App() {
     // Presupuesto de memoria: si no cabe, no se quita nada en silencio; se pregunta qué quitar (MemoryDialog).
     const used = playlistRef.current.reduce((sum, item) => sum + item.memoryBytes, 0);
     if (!options?.force && memoryBytes > 0 && used + memoryBytes > memoryBudget()) {
-      setMemoryPrompt({ name, files });
+      setMemoryPrompt({ name, files, tone: options?.tone, bpm: options?.bpm });
       setStatusMessage(`Memoria llena: elige qué quitar para añadir ${name}.`);
       return;
     }
-    const song: Song = { id: nextId(), name, files, memoryBytes };
+    const song: Song = { id: nextId(), name, files, memoryBytes, tone: options?.tone, bpm: options?.bpm };
     const next = [...playlistRef.current, song];
     playlistRef.current = next;
     setPlaylist(next);
@@ -633,6 +638,16 @@ export default function App() {
     const index = list.findIndex((song) => song.id === activeSongIdRef.current);
     const target = list[index + direction];
     if (target) activateSong(target);
+  }
+
+  function moveSong(songId: number, direction: -1 | 1) {
+    const list = [...playlistRef.current];
+    const from = list.findIndex((song) => song.id === songId);
+    const to = from + direction;
+    if (from < 0 || to < 0 || to >= list.length) return;
+    [list[from], list[to]] = [list[to], list[from]];
+    playlistRef.current = list;
+    setPlaylist(list);
   }
 
   function removeSong(songId: number) {
@@ -1243,24 +1258,15 @@ export default function App() {
       </header>
 
       {tab === "setlist" && (
-        <section className="screen" aria-label="Setlist">
-          <div className="lib-head">
-            <div><span className="eyebrow">TU REPERTORIO</span><h1>Setlist</h1></div>
-            <button className="glass-btn lib-add" onClick={openLibrary}>AÑADIR CANCIONES</button>
-          </div>
-          <div className="lib-rows">
-            {playlist.length === 0 && <button className="deck-empty" onClick={openLibrary}>Tu repertorio está vacío · toca aquí para añadir canciones</button>}
-            {playlist.map((song, index) => (
-              <article className={`song-row ${song.id === activeSongId ? "selected" : ""}`} key={song.id}>
-                <button className="row-main" onClick={() => { selectSong(song); setTab("mixer"); }} aria-label={`Abrir ${song.name}`}>
-                  <Artwork index={index} />
-                  <span><strong>{song.name}</strong><small>{song.id === activeSongId && playing ? "Reproduciendo" : pistas(song.files.length)}</small></span>
-                </button>
-                <button className="deck-remove" onClick={() => removeSong(song.id)} aria-label={`Quitar ${song.name}`}>×</button>
-              </article>
-            ))}
-          </div>
-        </section>
+        <SetlistScreen
+          songs={playlist.map((song) => ({ id: song.id, name: song.name, tracks: song.files.length, tone: song.tone, bpm: song.bpm }))}
+          activeId={activeSongId}
+          playing={playing}
+          onOpen={(id) => { const song = playlist.find((item) => item.id === id); if (song) selectSong(song); setTab("mixer"); }}
+          onMove={moveSong}
+          onRemove={removeSong}
+          onAdd={openLibrary}
+        />
       )}
 
       {tab === "mixer" && (
@@ -1430,7 +1436,7 @@ export default function App() {
           songs={memoryView.songs}
           freeBytes={memoryView.freeBytes}
           onRemove={(id) => { removeSong(id); setMemoryVersion((version) => version + 1); }}
-          onConfirm={() => { addSong(memoryPrompt.name, memoryPrompt.files, { inMemory: true, force: true }); setMemoryPrompt(null); }}
+          onConfirm={() => { addSong(memoryPrompt.name, memoryPrompt.files, { inMemory: true, force: true, tone: memoryPrompt.tone, bpm: memoryPrompt.bpm }); setMemoryPrompt(null); }}
           onCancel={() => { setMemoryPrompt(null); setStatusMessage("Canción no añadida."); }}
         />
       )}

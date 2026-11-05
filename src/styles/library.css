@@ -1,0 +1,153 @@
+/* =====================================================================
+   Diseño nuevo · Biblioteca (nube y dispositivo) y Setlist. Solo variables de tokens.css.
+   Las animaciones respetan el ajuste "Animaciones" (ver mixer.css, data-fx).
+   ===================================================================== */
+
+/* ---------- Encabezado de pantalla y botones principales ---------- */
+.lib-head { display: flex; flex: 0 0 auto; align-items: center; justify-content: space-between; gap: var(--sp-3); }
+.lib-head h1 { margin: 2px 0 0; }
+.btn-primary {
+  display: inline-flex; min-height: 44px; align-items: center; justify-content: center; gap: 6px; padding: 0 var(--sp-4); border: 0; border-radius: var(--r-sm);
+  background: var(--grad-metal); color: var(--c-bg-1); font-size: var(--fs-xs); font-weight: 800; letter-spacing: .08em; text-transform: uppercase; touch-action: manipulation;
+  transition: transform var(--t-fast) var(--ease-out), opacity .15s ease;
+}
+.btn-primary.compact { min-height: 40px; padding: 0 14px; }
+.btn-primary svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; }
+.btn-primary:active:not(:disabled) { transform: scale(.96); }
+.btn-primary:disabled { opacity: .4; }
+
+/* ---------- Barra de búsqueda, estado y filtros ---------- */
+.lib-toolbar { display: flex; flex: none; align-items: center; gap: var(--sp-2); }
+.lib-search {
+  display: flex; min-width: 0; flex: 1; align-items: center; gap: 10px; height: 44px; padding: 0 12px;
+  border: 1px solid var(--c-line); border-radius: var(--r-sm); background: var(--c-panel); color: var(--c-faint);
+}
+.lib-search:focus-within { border-color: var(--accent-line); }
+.lib-search svg, .lib-refresh svg { width: 20px; height: 20px; flex: none; }
+.lib-search input { min-width: 0; flex: 1; height: 100%; padding: 0; border: 0; outline: none; background: none; color: var(--c-text); font-size: 16px; user-select: text; -webkit-user-select: text; }
+.lib-search input::placeholder { color: var(--c-faint); }
+.lib-search input::-webkit-search-cancel-button { display: none; }
+.lib-clear { width: 32px; height: 32px; padding: 0; border: 0; border-radius: 50%; background: var(--c-glass-strong); color: var(--c-muted); font-size: 18px; line-height: 1; }
+.lib-refresh { display: grid; width: 44px; height: 44px; flex: none; place-items: center; padding: 0; border: 1px solid var(--c-line); border-radius: var(--r-sm); background: var(--c-panel); color: var(--c-muted); touch-action: manipulation; transition: color .15s ease, border-color .15s ease; }
+.lib-refresh:active:not(:disabled) { color: var(--c-accent-strong); border-color: var(--accent-line); }
+.lib-meta { display: flex; flex: none; flex-wrap: wrap; align-items: center; gap: 6px var(--sp-3); padding: var(--sp-2) 2px 2px; color: var(--c-muted); font-size: var(--fs-xs); }
+.connection-state { display: inline-flex; align-items: center; gap: 6px; font-weight: 600; }
+.connection-state i { width: 7px; height: 7px; border-radius: 50%; background: var(--c-faint); }
+.connection-state.connected i { background: var(--c-success); }
+.connection-state.offline i { background: var(--c-warn); }
+.connection-state.error i { background: var(--c-danger); }
+.connection-state.loading i { background: var(--c-accent); animation: connection-pulse .9s ease-in-out infinite alternate; }
+.lib-count { color: var(--c-faint); font-variant-numeric: tabular-nums; }
+.lib-filters { display: inline-flex; gap: 4px; margin-left: auto; }
+.lib-filters button { min-height: 32px; padding: 0 12px; border: 1px solid var(--c-line); border-radius: 999px; background: none; color: var(--c-muted); font-size: var(--fs-xs); font-weight: 600; touch-action: manipulation; transition: background-color .15s ease, color .15s ease, border-color .15s ease; }
+.lib-filters button.active { border-color: var(--accent-line); background: var(--accent-bg); color: var(--c-accent-strong); }
+.lib-limit { margin: var(--sp-2) 0 0; padding: 10px 12px; border: 1px solid color-mix(in srgb, var(--c-warn) 40%, transparent); border-radius: var(--r-sm); background: color-mix(in srgb, var(--c-warn) 12%, transparent); color: var(--c-warn-soft); font-size: var(--fs-sm); }
+
+/* ---------- Contenido ---------- */
+.library-scroll { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: var(--sp-2) 0 calc(var(--sp-4) + var(--kb, 0px)); scrollbar-width: thin; scrollbar-color: color-mix(in srgb, var(--c-white) 22%, transparent) transparent; }
+.library-notes .status-message, .library-notes .error-message { margin: 0 0 var(--sp-2); }
+.lib-title { margin: var(--sp-2) 2px var(--sp-2); color: var(--c-faint); font-size: var(--fs-xs); font-weight: 700; letter-spacing: .14em; }
+.lib-back { display: flex; align-items: center; gap: var(--sp-3); margin-bottom: var(--sp-3); }
+.lib-back button { display: grid; width: 44px; height: 44px; flex: none; place-items: center; padding: 0; border: 1px solid var(--c-line); border-radius: var(--r-sm); background: var(--c-panel); color: var(--c-muted); }
+.lib-back button svg { width: 20px; height: 20px; }
+.lib-back > div { display: flex; min-width: 0; flex: 1; flex-direction: column; gap: 2px; }
+.lib-back small { color: var(--c-faint); font-size: var(--fs-xs); font-weight: 700; letter-spacing: .14em; }
+.lib-back strong { overflow: hidden; font-family: var(--font-serif); font-size: 20px; font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
+.lib-back > span { color: var(--c-muted); font-size: var(--fs-xs); }
+
+/* Estados: vacío, error, cargando */
+.lib-state { display: flex; flex-direction: column; align-items: center; gap: var(--sp-2); padding: var(--sp-6) var(--sp-4); text-align: center; color: var(--c-muted); font-size: var(--fs-sm); }
+.lib-state strong { color: var(--c-text); font-family: var(--font-serif); font-size: 18px; font-weight: 500; }
+.lib-state .state-icon { display: grid; width: 52px; height: 52px; place-items: center; border: 1px solid var(--accent-line); border-radius: var(--r-md); background: var(--accent-bg); color: var(--c-accent); }
+.lib-state .state-icon svg { width: 24px; height: 24px; }
+.lib-state.error .state-icon { border-color: color-mix(in srgb, var(--c-danger) 45%, transparent); background: color-mix(in srgb, var(--c-danger) 14%, transparent); color: var(--c-danger-soft); }
+.lib-state .btn-primary { margin-top: var(--sp-2); }
+.lib-loading { display: grid; gap: var(--sp-2); }
+.lib-skeleton { display: flex; align-items: center; gap: var(--sp-3); height: 60px; padding: 0 12px; border: 1px solid var(--c-line); border-radius: var(--r-sm); background: var(--c-panel); }
+.lib-skeleton > span { width: 38px; height: 38px; flex: none; border-radius: 10px; background: var(--c-card-2); animation: skeleton-pulse 1.1s ease-in-out infinite alternate; }
+.lib-skeleton > div { display: flex; flex: 1; flex-direction: column; gap: 8px; }
+.lib-skeleton i { display: block; height: 10px; border-radius: 5px; background: var(--c-card-2); animation: skeleton-pulse 1.1s ease-in-out infinite alternate; }
+.lib-skeleton i:last-child { width: 45%; }
+
+/* ---------- Tarjetas de artista ---------- */
+.artist-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(176px, 1fr)); gap: var(--sp-2); }
+.artist-card {
+  display: flex; min-width: 0; align-items: center; gap: var(--sp-3); min-height: 64px; padding: 10px 12px; text-align: left;
+  border: 1px solid var(--c-line); border-radius: var(--r-md); background: var(--c-panel); color: inherit; touch-action: manipulation;
+  transition: border-color .15s ease, transform var(--t-fast) var(--ease-out);
+}
+.artist-card:active:not(:disabled) { transform: scale(.98); border-color: var(--accent-line); }
+.artist-initial { display: grid; width: 42px; height: 42px; flex: none; place-items: center; border: 1px solid var(--accent-line); border-radius: 50%; background: var(--accent-bg); color: var(--c-accent-strong); font-family: var(--font-serif); font-size: 20px; font-weight: 600; }
+.artist-copy { display: flex; min-width: 0; flex-direction: column; gap: 2px; }
+.artist-copy strong { overflow: hidden; font-size: var(--fs-md); font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+.artist-copy small { color: var(--c-muted); font-size: var(--fs-xs); }
+
+/* ---------- Filas de canción ---------- */
+.song-list { display: grid; gap: 6px; }
+.song-item { position: relative; border: 1px solid var(--c-line); border-radius: var(--r-sm); background: var(--c-panel); transition: border-color .15s ease, background-color .15s ease; }
+.song-item.selected { border-color: var(--accent-line); background: color-mix(in srgb, var(--c-accent) 6%, var(--c-panel)); }
+.song-item.soon { opacity: .6; }
+.song-item-main { display: flex; width: 100%; min-height: 58px; align-items: center; gap: var(--sp-3); padding: 8px 12px; border: 0; background: none; color: inherit; text-align: left; touch-action: manipulation; }
+.song-item-main:active:not(:disabled) { background: var(--c-glass); }
+.song-art { display: grid; width: 38px; height: 38px; flex: none; place-items: center; border: 1px solid var(--c-line); border-radius: 10px; background: var(--c-card); color: var(--c-accent); }
+.song-art svg { width: 18px; height: 18px; }
+.song-copy { display: flex; min-width: 0; flex: 1; flex-direction: column; gap: 2px; }
+.song-copy strong { overflow: hidden; font-family: var(--font-serif); font-size: 15px; font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
+.song-copy small { overflow: hidden; color: var(--c-muted); font-size: var(--fs-xs); text-overflow: ellipsis; white-space: nowrap; }
+.song-chips { display: inline-flex; flex: none; gap: 4px; }
+.chip-tag { padding: 2px 8px; border: 1px solid var(--c-line-strong); border-radius: 999px; background: var(--c-glass); color: var(--c-muted); font-size: var(--fs-xs); font-style: normal; font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.chip-tag.soon-tag { border-color: color-mix(in srgb, var(--c-accent) 35%, transparent); color: var(--c-accent-strong); }
+.song-end { display: grid; min-width: 28px; flex: none; place-items: center; color: var(--c-muted); }
+.song-end svg { width: 20px; height: 20px; stroke-width: 2; }
+.song-end b { color: var(--c-accent-strong); font-size: var(--fs-sm); font-variant-numeric: tabular-nums; }
+.song-add { display: block; width: calc(100% - 24px); min-height: 44px; margin: 0 12px 10px; border: 0; border-radius: var(--r-sm); background: var(--grad-metal); color: var(--c-bg-1); font-size: var(--fs-xs); font-weight: 800; letter-spacing: .08em; touch-action: manipulation; }
+.song-add:disabled { opacity: .45; }
+:root[data-fx="full"] .song-item, :root[data-fx="full"] .artist-card { animation: item-in .3s var(--ease-out) both; animation-delay: calc(var(--i, 0) * 28ms); }
+@media (max-width: 520px) { .song-chips { display: none; } }
+
+/* ---------- Setlist ---------- */
+.setlist-screen { gap: var(--sp-3); }
+.setlist-summary { display: flex; flex: none; align-items: center; gap: var(--sp-4); padding: 10px var(--sp-4); border: 1px solid var(--c-line); border-radius: var(--r-md); background: var(--c-panel); }
+.setlist-summary > div { display: flex; flex-direction: column; gap: 2px; }
+.setlist-summary strong { font-family: var(--font-serif); font-size: 24px; font-weight: 500; font-variant-numeric: tabular-nums; line-height: 1.1; }
+.setlist-summary .btn-primary { margin-left: auto; }
+.setlist-list { display: grid; min-height: 0; flex: 1; align-content: start; grid-template-columns: repeat(auto-fill, minmax(min(100%, 340px), 1fr)); gap: var(--sp-2); overflow-y: auto; overscroll-behavior: contain; padding-bottom: var(--sp-3); }
+.setlist-list > .lib-state { grid-column: 1 / -1; }
+.setlist-card { display: flex; align-items: center; border: 1px solid var(--c-line); border-radius: var(--r-sm); background: var(--c-panel); transition: border-color .15s ease, background-color .15s ease; }
+.setlist-card.active { border-color: var(--accent-line); background: color-mix(in srgb, var(--c-accent) 6%, var(--c-panel)); box-shadow: inset 3px 0 0 var(--c-accent); }
+.setlist-main { display: flex; min-width: 0; flex: 1; min-height: 60px; align-items: center; gap: var(--sp-3); padding: 8px 4px 8px 14px; border: 0; background: none; color: inherit; text-align: left; touch-action: manipulation; }
+.setlist-number { flex: none; color: var(--c-accent); font-size: var(--fs-sm); font-weight: 700; font-variant-numeric: tabular-nums; }
+.setlist-actions { display: flex; flex: none; padding-right: 4px; }
+.setlist-actions button { display: grid; width: 40px; height: 44px; place-items: center; padding: 0; border: 0; background: none; color: var(--c-muted); touch-action: manipulation; transition: color .15s ease; }
+.setlist-actions button svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.setlist-actions button:active:not(:disabled) { color: var(--c-accent-strong); }
+.setlist-actions button:disabled { opacity: .25; }
+
+@media (max-height: 420px) {
+  .lib-head h1 { font-size: 22px; }
+  .lib-meta { padding-top: 4px; }
+  .setlist-summary { padding: 6px var(--sp-3); }
+  .setlist-summary strong { font-size: 20px; }
+}
+
+/* Pantallas bajas: el título de la Biblioteca ya está en la barra inferior; se gana espacio para la lista */
+@media (max-height: 420px) {
+  .library-screen .lib-head { display: none; }
+  .library-screen .source-switch { height: 44px; }
+  .library-screen { gap: 6px; }
+}
+
+/* Tarjeta de descarga en pantallas bajas: sin logo, para que quepa sin desplazarse */
+@media (max-height: 420px) {
+  .load-card { padding: 16px 20px; }
+  .load-card .brand-mark { display: none; }
+}
+
+/* Pantallas bajas: toda la zona de la nube se desplaza junta (la búsqueda queda fija arriba) para que la lista tenga espacio */
+@media (max-height: 420px) {
+  .library-body { overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; }
+  .library-body > .library-scroll { flex: none; overflow: visible; }
+  .lib-toolbar { position: sticky; top: 0; z-index: 2; padding-bottom: 4px; background: var(--c-bg-1); }
+  .lib-count { display: none; }
+  .library-body > .load-layer { position: fixed; inset: 0 0 44px 0; z-index: 20; }
+}

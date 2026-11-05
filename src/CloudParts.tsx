@@ -49,12 +49,15 @@ export function LoadCard({ stage, percent, detail, fileName, error, onCancel, on
   );
 }
 
-export function CloudIcon({ name }: { name: "cloud" | "folder" | "archive" | "back" | "refresh" }) {
+export function CloudIcon({ name }: { name: "cloud" | "folder" | "archive" | "back" | "refresh" | "search" | "music" | "plus" }) {
   const paths: Record<typeof name, ReactNode> = {
     cloud: <path d="M7 18h11a4 4 0 0 0 .5-8A6.5 6.5 0 0 0 6 8.2 4.9 4.9 0 0 0 7 18Z" />,
     folder: <path d="M3 7.5h7l2-2h9v13H3v-11Z" />,
     archive: <><path d="M5 3h14v5H5V3Z" /><path d="M6 8v13h12V8M10 12h4" /></>,
     back: <><path d="m15 18-6-6 6-6" /><path d="M9 12h11" /></>,
+    search: <><circle cx="11" cy="11" r="6.5" /><path d="m16 16 4.5 4.5" /></>,
+    music: <><path d="M9 18V5l11-2v13" /><circle cx="6.5" cy="18" r="2.5" /><circle cx="17.5" cy="16" r="2.5" /></>,
+    plus: <path d="M12 5v14M5 12h14" />,
     refresh: <><path d="M20 7v5h-5" /><path d="M18.5 16a8 8 0 1 1 1.1-8.1L20 12" /></>,
   };
   return <svg viewBox="0 0 24 24" aria-hidden="true">{paths[name]}</svg>;
