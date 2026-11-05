@@ -10,6 +10,7 @@ import { isPlayable, type CatalogArtist } from "./cloud/catalog";
 import { buildIndex, foldQuery, searchIndex, type IndexData, type IndexSong } from "./searchIndex";
 import { parseSongTags } from "./songTags";
 import { libraryCache } from "./libraryCache";
+import SearchBox from "./SearchBox";
 
 type Props = {
   onSongLoaded: (name: string, files: File[], options?: { inMemory?: boolean; tone?: string | null; bpm?: number | null }) => void;
@@ -17,7 +18,6 @@ type Props = {
 
 /** Tocar una canción en los resultados de búsqueda: false = la selecciona y muestra "AÑADIR" (evita descargas grandes por error). */
 const SEARCH_TAP_LOADS = false;
-const SEARCH_DELAY_MS = 200;
 
 
 
@@ -68,8 +68,9 @@ export default function NubeBrowser({ onSongLoaded }: Props) {
   const [limit, setLimit] = useState<string | null>(null);
   const [filter, setFilter] = useState<Filter>("all");
   const abortRef = useRef<AbortController | null>(null);
-  const [query, setQuery] = useState("");
+  // El texto que se escribe vive en SearchBox; aquí solo está el filtro ya asentado.
   const [search, setSearch] = useState("");
+  const [resetSignal, setResetSignal] = useState(0);
   const mounted = useRef(true);
 
   const busy = loading || adding;
@@ -103,12 +104,6 @@ export default function NubeBrowser({ onSongLoaded }: Props) {
     return () => { mounted.current = false; };
   }, [fetchCatalog]);
 
-  // Búsqueda en vivo con un pequeño retardo para no recalcular en cada tecla.
-  useEffect(() => {
-    const timer = window.setTimeout(() => setSearch(query), query ? SEARCH_DELAY_MS : 0);
-    return () => window.clearTimeout(timer);
-  }, [query]);
-
   // El teclado del celular no debe tapar los resultados: se reserva su altura como espacio al final de la lista.
   useEffect(() => {
     const viewport = window.visualViewport;
@@ -127,7 +122,7 @@ export default function NubeBrowser({ onSongLoaded }: Props) {
   const visible = (songs: IndexSong[]) => (filter === "available" ? songs.filter(isPlayable) : songs);
 
   function openArtist(item: CatalogArtist) {
-    setQuery("");
+    setResetSignal((value) => value + 1);
     setSearch("");
     setArtist(item);
     setSelected(null);
@@ -245,22 +240,7 @@ export default function NubeBrowser({ onSongLoaded }: Props) {
     <>
       <div className="lib-toolbar">
         {index && (
-          <label className="lib-search" role="search">
-            <CloudIcon name="search" />
-            <input
-              type="search"
-              inputMode="search"
-              enterKeyHint="search"
-              autoComplete="off"
-              autoCorrect="off"
-              spellCheck={false}
-              placeholder="Buscar artistas o canciones"
-              aria-label="Buscar artista o canción"
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-            />
-            {query && <button type="button" className="lib-clear" aria-label="Limpiar búsqueda" onClick={() => { setQuery(""); setSearch(""); }}>×</button>}
-          </label>
+          <SearchBox onSearch={setSearch} resetSignal={resetSignal} placeholder="Buscar artistas o canciones" label="Buscar artista o canción" />
         )}
         <button className="lib-refresh" disabled={busy} onClick={reload} aria-label={error && !index ? "Reintentar conexión" : "Actualizar catálogo"} title={error && !index ? "Reintentar" : "Actualizar"}>
           <CloudIcon name="refresh" />
