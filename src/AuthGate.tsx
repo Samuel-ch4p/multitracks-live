@@ -11,6 +11,7 @@ type Account = { email: string; signOut: () => void };
 const AccountContext = createContext<Account | null>(null);
 
 /** Cuenta con sesión iniciada (null en desarrollo sin nube configurada). Sirve para el botón "Cerrar sesión". */
+// eslint-disable-next-line react-refresh/only-export-components
 export const useAccount = () => useContext(AccountContext);
 
 /** En desarrollo sin variables de nube se deja pasar para poder usar el modo demo; en producción nunca. */
@@ -63,22 +64,25 @@ export default function AuthGate({ children }: { children: ReactNode }) {
   );
 
   if (!DEV_BYPASS && !cloudConfigured) {
-    return <Screen title="Nube no configurada"><p>La Nube Crescendo aún no está configurada en esta versión de la app.</p></Screen>;
+    return <Screen chip="SIN CONFIGURAR" title="Nube no configurada"><p>La Nube Crescendo aún no está configurada en esta versión de la app.</p></Screen>;
   }
   if (phase.name === "boot") return null; // el logo de arranque de index.html sigue visible
   if (phase.name === "out") {
     return <AuthScreen onSignedIn={(s) => { setSession(s); void check(); }} />;
   }
-  if (phase.name === "checking") return <Screen title="Verificando tu cuenta…" busy><p>Un momento.</p></Screen>;
-  if (phase.name === "problem") return <ProblemScreen error={phase.error} onRetry={() => void check()} onSignOut={() => account?.signOut()} />;
+  if (phase.name === "checking") return <Screen title="Verificando tu cuenta…" busy><div className="auth-spinner" aria-hidden="true" /><p>Un momento.</p></Screen>;
+  if (phase.name === "problem") {
+    return <ProblemScreen error={phase.error} email={session?.user.email ?? ""} onRetry={() => void check()} onSignOut={() => account?.signOut()} />;
+  }
   return <AccountContext.Provider value={account}>{children}</AccountContext.Provider>;
 }
 
-function Screen({ title, children, busy }: { title: string; children: ReactNode; busy?: boolean }) {
+function Screen({ title, chip, children, busy }: { title: string; chip?: string; children: ReactNode; busy?: boolean }) {
   return (
     <main className="auth-screen">
-      <div className="auth-card" aria-busy={busy}>
+      <div className="auth-state" aria-busy={busy}>
         <BrandMark className="auth-mark" />
+        {chip && <span className="auth-chip">{chip}</span>}
         <h1>{title}</h1>
         {children}
       </div>
@@ -86,33 +90,61 @@ function Screen({ title, children, busy }: { title: string; children: ReactNode;
   );
 }
 
-function ProblemScreen({ error, onRetry, onSignOut }: { error: CloudError; onRetry: () => void; onSignOut: () => void }) {
-  const title =
-    error.kind === "pending" ? "Tu cuenta aún no está activa"
-    : error.kind === "expired" ? "Membresía vencida"
-    : error.kind === "blocked" ? "Cuenta bloqueada"
-    : error.kind === "device_limit" ? "Demasiados dispositivos"
-    : "No pudimos verificar tu cuenta";
+function ProblemScreen({ error, email, onRetry, onSignOut }: { error: CloudError; email: string; onRetry: () => void; onSignOut: () => void }) {
+  const [chip, title] =
+    error.kind === "pending" ? ["PENDIENTE DE ACTIVACIÓN", "Tu cuenta aún no está activa"]
+    : error.kind === "expired" ? ["MEMBRESÍA VENCIDA", "Tu membresía venció"]
+    : error.kind === "blocked" ? ["CUENTA BLOQUEADA", "Cuenta bloqueada"]
+    : error.kind === "device_limit" ? ["LÍMITE DE DISPOSITIVOS", "Demasiados dispositivos"]
+    : ["SIN VERIFICAR", "No pudimos verificar tu cuenta"];
   const message = error.kind === "pending"
     ? "Estamos revisando tu registro. Cuando tu cuenta esté activa, toca Reintentar."
     : friendlyCloudMessage(error);
   return (
-    <Screen title={title}>
+    <Screen chip={chip} title={title}>
       <p>{message}</p>
+      {error.kind === "pending" && email && <div className="auth-email"><span>Cuenta registrada</span><strong>{email}</strong></div>}
       {error.isAccountState && <p className="auth-contact">{CONTACTO_SOPORTE}</p>}
-      <button className="auth-primary" onClick={onRetry}>REINTENTAR</button>
-      <button className="auth-link" onClick={onSignOut}>Cerrar sesión</button>
+      <div className="auth-actions">
+        <button className="auth-primary" onClick={onRetry}>REINTENTAR</button>
+        <button className="auth-link" onClick={onSignOut}>Cerrar sesión</button>
+      </div>
     </Screen>
   );
 }
 
+/** Ilustración de la bienvenida: onda y tres faders. Solo decoración (sin animación). */
+function WelcomeArt() {
+  const bars = [30, 52, 38, 70, 46, 82, 58, 40, 74, 50, 90, 62, 44, 78, 54, 36, 66, 48, 28, 56];
+  const faders = [62, 38, 78];
+  return (
+    <div className="welcome-art" aria-hidden="true">
+      <div className="art-wave">{bars.map((h, i) => <i key={i} className={i < 9 ? "played" : ""} style={{ height: `${h}%` }} />)}</div>
+      <div className="art-faders">
+        {faders.map((v, i) => (
+          <span key={i}><i style={{ height: `${v}%` }} /><b style={{ bottom: `${v}%` }} /></span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+type Mode = "welcome" | "in" | "up" | "reset";
+
 function AuthScreen({ onSignedIn }: { onSignedIn: (session: Session) => void }) {
-  const [mode, setMode] = useState<"in" | "up" | "reset">("in");
+  const [mode, setMode] = useState<Mode>("welcome");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [show, setShow] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [info, setInfo] = useState("");
+
+  function go(next: Mode) {
+    setMode(next);
+    setError("");
+    setInfo("");
+  }
 
   async function submit(event: FormEvent) {
     event.preventDefault();
@@ -140,31 +172,67 @@ function AuthScreen({ onSignedIn }: { onSignedIn: (session: Session) => void }) 
     }
   }
 
+  if (mode === "welcome") {
+    return (
+      <main className="auth-screen">
+        <div className="welcome">
+          <div className="welcome-copy">
+            <BrandMark className="auth-mark" />
+            <span className="auth-eyebrow">MULTITRACKS EN VIVO</span>
+            <h1>Tu servicio, con cada pista en su lugar.</h1>
+            <p>Biblioteca de multitracks, mezclador y click en un solo lugar.</p>
+            <div className="auth-actions">
+              <button className="auth-primary" onClick={() => go("in")}>INICIAR SESIÓN</button>
+              <button className="auth-secondary" onClick={() => go("up")}>CREAR CUENTA</button>
+            </div>
+            <small className="auth-caption">Acceso seguro · Crescendo Live</small>
+          </div>
+          <WelcomeArt />
+        </div>
+      </main>
+    );
+  }
+
+  const title = mode === "in" ? "Iniciar sesión" : mode === "up" ? "Crear cuenta" : "Recuperar contraseña";
   return (
     <main className="auth-screen">
       <form className="auth-card" onSubmit={(e) => void submit(e)} noValidate>
-        <BrandMark className="auth-mark" />
-        <h1>{mode === "in" ? "Iniciar sesión" : mode === "up" ? "Crear cuenta" : "Recuperar contraseña"}</h1>
-        <label>
-          <span>Correo</span>
-          <input type="email" inputMode="email" autoComplete="email" autoCapitalize="none" spellCheck={false} value={email} onChange={(e) => setEmail(e.target.value)} />
-        </label>
-        {mode !== "reset" && (
-          <label>
-            <span>Contraseña</span>
-            <input type="password" autoComplete={mode === "up" ? "new-password" : "current-password"} value={password} onChange={(e) => setPassword(e.target.value)} />
+        <header className="auth-head">
+          <button type="button" className="auth-back" aria-label="Volver" onClick={() => go("welcome")}>
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 18-6-6 6-6" /></svg>
+          </button>
+          <BrandMark className="auth-mark small" />
+          <span className="auth-eyebrow">CRESCENDO LIVE</span>
+          <h1>{title}</h1>
+          {mode === "up" && <p>Tu cuenta quedará pendiente hasta que la activemos.</p>}
+          {mode === "reset" && <p>Te enviaremos un enlace para elegir una contraseña nueva.</p>}
+        </header>
+        <div className="auth-body">
+          <label className="auth-field">
+            <span>Correo</span>
+            <input type="email" inputMode="email" autoComplete="email" autoCapitalize="none" spellCheck={false} value={email} onChange={(e) => setEmail(e.target.value)} />
           </label>
-        )}
-        {error && <p className="auth-error" role="alert">{error}</p>}
-        {info && <p className="auth-info" role="status">{info}</p>}
-        <button className="auth-primary" type="submit" disabled={busy}>
-          {busy ? "UN MOMENTO…" : mode === "in" ? "ENTRAR" : mode === "up" ? "CREAR CUENTA" : "ENVIAR CORREO"}
-        </button>
-        {mode === "in" && <button type="button" className="auth-link" onClick={() => { setMode("reset"); setError(""); setInfo(""); }}>Olvidé mi contraseña</button>}
-        <button type="button" className="auth-link" onClick={() => { setMode(mode === "up" ? "in" : mode === "in" ? "up" : "in"); setError(""); setInfo(""); }}>
-          {mode === "in" ? "No tengo cuenta · Crear una" : "Ya tengo cuenta · Iniciar sesión"}
-        </button>
-        {mode === "up" && <p className="auth-note">Tu cuenta quedará pendiente hasta que la activemos.</p>}
+          {mode !== "reset" && (
+            <label className="auth-field">
+              <span>Contraseña</span>
+              <span className="auth-pass">
+                <input type={show ? "text" : "password"} autoComplete={mode === "up" ? "new-password" : "current-password"} value={password} onChange={(e) => setPassword(e.target.value)} />
+                <button type="button" className="auth-show" onClick={() => setShow((v) => !v)} aria-pressed={show}>{show ? "Ocultar" : "Ver"}</button>
+              </span>
+            </label>
+          )}
+          {error && <p className="auth-error" role="alert">{error}</p>}
+          {info && <p className="auth-info" role="status">{info}</p>}
+          <button className="auth-primary" type="submit" disabled={busy}>
+            {busy ? "UN MOMENTO…" : mode === "in" ? "ENTRAR" : mode === "up" ? "CREAR CUENTA" : "ENVIAR CORREO"}
+          </button>
+          <div className="auth-links">
+            {mode === "in" && <button type="button" className="auth-link" onClick={() => go("reset")}>Olvidé mi contraseña</button>}
+            <button type="button" className="auth-link" onClick={() => go(mode === "in" ? "up" : "in")}>
+              {mode === "in" ? "No tengo cuenta · Crear una" : "Ya tengo cuenta · Iniciar sesión"}
+            </button>
+          </div>
+        </div>
       </form>
     </main>
   );
