@@ -8,6 +8,7 @@ import MemoryDialog, { type MemorySong } from "./MemoryDialog";
 import "./styles/app.css";
 import "./styles/nav.css";
 import "./styles/mixer.css";
+import ChannelScroll from "./ChannelScroll";
 import NubeBrowser from "./NubeBrowser";
 import { perfBegin, perfEnd, perfStep } from "./perf";
 import ProfileDrawer from "./ProfileDrawer";
@@ -1157,9 +1158,9 @@ export default function App() {
     <div className="channels-box">
       {tracks.length === 0 && <div className="mixer-empty">Selecciona una canción del repertorio para cargar sus pistas.</div>}
       <div className="channels mx" hidden={tracks.length === 0}>
-        <div className="mx-main">
+        <ChannelScroll>
           {tracks.map((track, index) => (teamIndexes.includes(index) ? null : strip(track, index)))}
-        </div>
+        </ChannelScroll>
         {teamIndexes.length > 0 && (
           <>
             <i className="mx-sep" aria-hidden="true" />

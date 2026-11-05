@@ -13,8 +13,8 @@ const clamp = (n: number) => Math.min(100, Math.max(0, n));
 export default function Fader({ value, onChange, label, dimmed }: Props) {
   const railRef = useRef<HTMLDivElement>(null);
   const rootRef = useRef<HTMLDivElement>(null);
-  // Con el dedo, tocar no mueve el fader hasta que el gesto sea claramente vertical: así se puede deslizar el mezclador de lado
-  // por encima de los faders sin cambiarles el volumen (con el mouse sigue siendo inmediato).
+  // El fader (touch-action: none) es solo del fader: con el dedo, un toque corto salta a esa altura y arrastrar lo mueve.
+  // Para desplazar la lista de canales se arrastra desde fuera de la zona del fader (cabecera, medidor, nombre).
   const gesture = useRef<{ id: number; x: number; y: number; time: number; engaged: boolean } | null>(null);
 
   // Mientras se arrastra, la perilla sigue al dedo sin retraso; al soltar o al cambiar por toque/teclado se desliza con inercia (CSS).
@@ -51,9 +51,8 @@ export default function Fader({ value, onChange, label, dimmed }: Props) {
         const g = gesture.current;
         if (g && g.id === event.pointerId) {
           if (!g.engaged) {
-            const dx = Math.abs(event.clientX - g.x);
             const dy = Math.abs(event.clientY - g.y);
-            if (dy < 8 || dy <= dx) return;
+            if (dy < 4) return;
             g.engaged = true;
             event.currentTarget.setPointerCapture(event.pointerId);
             setDragging(true);
