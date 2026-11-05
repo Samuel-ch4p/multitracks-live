@@ -10,8 +10,11 @@ import "./styles/nav.css";
 import "./styles/mixer.css";
 import "./styles/library.css";
 import "./styles/pads.css";
+import "./styles/setlists.css";
 import ChannelScroll from "./ChannelScroll";
 import SetlistScreen from "./SetlistScreen";
+import SavedSetlists from "./SavedSetlists";
+import type { SongRef } from "./setlistStore";
 import NubeBrowser from "./NubeBrowser";
 import { perfBegin, perfEnd, perfStep } from "./perf";
 import ProfileDrawer from "./ProfileDrawer";
@@ -60,6 +63,8 @@ type Song = {
   /** Tono y BPM que informa el catálogo de la nube (si no vienen, se leen del nombre). */
   tone?: string | null;
   bpm?: number | null;
+  /** Referencia a la canción de la nube (para guardar setlists). Las de "Este dispositivo" no la tienen. */
+  ref?: SongRef;
 };
 
 /**
@@ -593,28 +598,31 @@ export default function App() {
     setStatusMessage(`${song.name} · ${pistas(song.files.length)}`);
   }
 
-  const [memoryPrompt, setMemoryPrompt] = useState<{ name: string; files: File[]; tone?: string | null; bpm?: number | null } | null>(null);
+  const [memoryPrompt, setMemoryPrompt] = useState<{ name: string; files: File[]; tone?: string | null; bpm?: number | null; ref?: SongRef } | null>(null);
   const [, setMemoryVersion] = useState(0);
 
-  const addSong = useCallback((name: string, files: File[], options?: { inMemory?: boolean; force?: boolean; tone?: string | null; bpm?: number | null }) => {
+  const addSong = useCallback((name: string, files: File[], options?: { inMemory?: boolean; force?: boolean; tone?: string | null; bpm?: number | null; ref?: SongRef; noPrompt?: boolean }): boolean => {
     if (!Array.isArray(files) || files.length === 0) {
       setStatusMessage(`No se pudo añadir ${name}: no contiene pistas válidas.`);
-      return;
+      return false;
     }
     const memoryBytes = options?.inMemory ? files.reduce((sum, file) => sum + file.size, 0) : 0;
     // Presupuesto de memoria: si no cabe, no se quita nada en silencio; se pregunta qué quitar (MemoryDialog).
     const used = playlistRef.current.reduce((sum, item) => sum + item.memoryBytes, 0);
     if (!options?.force && memoryBytes > 0 && used + memoryBytes > memoryBudget()) {
-      setMemoryPrompt({ name, files, tone: options?.tone, bpm: options?.bpm });
+      // Al cargar un setlist guardado no se abre el diálogo (la hoja de progreso informa el motivo): la canción no se añade.
+      if (options?.noPrompt) return false;
+      setMemoryPrompt({ name, files, tone: options?.tone, bpm: options?.bpm, ref: options?.ref });
       setStatusMessage(`Memoria llena: elige qué quitar para añadir ${name}.`);
-      return;
+      return false;
     }
-    const song: Song = { id: nextId(), name, files, memoryBytes, tone: options?.tone, bpm: options?.bpm };
+    const song: Song = { id: nextId(), name, files, memoryBytes, tone: options?.tone, bpm: options?.bpm, ref: options?.ref };
     const next = [...playlistRef.current, song];
     playlistRef.current = next;
     setPlaylist(next);
     setStatusMessage(`${name} añadida a la lista (${pistas(files.length)}).`);
     if (activeSongIdRef.current === null) loadSong(song);
+    return true;
     // loadSong solo toca refs y estado de React; no depende de renders previos.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -639,6 +647,21 @@ export default function App() {
     const index = list.findIndex((song) => song.id === activeSongIdRef.current);
     const target = list[index + direction];
     if (target) activateSong(target);
+  }
+
+  /** Vacía el setlist actual (igual que quitar todas las canciones). Devuelve false si hay una operación en curso. */
+  function clearSetlist(): boolean {
+    if (busyRef.current) return false;
+    playlistRef.current = [];
+    setPlaylist([]);
+    mixesRef.current.clear();
+    disposeActiveTracks();
+    activeSongIdRef.current = null;
+    setActiveSongId(null);
+    setMarkers([]);
+    setSongName("Añade una canción");
+    setStatusMessage("La lista está vacía.");
+    return true;
   }
 
   function moveSong(songId: number, direction: -1 | 1) {
@@ -1267,6 +1290,13 @@ export default function App() {
           onMove={moveSong}
           onRemove={removeSong}
           onAdd={openLibrary}
+          extra={
+            <SavedSetlists
+              current={playlist.map((song) => ({ name: song.name, ref: song.ref }))}
+              onClear={clearSetlist}
+              onAddSong={(name, files, options) => addSong(name, files, options)}
+            />
+          }
         />
       )}
 
@@ -1434,7 +1464,7 @@ export default function App() {
           songs={memoryView.songs}
           freeBytes={memoryView.freeBytes}
           onRemove={(id) => { removeSong(id); setMemoryVersion((version) => version + 1); }}
-          onConfirm={() => { addSong(memoryPrompt.name, memoryPrompt.files, { inMemory: true, force: true, tone: memoryPrompt.tone, bpm: memoryPrompt.bpm }); setMemoryPrompt(null); }}
+          onConfirm={() => { addSong(memoryPrompt.name, memoryPrompt.files, { inMemory: true, force: true, tone: memoryPrompt.tone, bpm: memoryPrompt.bpm, ref: memoryPrompt.ref }); setMemoryPrompt(null); }}
           onCancel={() => { setMemoryPrompt(null); setStatusMessage("Canción no añadida."); }}
         />
       )}

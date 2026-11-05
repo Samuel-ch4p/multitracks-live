@@ -1,0 +1,34 @@
+/* =====================================================================
+   Diseño nuevo · Mis setlists (lista guardada, diálogos y hoja de progreso). Solo variables de tokens.css.
+   ===================================================================== */
+.setlist-body { display: flex; min-height: 0; flex: 1; flex-direction: column; gap: var(--sp-3); overflow-y: auto; overscroll-behavior: contain; padding-bottom: var(--sp-4); }
+.setlist-body > .setlist-list { overflow: visible; flex: none; }
+.saved-setlists { display: flex; flex: none; flex-direction: column; gap: var(--sp-2); margin-top: var(--sp-2); }
+.saved-head { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-3); }
+.saved-head .lib-title { margin: 0; }
+.settings-action.compact { display: inline-flex; min-height: 40px; align-items: center; gap: 6px; padding: 0 var(--sp-3); }
+.settings-action.compact svg, .saved-setlists .setlist-actions svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.saved-note { margin: 0; }
+.saved-empty { margin: 0; color: var(--c-muted); font-size: var(--fs-sm); line-height: 1.5; }
+.saved-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 340px), 1fr)); gap: var(--sp-2); }
+.saved-card { display: flex; align-items: center; border: 1px solid var(--c-line); border-radius: var(--r-sm); background: var(--c-panel); }
+.saved-main { display: flex; min-width: 0; flex: 1; min-height: 60px; align-items: center; gap: var(--sp-3); padding: 8px 4px 8px 14px; border: 0; background: none; color: inherit; text-align: left; touch-action: manipulation; }
+.saved-main:active { background: var(--c-glass); }
+.saved-load { flex: none; color: var(--c-accent-strong); font-size: var(--fs-xs); font-weight: 800; letter-spacing: .08em; }
+
+/* Diálogos y hoja de progreso (sin desenfoque: fondo oscuro plano) */
+.sheet-layer { position: fixed; z-index: 60; inset: 0; display: grid; place-items: center; padding: var(--sp-4); background: color-mix(in srgb, var(--c-bg-0) 82%, transparent); }
+.sheet { display: flex; width: min(420px, 100%); max-height: calc(100vh - 32px); flex-direction: column; gap: var(--sp-3); overflow-y: auto; padding: var(--sp-5); border: 1px solid var(--c-line-strong); border-radius: var(--r-lg); background: var(--c-card); }
+:root[data-fx="full"] .sheet { animation: item-in .25s var(--ease-out) both; }
+.sheet h2 { margin: 0; font-family: var(--font-serif); font-size: 22px; font-weight: 500; line-height: 1.2; }
+.sheet p { margin: 0; color: var(--c-muted); font-size: var(--fs-md); line-height: 1.5; }
+.sheet .sheet-song { color: var(--c-text); font-family: var(--font-serif); font-size: 18px; }
+.sheet .sheet-note { font-size: var(--fs-sm); }
+.sheet-actions { display: flex; justify-content: flex-end; gap: var(--sp-2); }
+.sheet-actions .pill-btn { min-height: 44px; padding: 0 var(--sp-4); }
+.sheet-actions .pill-btn.danger { border-color: color-mix(in srgb, var(--c-danger) 50%, transparent); background: color-mix(in srgb, var(--c-danger) 20%, transparent); color: var(--c-danger-soft); }
+.sheet-failed { display: flex; max-height: 40vh; flex-direction: column; gap: 6px; margin: 0; padding: 0; overflow-y: auto; list-style: none; }
+.sheet-failed li { display: flex; flex-direction: column; gap: 2px; padding: 8px 10px; border: 1px solid color-mix(in srgb, var(--c-danger) 30%, transparent); border-radius: var(--r-xs); background: color-mix(in srgb, var(--c-danger) 8%, transparent); }
+.sheet-failed strong { font-size: var(--fs-sm); }
+.sheet-failed small { color: var(--c-muted); font-size: var(--fs-xs); }
+@media (max-height: 420px) { .sheet { padding: var(--sp-3) var(--sp-4); gap: var(--sp-2); } .sheet h2 { font-size: 18px; } .sheet-failed { max-height: 90px; } }

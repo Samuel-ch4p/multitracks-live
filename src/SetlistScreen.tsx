@@ -12,6 +12,8 @@ type Props = {
   onMove: (id: number, direction: -1 | 1) => void;
   onRemove: (id: number) => void;
   onAdd: () => void;
+  /** Contenido adicional bajo el setlist actual (Mis setlists). */
+  extra?: ReactNode;
 };
 
 const icons: Record<"up" | "down" | "x" | "plus" | "music", ReactNode> = {
@@ -24,7 +26,7 @@ const icons: Record<"up" | "down" | "x" | "plus" | "music", ReactNode> = {
 const Icon = ({ name }: { name: keyof typeof icons }) => <svg viewBox="0 0 24 24" aria-hidden="true">{icons[name]}</svg>;
 
 /** Setlist: el repertorio de la sesión (en memoria). Solo muestra lo que la app sabe: nombre, pistas y tono/BPM leídos del nombre. */
-export default function SetlistScreen({ songs, activeId, playing, onOpen, onMove, onRemove, onAdd }: Props) {
+export default function SetlistScreen({ songs, activeId, playing, onOpen, onMove, onRemove, onAdd, extra }: Props) {
   const totalTracks = songs.reduce((sum, song) => sum + song.tracks, 0);
   const activeIndex = songs.findIndex((song) => song.id === activeId);
   return (
@@ -45,6 +47,7 @@ export default function SetlistScreen({ songs, activeId, playing, onOpen, onMove
         </div>
       )}
 
+      <div className="setlist-body">
       <div className="setlist-list">
         {songs.length === 0 && (
           <div className="lib-state empty">
@@ -82,6 +85,8 @@ export default function SetlistScreen({ songs, activeId, playing, onOpen, onMove
             </article>
           );
         })}
+      </div>
+      {extra}
       </div>
     </section>
   );

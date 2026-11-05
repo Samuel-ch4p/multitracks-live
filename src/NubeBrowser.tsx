@@ -13,7 +13,7 @@ import { libraryCache } from "./libraryCache";
 import SearchBox from "./SearchBox";
 
 type Props = {
-  onSongLoaded: (name: string, files: File[], options?: { inMemory?: boolean; tone?: string | null; bpm?: number | null }) => void;
+  onSongLoaded: (name: string, files: File[], options?: { inMemory?: boolean; tone?: string | null; bpm?: number | null; ref?: { id: string; key: string; title: string } }) => void;
 };
 
 /** Tocar una canción en los resultados de búsqueda: false = la selecciona y muestra "AÑADIR" (evita descargas grandes por error). */
@@ -163,7 +163,7 @@ export default function NubeBrowser({ onSongLoaded }: Props) {
     try {
       const files = await fetchSongFiles(item, onProgress, controller.signal);
       if (controller.signal.aborted) throw new CloudError("cancelled");
-      onSongLoaded(item.title, files, { inMemory: true, tone: item.tone, bpm: item.bpm });
+      onSongLoaded(item.title, files, { inMemory: true, tone: item.tone, bpm: item.bpm, ref: { id: item.id, key: item.key, title: item.title } });
       setSelected(null);
       setStatus(`Añadida: ${item.title} · ${pistas(files.length)}.`);
     } catch (e) {
