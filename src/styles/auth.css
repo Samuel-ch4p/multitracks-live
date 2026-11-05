@@ -103,3 +103,11 @@
   .auth-primary { min-height: 44px; }
   .auth-links { flex-direction: row; justify-content: space-between; }
 }
+
+/* Línea discreta de soporte en errores que no se resuelven reintentando */
+.auth-screen p.auth-hint { color: var(--c-faint); font-size: var(--fs-xs); }
+@media (max-height: 420px) {
+  .auth-state .auth-actions { max-width: 560px; flex-wrap: wrap; justify-content: center; align-items: center; }
+  .auth-state .auth-actions > button { flex: 1 1 auto; white-space: nowrap; }
+  .auth-state .auth-actions > .auth-link { flex: none; }
+}

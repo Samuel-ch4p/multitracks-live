@@ -15,6 +15,7 @@
   },
   "dependencies": {
     "@capacitor/android": "^7.6.9",
+    "@capacitor/app-launcher": "^7.0.4",
     "@capacitor/core": "^7.6.9",
     "@capacitor/filesystem": "^7.1.9",
     "@capacitor/preferences": "^7.0.4",

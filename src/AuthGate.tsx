@@ -3,7 +3,8 @@ import type { Session } from "@supabase/supabase-js";
 import BrandMark from "./BrandMark";
 import { apiGet } from "./cloud/api";
 import { currentSession, friendlyAuthMessage, sendPasswordReset, signIn, signOut, signUp, supabase } from "./cloud/auth";
-import { CONTACTO_SOPORTE, cloudConfigured } from "./cloud/config";
+import { CONTACTO_SOPORTE, cloudConfigured, supportHint, whatsappLink } from "./cloud/config";
+import { openExternal } from "./externalLink";
 import { CloudError, friendlyCloudMessage } from "./cloud/errors";
 import "./styles/auth.css";
 
@@ -100,17 +101,32 @@ function ProblemScreen({ error, email, onRetry, onSignOut }: { error: CloudError
   const message = error.kind === "pending"
     ? "Estamos revisando tu registro. Cuando tu cuenta esté activa, toca Reintentar."
     : friendlyCloudMessage(error);
+  const whatsappLabel = error.kind === "expired" ? "RENOVAR POR WHATSAPP" : "ESCRIBIR POR WHATSAPP";
   return (
     <Screen chip={chip} title={title}>
       <p>{message}</p>
       {error.kind === "pending" && email && <div className="auth-email"><span>Cuenta registrada</span><strong>{email}</strong></div>}
-      {error.isAccountState && <p className="auth-contact">{CONTACTO_SOPORTE}</p>}
       <div className="auth-actions">
-        <button className="auth-primary" onClick={onRetry}>REINTENTAR</button>
+        {error.isAccountState && (
+          <button className="auth-primary" onClick={() => void openExternal(whatsappLink(supportMessage(error.kind, email)))}>{whatsappLabel}</button>
+        )}
+        <button className={error.isAccountState ? "auth-secondary" : "auth-primary"} onClick={onRetry}>REINTENTAR</button>
         <button className="auth-link" onClick={onSignOut}>Cerrar sesión</button>
       </div>
+      {error.isAccountState
+        ? <p className="auth-contact">WhatsApp {CONTACTO_SOPORTE.whatsappDisplay}</p>
+        : <p className="auth-hint">{supportHint()}</p>}
     </Screen>
   );
+}
+
+/** Mensaje de WhatsApp según el caso; incluye el correo de la sesión cuando se conoce. */
+function supportMessage(kind: CloudError["kind"], email: string): string {
+  const account = email ? ` (${email})` : "";
+  if (kind === "pending") return `Hola, creé mi cuenta en Crescendo Live${email ? ` con el correo ${email}` : ""} y quiero activar mi membresía.`;
+  if (kind === "expired") return email ? `Hola, quiero renovar mi membresía de Crescendo Live. Mi correo es ${email}.` : "Hola, quiero renovar mi membresía de Crescendo Live.";
+  if (kind === "blocked") return `Hola, mi cuenta de Crescendo Live${account} aparece bloqueada. ¿Me pueden ayudar?`;
+  return `Hola, mi cuenta de Crescendo Live${account} llegó al límite de dispositivos y quiero cambiar de dispositivo.`;
 }
 
 /** Ilustración de la bienvenida: onda y tres faders. Solo decoración (sin animación). */

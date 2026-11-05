@@ -5,7 +5,7 @@ import { CloudIcon, LoadCard } from "./CloudParts";
 import { CloudError, friendlyCloudMessage } from "./cloud/errors";
 import { fetchSongFiles, isDownloading, loadCatalog, type SongProgress } from "./cloud/cloudSource";
 import { signOut } from "./cloud/auth";
-import { CONTACTO_SOPORTE } from "./cloud/config";
+import { CONTACTO_SOPORTE, supportHint } from "./cloud/config";
 import { isPlayable, type CatalogArtist } from "./cloud/catalog";
 import { buildIndex, foldQuery, searchIndex, type IndexData, type IndexSong } from "./searchIndex";
 import { parseSongTags } from "./songTags";
@@ -28,7 +28,10 @@ const songsLabel = (n: number) => `${n} ${n === 1 ? "canción" : "canciones"}`;
 
 /** Mensaje de la tarjeta de error. Los errores de extracción ya vienen en español ("El ZIP está dañado…"). */
 function downloadMessage(e: unknown): string {
-  if (e instanceof CloudError) return e.isAccountState ? `${friendlyCloudMessage(e)} ${CONTACTO_SOPORTE}` : friendlyCloudMessage(e);
+  if (e instanceof CloudError) {
+    if (e.isAccountState) return `${friendlyCloudMessage(e)} Escríbenos por WhatsApp al ${CONTACTO_SOPORTE.whatsappDisplay}.`;
+    return e.kind === "network" || e.kind === "server" || e.kind === "other" ? `${friendlyCloudMessage(e)} ${supportHint()}` : friendlyCloudMessage(e);
+  }
   if (e instanceof RangeError) return "Este multitrack es demasiado grande para la memoria del dispositivo. Cierra otras apps e inténtalo de nuevo.";
   if (e instanceof Error && !/fetch|network|abort/i.test(e.message)) return e.message;
   return friendlyCloudMessage(e);
@@ -298,6 +301,7 @@ export default function NubeBrowser({ onSongLoaded }: Props) {
             <span className="state-icon"><CloudIcon name="cloud" /></span>
             <strong>{error ? "No pudimos conectar con la Nube Crescendo" : "Biblioteca Crescendo"}</strong>
             <span>{error || "Toca actualizar para ver las canciones disponibles."}</span>
+            {error && <small className="lib-support">{supportHint()}</small>}
           </div>
         )}
 

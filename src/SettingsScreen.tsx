@@ -5,6 +5,8 @@ import { fpsSnapshot } from "./fpsMonitor";
 import { NORM_MODES, NORM_MODE_LABEL, type NormMode } from "./normConfig.ts";
 import { pistas } from "./format";
 import { useAccount } from "./AuthGate";
+import { CONTACTO_SOPORTE, mailtoLink, whatsappLink } from "./cloud/config";
+import { openExternal } from "./externalLink";
 import { clearTemporaryData, formatDate, getDefaultMaster, loadMembership, setDefaultMaster, statusLabel, type Membership } from "./account";
 import "./styles/settings.css";
 
@@ -145,6 +147,15 @@ export default function SettingsScreen({ normMode, onNormMode, onOpenProfiles, g
                   className="settings-action"
                   onClick={() => void clearTemporaryData().then(() => { setCleaned(true); window.setTimeout(() => setCleaned(false), 2500); })}
                 >{cleaned ? "Listo" : "Limpiar"}</button>
+              </Row>
+            </Card>
+
+            <Card title="Ayuda">
+              <Row title="Soporte por WhatsApp" hint={CONTACTO_SOPORTE.whatsappDisplay}>
+                <button className="settings-action" onClick={() => void openExternal(whatsappLink(`Hola, necesito ayuda con Crescendo Live.${account?.email ? ` Mi correo es ${account.email}.` : ""}`))}>Escribir</button>
+              </Row>
+              <Row title="Soporte por correo" hint={CONTACTO_SOPORTE.email}>
+                <button className="settings-action" onClick={() => void openExternal(mailtoLink("Ayuda con Crescendo Live", account?.email ? `Mi correo en la app es ${account.email}.` : ""))}>Escribir</button>
               </Row>
             </Card>
 
