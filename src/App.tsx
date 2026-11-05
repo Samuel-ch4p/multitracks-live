@@ -1354,7 +1354,6 @@ export default function App() {
         <SettingsScreen
           normMode={normMode}
           onNormMode={setNormMode}
-          onOpenProfiles={() => setProfileOpen(true)}
           getDiagnostics={getDiagnostics}
         />
       )}

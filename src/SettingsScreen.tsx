@@ -22,7 +22,6 @@ export type DiagnosticsInfo = {
 type Props = {
   normMode: NormMode;
   onNormMode: (mode: NormMode) => void;
-  onOpenProfiles: () => void;
   getDiagnostics: () => DiagnosticsInfo;
 };
 
@@ -54,7 +53,7 @@ function Fact({ name, value }: { name: string; value: string }) {
 }
 
 /** Ajustes: pantalla completa con las secciones del diseño. Solo muestra ajustes que existen en la app. */
-export default function SettingsScreen({ normMode, onNormMode, onOpenProfiles, getDiagnostics }: Props) {
+export default function SettingsScreen({ normMode, onNormMode, getDiagnostics }: Props) {
   const [fx] = useFx();
   const { systemReduce, respect } = useMotion();
   const [view, setView] = useState<"settings" | "diag">("settings");
@@ -115,12 +114,6 @@ export default function SettingsScreen({ normMode, onNormMode, onOpenProfiles, g
                     <button key={mode} role="radio" aria-checked={normMode === mode} className={normMode === mode ? "active" : ""} onClick={() => onNormMode(mode)}>{NORM_MODE_LABEL[mode]}</button>
                   ))}
                 </div>
-              </Row>
-            </Card>
-
-            <Card title="Perfil de pistas">
-              <Row title="Volumen, paneo y silencios" hint="Guarda cómo suena cada pista por canción o como predeterminado, y vuelve a aplicarlo cuando quieras.">
-                <button className="settings-action" onClick={onOpenProfiles}>Abrir perfil</button>
               </Row>
             </Card>
 
