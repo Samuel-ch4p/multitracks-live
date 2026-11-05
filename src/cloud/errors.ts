@@ -48,7 +48,7 @@ export async function errorFromResponse(resp: Response): Promise<CloudError> {
 const formatDate = (iso?: string) => {
   if (!iso) return "";
   const d = new Date(iso);
-  return Number.isNaN(d.getTime()) ? "" : d.toLocaleDateString("es", { day: "numeric", month: "long", year: "numeric" });
+  return Number.isNaN(d.getTime()) ? "" : new Intl.DateTimeFormat("es", { day: "numeric", month: "long", year: "numeric", timeZone: "America/Bogota" }).format(d);
 };
 
 /** Mensaje para el usuario: en español, claro y sin jerga. */
