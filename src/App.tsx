@@ -7,6 +7,7 @@ import { MARKER_COLORS, dismissHint, hintDismissed, loadMarkers, saveMarkers, ty
 import MemoryDialog, { type MemorySong } from "./MemoryDialog";
 import "./styles/app.css";
 import "./styles/nav.css";
+import "./styles/mixer.css";
 import NubeBrowser from "./NubeBrowser";
 import { perfBegin, perfEnd, perfStep } from "./perf";
 import ProfileDrawer from "./ProfileDrawer";
@@ -23,7 +24,7 @@ import { FAMILY_COLORS, defaultPan, familyOf, isGuideOrClick } from "./trackFami
 import { bindAnalyser, bindMeterElements, setMetersActive, startDemoMeters } from "./meters";
 import { useFx } from "./effects";
 import ScrubBar from "./ScrubBar";
-import { HeaderClock, ElapsedText, RemainingText, getClock, setClock } from "./clock";
+import { HeaderClock, ElapsedText, RemainingText, getClock, setClock, useProgress } from "./clock";
 import Click from "./Click";
 import Splash from "./Splash";
 import Pads from "./Pads";
@@ -230,7 +231,7 @@ function useWakeLock(active: boolean) {
   }, [active]);
 }
 
-type IconName = "metronome" | "restart" | "mixer" | "library" | "play" | "spark" | "setlist" | "settings";
+type IconName = "profile" | "metronome" | "restart" | "mixer" | "library" | "play" | "spark" | "setlist" | "settings";
 
 function Icon({ name }: { name: IconName }) {
   const paths: Record<IconName, React.ReactNode> = {
@@ -239,6 +240,7 @@ function Icon({ name }: { name: IconName }) {
     mixer: <><path d="M5 4v16M12 4v16M19 4v16" /><circle cx="5" cy="9" r="2" /><circle cx="12" cy="15" r="2" /><circle cx="19" cy="8" r="2" /></>,
     library: <><path d="M4 4v16M9 4v16" /><path d="m14 5 4-1 3 15-4 1-3-15Z" /></>,
     play: <path d="m8 5 11 7-11 7V5Z" />,
+    profile: <><path d="M4 7h10M18 7h2M4 17h2M10 17h10" /><circle cx="16" cy="7" r="2" /><circle cx="8" cy="17" r="2" /></>,
     setlist: <><path d="M9 6h11M9 12h11M9 18h11" /><path d="M4 6h.01M4 12h.01M4 18h.01" /></>,
     settings: <><path d="M4 7h16M4 17h16" /><circle cx="9" cy="7" r="2" /><circle cx="15" cy="17" r="2" /></>,
     spark: <path d="M12 3v4M12 17v4M3 12h4M17 12h4M6 6l2.5 2.5M15.5 15.5 18 18M18 6l-2.5 2.5M8.5 15.5 6 18" />,
@@ -248,7 +250,6 @@ function Icon({ name }: { name: IconName }) {
 
 type ChannelStripProps = {
   track: Track;
-  index: number;
   displayName: string;
   dimmed: boolean;
   onChange: (id: number, changes: Partial<Track>) => void;
@@ -256,7 +257,7 @@ type ChannelStripProps = {
 };
 
 /** Un canal del mezclador. Con memo, mover un fader solo vuelve a pintar ese canal (y no los demás ni la pantalla entera). */
-const ChannelStrip = memo(function ChannelStrip({ track, index, displayName, dimmed, onChange, onRemove }: ChannelStripProps) {
+const ChannelStrip = memo(function ChannelStrip({ track, displayName, dimmed, onChange, onRemove }: ChannelStripProps) {
   const rootRef = useRef<HTMLElement>(null);
   const fillRef = useRef<HTMLElement>(null);
   const family = FAMILY_COLORS[familyOf(track.name)];
@@ -273,7 +274,6 @@ const ChannelStrip = memo(function ChannelStrip({ track, index, displayName, dim
       className={`channel ${track.muted ? "is-muted" : ""} ${track.solo ? "is-soloed" : ""} ${dimmed ? "is-dimmed" : ""}`}
     >
       <div className="channel-head">
-        <span>{String(index + 1).padStart(2, "0")}</span>
         <div className="chip-row">
           <button className={`chip mute ${track.muted ? "active" : ""}`} onClick={() => onChange(track.id, { muted: !track.muted })} aria-pressed={track.muted} aria-label={`Silenciar ${track.name}`}>M</button>
           <button className={`chip solo ${track.solo ? "active" : ""}`} onClick={() => onChange(track.id, { solo: !track.solo })} aria-pressed={track.solo} aria-label={`Solo ${track.name}`}>S</button>
@@ -293,6 +293,8 @@ const ChannelStrip = memo(function ChannelStrip({ track, index, displayName, dim
   );
 });
 
+const masterDb = (volume: number) => (volume <= 0 ? "−∞" : (20 * Math.log10(volume / 100)).toFixed(1).replace("-", "−"));
+
 type MasterStripProps = { volume: number; onVolume: (value: number) => void; normMode: NormMode; onNormMode: () => void };
 
 /** Canal MASTER: fader, medidor de salida e interruptor de normalización. */
@@ -307,7 +309,6 @@ const MasterStrip = memo(function MasterStrip({ volume, onVolume, normMode, onNo
   return (
     <article ref={rootRef} style={style} className="channel master">
       <div className="channel-head">
-        MASTER
         <button
           className={`chip norm ${normMode !== "off" ? "active" : ""}`}
           onClick={onNormMode}
@@ -319,11 +320,20 @@ const MasterStrip = memo(function MasterStrip({ volume, onVolume, normMode, onNo
         <div className="channel-meter" aria-hidden="true"><i ref={fillRef as React.RefObject<HTMLElement>} /></div>
         <Fader value={volume} onChange={onVolume} label="Volumen master" />
       </div>
-      <div className="master-readout">{volume}%</div>
-      <div className="channel-name"><strong>Salida</strong></div>
+      <div className="master-readout"><strong>{masterDb(volume)}</strong><small>dB</small></div>
+      <div className="channel-name"><strong>MASTER</strong><small>{volume}</small></div>
     </article>
   );
 });
+
+/** Nombre de la sección en curso: el del último marcador ya pasado. No se muestra si no hay marcadores o aún no se llegó al primero. */
+function SectionName({ markers }: { markers: Marker[] }) {
+  const progress = useProgress();
+  let current: Marker | null = null;
+  for (const marker of markers) if (marker.position <= progress && (!current || marker.position >= current.position)) current = marker;
+  if (!current) return null;
+  return <span className="wave-section" style={{ "--marker-color": current.color } as React.CSSProperties}><i aria-hidden="true" />{current.name}</span>;
+}
 
 /** Marcador en la barra: un toque salta a ese punto; mantenerlo pulsado lo edita. */
 const MarkerChip = memo(function MarkerChip({ marker, onJump, onEdit }: { marker: Marker; onJump: () => void; onEdit: () => void }) {
@@ -1127,24 +1137,38 @@ export default function App() {
         </article>
       ))}
       {playlist.length > 0 && <button className="deck-add" onClick={openLibrary} aria-label="Añadir canciones">＋</button>}
+      <button className="deck-profile" onClick={() => setProfileOpen(true)} aria-label={`Perfil de pistas (${PROFILE_LABEL[profileSource]})`} title={`Perfil de pistas · ${PROFILE_LABEL[profileSource]}`}><Icon name="profile" /></button>
     </div>
   );
 
+  const strip = (track: Track, index: number) => (
+    <ChannelStrip
+      key={track.id}
+      track={track}
+      displayName={displayNames[index]}
+      dimmed={hasSolo && !track.solo && !track.muted}
+      onChange={onTrackChange}
+      onRemove={onTrackRemove}
+    />
+  );
+  // "Para el equipo": Click y Guía (por nombre). Van pegados al Master; solo aparecen si existen.
+  const teamIndexes = tracks.map((track, index) => (isGuideOrClick(track.name) ? index : -1)).filter((index) => index >= 0);
   const mixer = (
     <div className="channels-box">
       {tracks.length === 0 && <div className="mixer-empty">Selecciona una canción del repertorio para cargar sus pistas.</div>}
-      <div className="channels" hidden={tracks.length === 0}>
-        {tracks.map((track, index) => (
-          <ChannelStrip
-            key={track.id}
-            track={track}
-            index={index}
-            displayName={displayNames[index]}
-            dimmed={hasSolo && !track.solo && !track.muted}
-            onChange={onTrackChange}
-            onRemove={onTrackRemove}
-          />
-        ))}
+      <div className="channels mx" hidden={tracks.length === 0}>
+        <div className="mx-main">
+          {tracks.map((track, index) => (teamIndexes.includes(index) ? null : strip(track, index)))}
+        </div>
+        {teamIndexes.length > 0 && (
+          <>
+            <i className="mx-sep" aria-hidden="true" />
+            <section className="mx-team" aria-label="Para el equipo">
+              <span className="mx-team-label">PARA EL EQUIPO</span>
+              {teamIndexes.map((index) => strip(tracks[index], index))}
+            </section>
+          </>
+        )}
         <MasterStrip volume={masterVolume} onVolume={setMasterVolume} normMode={normMode} onNormMode={() => setNormMode((mode) => NORM_MODES[(NORM_MODES.indexOf(mode) + 1) % NORM_MODES.length])} />
       </div>
     </div>
@@ -1246,7 +1270,6 @@ export default function App() {
               <Artwork index={Math.max(0, activeIndex)} />
               <span><small>CANCIÓN CARGADA · PERFIL {PROFILE_LABEL[profileSource].toUpperCase()}</small><strong>{songName || "Ninguna"}</strong></span>
             </button>
-            <button className="glass-btn profile-chip" onClick={() => setProfileOpen(true)} aria-label="Perfil de pistas">PERFIL</button>
           </div>
           {songDeck}
           <div className="wave-panel" aria-label="Forma de onda">
@@ -1259,6 +1282,7 @@ export default function App() {
               onSeek={(fraction) => void seekTo(fraction)}
               onLongPress={addMarkerAt}
             />
+            <SectionName markers={markers} />
             {markers.length > 0 && (
               <div className="wave-marks" aria-hidden="true">
                 {markers.map((marker) => <i key={marker.id} style={{ left: `${marker.position * 100}%`, background: marker.color }} />)}
@@ -1419,9 +1443,9 @@ export default function App() {
 
       {slowPrompt && (
         <div className="slow-prompt" role="alertdialog" aria-label="Fotogramas lentos">
-          <span>La pantalla va lenta. ¿Pasar a efectos reducidos?</span>
+          <span>La pantalla va lenta. ¿Pasar a animaciones reducidas?</span>
           <button className="pill-btn" onClick={() => setSlowPrompt(false)}>NO, GRACIAS</button>
-          <button className="pill-btn primary" onClick={() => { setFx("reduced"); setSlowPrompt(false); setStatusMessage("Efectos visuales: Reducidos"); }}>REDUCIR</button>
+          <button className="pill-btn primary" onClick={() => { setFx("reduced"); setSlowPrompt(false); setStatusMessage("Animaciones: Reducidas"); }}>REDUCIR</button>
         </div>
       )}
 

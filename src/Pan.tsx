@@ -48,11 +48,14 @@ export default function Pan({ value, onChange, label }: Props) {
         aria-valuenow={Math.round(value * 100)}
         onPointerDown={(event) => {
           event.currentTarget.setPointerCapture(event.pointerId);
+          event.currentTarget.classList.add("is-dragging");
           fromPointer(event.clientX);
         }}
         onPointerMove={(event) => {
           if (event.currentTarget.hasPointerCapture(event.pointerId)) fromPointer(event.clientX);
         }}
+        onPointerUp={(event) => event.currentTarget.classList.remove("is-dragging")}
+        onPointerCancel={(event) => event.currentTarget.classList.remove("is-dragging")}
         onDoubleClick={() => onChange(0)}
         onKeyDown={(event) => {
           if (event.key === "ArrowLeft" || event.key === "ArrowDown") onChange(clamp(Math.round((value - 0.1) * 50) / 50));
@@ -68,7 +71,7 @@ export default function Pan({ value, onChange, label }: Props) {
           className="pan-fill"
           style={{ left: `${Math.min(50, position)}%`, width: `${Math.abs(position - 50)}%` }}
         />
-        <div className="pan-thumb" style={{ left: `${position}%` }} />
+        <div className="pan-thumb" style={{ left: `${position}%` }}><output className="pan-value" aria-hidden="true">{panText(value)}</output></div>
       </div>
     </div>
   );

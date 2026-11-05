@@ -1,4 +1,4 @@
-import { getFx } from "./effects";
+import { isLightFx } from "./effects";
 
 /**
  * Medidores de nivel "vivos". Leen un AnalyserNode por canal y mueven el relleno con `transform` directamente en el
@@ -62,7 +62,7 @@ const DB_FLOOR = 54;
 
 function tick(now: number) {
   frame = 0;
-  const reduced = getFx() === "reduced";
+  const reduced = isLightFx();
   const minGap = reduced ? 50 : 24; // ms entre lecturas (≈20 fps / ≈40 fps)
   if (now - last < minGap) {
     frame = requestAnimationFrame(tick);

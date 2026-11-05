@@ -9,7 +9,7 @@ type Props = {
 
 const clamp = (n: number) => Math.min(100, Math.max(0, n));
 
-/** Fader vertical con puntero (táctil y mouse) y teclado. */
+/** Fader vertical con puntero (táctil y mouse) y teclado. Cápsula fina sobre un carril delgado; el número aparece al arrastrar. */
 export default function Fader({ value, onChange, label, dimmed }: Props) {
   const railRef = useRef<HTMLDivElement>(null);
   const rootRef = useRef<HTMLDivElement>(null);
@@ -84,14 +84,13 @@ export default function Fader({ value, onChange, label, dimmed }: Props) {
         event.preventDefault();
       }}
     >
-      <div className="fader-scale" aria-hidden="true">
-        {Array.from({ length: 11 }, (_, i) => <i key={i} className={i % 5 === 0 ? "major" : ""} />)}
-      </div>
       <div className="fader-rail" ref={railRef}>
         <div className="fader-groove" />
-        <div className="fader-glow" style={{ height: `${value}%` }} />
         <div className="fader-fill" style={{ height: `${value}%` }} />
-        <div className="fader-cap" style={{ bottom: `${value}%` }}><i /></div>
+        <div className="fader-cap" style={{ bottom: `${value}%` }}>
+          <i />
+          <output className="fader-value" aria-hidden="true">{value}</output>
+        </div>
       </div>
     </div>
   );

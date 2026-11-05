@@ -138,4 +138,4 @@
 }
 
 /* Efectos "Reducidos": sin desenfoques de fondo, sin partículas ni brillos grandes (ver styles/app.css) */
-:root[data-fx="reduced"] { --fx-blur: 0px; }
+:root:not([data-fx="full"]) { --fx-blur: 0px; }

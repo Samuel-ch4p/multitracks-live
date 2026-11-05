@@ -50,10 +50,10 @@ export default function SettingsDrawer({ normMode, onNormMode, onOpenProfiles, g
           </section>
 
           <section className="setting-block">
-            <div><strong>Efectos visuales</strong><small>«Reducidos» apaga los brillos y partículas más pesados y mantiene un aspecto limpio.</small></div>
-            <div className="segmented-setting" role="radiogroup" aria-label="Efectos visuales">
-              {(["full", "reduced"] as const).map((mode) => (
-                <button key={mode} role="radio" aria-checked={fx === mode} className={fx === mode ? "active" : ""} onClick={() => setFx(mode)}>{mode === "full" ? "Completos" : "Reducidos"}</button>
+            <div><strong>Animaciones</strong><small>«Reducidas» deja solo cambios breves de color. «Desactivadas» quita todo movimiento y los brillos.</small></div>
+            <div className="segmented-setting" role="radiogroup" aria-label="Animaciones">
+              {(["full", "reduced", "off"] as const).map((mode) => (
+                <button key={mode} role="radio" aria-checked={fx === mode} className={fx === mode ? "active" : ""} onClick={() => setFx(mode)}>{mode === "full" ? "Completas" : mode === "reduced" ? "Reducidas" : "Desactivadas"}</button>
               ))}
             </div>
           </section>
@@ -117,7 +117,7 @@ function Diagnostics({ getDiagnostics }: { getDiagnostics: () => DiagnosticsInfo
   const heap = (performance as Performance & { memory?: { usedJSHeapSize: number } }).memory?.usedJSHeapSize;
   const timings = ((window.__perf ?? []) as Perf[]).filter((row) => row.stage === "TOTAL" || row.phase === "carga").slice(-6);
   const rows: [string, string][] = [
-    ["Efectos visuales", fx === "full" ? "Completos" : "Reducidos"],
+    ["Animaciones", fx === "full" ? "Completas" : fx === "reduced" ? "Reducidas" : "Desactivadas"],
     ["Movimiento del sistema", systemReduce ? (respect ? "Menos animaciones (respetado)" : "Menos animaciones (ignorado)") : "Normal"],
     ["Fotogramas por segundo", fps ? `${fps.fps} fps (mínimo ${fps.min5s} en 5 s)` : "Se mide mientras suena una canción"],
     ["Audio", info.audio ? `${info.audio.state} · ${Math.round(info.audio.sampleRate / 100) / 10} kHz` : "Aún sin iniciar"],

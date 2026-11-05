@@ -77,7 +77,7 @@ export default function Waveform({ peaks, playing, getProgress, loading, onSeek,
     // Plateados (diseño): la parte ya reproducida es más clara y luminosa que la que falta
     // Los colores salen de tokens.css (el canvas necesita el valor ya resuelto)
     const token = (name: string) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
-    paint(baseRef.current, token("--c-silver"), token("--c-text-3"), 0.7);
+    paint(baseRef.current, token("--c-grey-5"), token("--c-text-3"), 0.55);
     paint(playedRef.current, token("--c-metal-hi"), token("--c-metal-lo"), 1);
   }, [peaks]);
 

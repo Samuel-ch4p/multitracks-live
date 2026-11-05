@@ -1,18 +1,22 @@
 import { useSyncExternalStore } from "react";
 
 /**
- * Ajuste "Efectos visuales: Completos / Reducidos".
- * Se guarda en localStorage y se aplica como <html data-fx="full|reduced">; todo el CSS pesado cuelga de ese atributo
+ * Ajuste "Animaciones: Completas / Reducidas / Desactivadas".
+ * Se guarda en localStorage y se aplica como <html data-fx="full|reduced|off">; todo el CSS pesado cuelga de ese atributo
  * (ver styles/app.css). "Completos" es el valor por defecto. Además, `prefers-reduced-motion` apaga las animaciones por CSS.
  */
-export type FxMode = "full" | "reduced";
+export type FxMode = "full" | "reduced" | "off";
+
+/** Reducidas y Desactivadas comparten los ahorros de rendimiento (medidores a menos fotogramas, sin brillos). */
+export const isLightFx = () => mode !== "full";
 
 const KEY = "crescendo-fx-v1";
 const listeners = new Set<() => void>();
 let mode: FxMode = "full";
 
 try {
-  if (localStorage.getItem(KEY) === "reduced") mode = "reduced";
+  const saved = localStorage.getItem(KEY);
+  if (saved === "reduced" || saved === "off") mode = saved;
 } catch { /* sin almacenamiento: queda en Completos */ }
 
 export function applyFx() {
