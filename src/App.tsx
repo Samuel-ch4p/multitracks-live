@@ -6,6 +6,7 @@ import MarkerEditor from "./MarkerEditor";
 import { MARKER_COLORS, dismissHint, hintDismissed, loadMarkers, saveMarkers, type Marker } from "./markers";
 import MemoryDialog, { type MemorySong } from "./MemoryDialog";
 import "./styles/app.css";
+import "./styles/nav.css";
 import NubeBrowser from "./NubeBrowser";
 import { perfBegin, perfEnd, perfStep } from "./perf";
 import ProfileDrawer from "./ProfileDrawer";
@@ -229,7 +230,7 @@ function useWakeLock(active: boolean) {
   }, [active]);
 }
 
-type IconName = "metronome" | "restart" | "mixer" | "library" | "play" | "spark";
+type IconName = "metronome" | "restart" | "mixer" | "library" | "play" | "spark" | "setlist" | "settings";
 
 function Icon({ name }: { name: IconName }) {
   const paths: Record<IconName, React.ReactNode> = {
@@ -238,6 +239,8 @@ function Icon({ name }: { name: IconName }) {
     mixer: <><path d="M5 4v16M12 4v16M19 4v16" /><circle cx="5" cy="9" r="2" /><circle cx="12" cy="15" r="2" /><circle cx="19" cy="8" r="2" /></>,
     library: <><path d="M4 4v16M9 4v16" /><path d="m14 5 4-1 3 15-4 1-3-15Z" /></>,
     play: <path d="m8 5 11 7-11 7V5Z" />,
+    setlist: <><path d="M9 6h11M9 12h11M9 18h11" /><path d="M4 6h.01M4 12h.01M4 18h.01" /></>,
+    settings: <><path d="M4 7h16M4 17h16" /><circle cx="9" cy="7" r="2" /><circle cx="15" cy="17" r="2" /></>,
     spark: <path d="M12 3v4M12 17v4M3 12h4M17 12h4M6 6l2.5 2.5M15.5 15.5 18 18M18 6l-2.5 2.5M8.5 15.5 6 18" />,
   };
   return <svg aria-hidden="true" viewBox="0 0 24 24">{paths[name]}</svg>;
@@ -322,25 +325,6 @@ const MasterStrip = memo(function MasterStrip({ volume, onVolume, normMode, onNo
   );
 });
 
-const masterDb = (volume: number) => (volume <= 0 ? "−∞" : (20 * Math.log10(volume / 100)).toFixed(1).replace("-", "−"));
-
-/** Tarjeta de salida principal (pestaña Mezcla): nivel en dB del master y medidor de salida. */
-const MasterCard = memo(function MasterCard({ volume }: { volume: number }) {
-  const fillRef = useRef<HTMLElement>(null);
-  useEffect(() => {
-    bindMeterElements("master-card", null, fillRef.current, "x");
-    return () => bindMeterElements("master-card", null, null);
-  }, []);
-  return (
-    <div className="master-card">
-      <span className="master-icon" aria-hidden="true"><Icon name="mixer" /></span>
-      <div className="master-card-info"><small>SALIDA PRINCIPAL</small><strong>Master</strong></div>
-      <div className="master-db">{masterDb(volume)} <small>dB</small></div>
-      <div className="master-led" aria-hidden="true"><i ref={fillRef as React.RefObject<HTMLElement>} /></div>
-    </div>
-  );
-});
-
 /** Marcador en la barra: un toque salta a ese punto; mantenerlo pulsado lo edita. */
 const MarkerChip = memo(function MarkerChip({ marker, onJump, onEdit }: { marker: Marker; onJump: () => void; onEdit: () => void }) {
   const timer = useRef(0);
@@ -383,11 +367,10 @@ export default function App() {
   const [songName, setSongName] = useState("Añade una canción");
   // El tiempo y la duración viven en clock.tsx (fuera de React) para que el segundero no repinte el mezclador.
   const [masterVolume, setMasterVolume] = useState(85);
-  const [showLibrary, setShowLibrary] = useState(false);
   const [source, setSource] = useState<"local" | "cloud">("local");
   // Las pruebas automáticas (navegador sin cabeza) se saltan la pantalla de inicio.
   const [showSplash, setShowSplash] = useState(() => !navigator.webdriver);
-  const [tab, setTab] = useState<"library" | "live" | "mixer">("live");
+  const [tab, setTab] = useState<"library" | "setlist" | "mixer" | "settings">("mixer");
   const [showClick, setShowClick] = useState(false);
   const [metronome] = useState(() => new Metronome());
   const [pad] = useState(() => new PadEngine());
@@ -942,7 +925,6 @@ export default function App() {
   const [markers, setMarkers] = useState<Marker[]>([]);
   const [markerDraft, setMarkerDraft] = useState<{ marker: Marker; isNew: boolean } | null>(null);
   const [hintShown, setHintShown] = useState(() => !hintDismissed());
-  const [settingsOpen, setSettingsOpen] = useState(false);
   const [slowPrompt, setSlowPrompt] = useState(false);
   // Fotogramas lentos sostenidos (< 40 fps durante 5 s) con efectos Completos: se propone pasar a Reducidos (nunca se cambia en silencio).
   const slowAsked = useRef(false);
@@ -1124,8 +1106,8 @@ export default function App() {
     };
   }
 
-  const openLibrary = () => { setShowClick(false); setPadOpen(false); setShowLibrary(true); };
-  const openClick = () => { setShowLibrary(false); setPadOpen(false); setShowClick(true); };
+  const openLibrary = () => { setShowClick(false); setPadOpen(false); setTab("library"); };
+  const openClick = () => { setPadOpen(false); setShowClick(true); };
   // En pantalla ancha el panel va junto al mezclador; en celular se abre como cajón.
   const padInline = wide && padOpen;
   const padDrawer = !wide && padOpen;
@@ -1196,7 +1178,7 @@ export default function App() {
           </button>
           <button
             className={`glass-btn pad-btn ${padState.playing ? "is-running" : ""} ${padOpen ? "is-open" : ""}`}
-            onClick={() => { setShowClick(false); setShowLibrary(false); setPadOpen((value) => !value); }}
+            onClick={() => { setShowClick(false); setPadOpen((value) => !value); }}
             aria-pressed={padOpen}
             aria-label="Abrir el panel de pads"
           >
@@ -1229,27 +1211,23 @@ export default function App() {
 
         <div className="top-tools">
           <span className={`sync-chip ${playing ? "playing" : ready ? "ready" : ""}`} role="status" title={syncLabel} aria-label={syncLabel}><i /><b className="sync-label">{syncLabel}</b></span>
-          <button className="glass-btn profile-top" onClick={() => setProfileOpen(true)} aria-label="Perfil de pistas">PERFIL</button>
-          <button className="glass-btn square settings-btn" onClick={() => setSettingsOpen(true)} aria-label="Ajustes" title="Ajustes">
-            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 17h16" /><circle cx="9" cy="7" r="2" /><circle cx="15" cy="17" r="2" /></svg>
-          </button>
           <button className="glass-btn restart-btn" onClick={() => void playAll()} disabled={resetting || tracks.length === 0} aria-label="Reiniciar desde el principio">
             <Icon name="restart" /><span>REINICIAR</span>
           </button>
         </div>
       </header>
 
-      {tab === "library" && (
-        <section className="screen" aria-label="Biblioteca">
+      {tab === "setlist" && (
+        <section className="screen" aria-label="Setlist">
           <div className="lib-head">
-            <div><span className="eyebrow">TU MÚSICA</span><h1>Biblioteca</h1></div>
+            <div><span className="eyebrow">TU REPERTORIO</span><h1>Setlist</h1></div>
             <button className="glass-btn lib-add" onClick={openLibrary}>AÑADIR CANCIONES</button>
           </div>
           <div className="lib-rows">
             {playlist.length === 0 && <button className="deck-empty" onClick={openLibrary}>Tu repertorio está vacío · toca aquí para añadir canciones</button>}
             {playlist.map((song, index) => (
               <article className={`song-row ${song.id === activeSongId ? "selected" : ""}`} key={song.id}>
-                <button className="row-main" onClick={() => { selectSong(song); setTab("live"); }} aria-label={`Abrir ${song.name}`}>
+                <button className="row-main" onClick={() => { selectSong(song); setTab("mixer"); }} aria-label={`Abrir ${song.name}`}>
                   <Artwork index={index} />
                   <span><strong>{song.name}</strong><small>{song.id === activeSongId && playing ? "Reproduciendo" : pistas(song.files.length)}</small></span>
                 </button>
@@ -1260,7 +1238,7 @@ export default function App() {
         </section>
       )}
 
-      {tab === "live" && (
+      {tab === "mixer" && (
         <section className="screen" aria-label="En vivo">
           <div className="live-status">
             <div className="session-pill"><i className={playing ? "active" : ""} />SESIÓN EN VIVO<b>{click.beats}/4</b></div>
@@ -1313,15 +1291,38 @@ export default function App() {
         </section>
       )}
 
-      {tab === "mixer" && (
-        <section className="screen" aria-label="Mezclador">
+      {tab === "library" && (
+        <section className="screen library-screen" aria-label="Biblioteca">
           <div className="lib-head">
-            <div><span className="eyebrow">{pistas(tracks.length).toUpperCase()} {tracks.length === 1 ? "CARGADA" : "CARGADAS"}</span><h1>Mezclador</h1></div>
-            <button className="glass-btn profile-chip" onClick={() => setProfileOpen(true)} aria-label="Perfil de pistas">PERFIL · {PROFILE_LABEL[profileSource].toUpperCase()}</button>
-            <MasterCard volume={masterVolume} />
+            <div><span className="eyebrow">CRESCENDO LIVE</span><h1>Biblioteca</h1></div>
           </div>
-          {mixer}
+          <div className="source-switch" role="tablist" aria-label="Origen de las canciones">
+            <button role="tab" aria-selected={source === "local"} className={source === "local" ? "selected" : ""} onClick={() => setSource("local")}>
+              <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="2.5" width="12" height="19" rx="2.5" /><path d="M10 18.5h4" /></svg>
+              <span>Este dispositivo</span>
+            </button>
+            <button role="tab" aria-selected={source === "cloud"} className={source === "cloud" ? "selected" : ""} onClick={() => setSource("cloud")}>
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 18h11a4 4 0 0 0 .5-8A6.5 6.5 0 0 0 6 8.2 4.9 4.9 0 0 0 7 18Z" /></svg>
+              <span>Nube Crescendo</span>
+            </button>
+          </div>
+          <div className="library-body">
+            {source === "local"
+              ? <div className="library-scroll"><LocalImport onSongLoaded={addSong} /></div>
+              : <NubeBrowser onSongLoaded={addSong} />}
+          </div>
         </section>
+      )}
+
+      {tab === "settings" && (
+        <SettingsDrawer
+          embedded
+          normMode={normMode}
+          onNormMode={setNormMode}
+          onOpenProfiles={() => setProfileOpen(true)}
+          getDiagnostics={getDiagnostics}
+          onClose={() => setTab("mixer")}
+        />
       )}
 
       {preparing && (
@@ -1341,7 +1342,7 @@ export default function App() {
         </div>
       )}
 
-      {tab !== "live" && tracks.length > 0 && (
+      {tab !== "mixer" && tracks.length > 0 && (
         <div className="mini-player">
           <button className="mini-main" onClick={() => setExpanded(true)} aria-label="Abrir el reproductor ampliado">
             <Artwork index={Math.max(0, activeIndex)} />
@@ -1356,10 +1357,11 @@ export default function App() {
         </div>
       )}
 
-      <nav className="tab-bar" aria-label="Navegación principal" style={{ "--tab-i": tab === "library" ? 0 : tab === "live" ? 1 : 2 } as React.CSSProperties}>
-        <button className={tab === "library" ? "active" : ""} onClick={() => setTab("library")}><Icon name="library" /><span>Biblioteca</span></button>
-        <button className={tab === "live" ? "active" : ""} onClick={() => setTab("live")}><Icon name="play" /><span>Live</span></button>
-        <button className={tab === "mixer" ? "active" : ""} onClick={() => setTab("mixer")}><Icon name="mixer" /><span>Mezcla</span></button>
+      <nav className="tab-bar" aria-label="Navegación principal" style={{ "--tab-i": ["library", "setlist", "mixer", "settings"].indexOf(tab) } as React.CSSProperties}>
+        <button className={tab === "library" ? "active" : ""} aria-current={tab === "library" ? "page" : undefined} onClick={() => setTab("library")}><Icon name="library" /><span>Biblioteca</span></button>
+        <button className={tab === "setlist" ? "active" : ""} aria-current={tab === "setlist" ? "page" : undefined} onClick={() => setTab("setlist")}><Icon name="setlist" /><span>Setlist</span></button>
+        <button className={tab === "mixer" ? "active" : ""} aria-current={tab === "mixer" ? "page" : undefined} onClick={() => setTab("mixer")}><Icon name="mixer" /><span>Mezclador</span></button>
+        <button className={tab === "settings" ? "active" : ""} aria-current={tab === "settings" ? "page" : undefined} onClick={() => setTab("settings")}><Icon name="settings" /><span>Ajustes</span></button>
       </nav>
 
       {expanded && (
@@ -1393,39 +1395,6 @@ export default function App() {
         </div>
       )}
 
-      {showLibrary && (
-        <div className="library-layer" aria-label="Biblioteca musical">
-          <button className="library-scrim" aria-label="Cerrar biblioteca" onClick={() => setShowLibrary(false)} />
-          <aside className="library-panel">
-            <div className="library-panel-top">
-              <div className="library-panel-heading">
-                <div>
-                  <span className="eyebrow">CRESCENDO LIVE</span>
-                  <strong>Biblioteca</strong>
-                </div>
-                <button className="library-close" onClick={() => setShowLibrary(false)}>
-                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18" /></svg>
-                  <span>CERRAR</span>
-                </button>
-              </div>
-              <div className="source-switch" role="tablist" aria-label="Origen de las canciones">
-                <button role="tab" aria-selected={source === "local"} className={source === "local" ? "selected" : ""} onClick={() => setSource("local")}>
-                  <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="2.5" width="12" height="19" rx="2.5" /><path d="M10 18.5h4" /></svg>
-                  <span>Este dispositivo</span>
-                </button>
-                <button role="tab" aria-selected={source === "cloud"} className={source === "cloud" ? "selected" : ""} onClick={() => setSource("cloud")}>
-                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 18h11a4 4 0 0 0 .5-8A6.5 6.5 0 0 0 6 8.2 4.9 4.9 0 0 0 7 18Z" /></svg>
-                  <span>Nube Crescendo</span>
-                </button>
-              </div>
-            </div>
-            {source === "local"
-              ? <div className="library-scroll"><LocalImport onSongLoaded={addSong} /></div>
-              : <NubeBrowser onSongLoaded={addSong} />}
-          </aside>
-        </div>
-      )}
-
       {memoryPrompt && memoryView && (
         <MemoryDialog
           incoming={{ name: memoryPrompt.name, tracks: memoryPrompt.files.length, bytes: memoryView.bytes }}
@@ -1445,16 +1414,6 @@ export default function App() {
           onSave={saveMarker}
           onDelete={() => { commitMarkers(markers.filter((item) => item.id !== markerDraft.marker.id)); setMarkerDraft(null); }}
           onClose={() => setMarkerDraft(null)}
-        />
-      )}
-
-      {settingsOpen && (
-        <SettingsDrawer
-          normMode={normMode}
-          onNormMode={setNormMode}
-          onOpenProfiles={() => { setSettingsOpen(false); setProfileOpen(true); }}
-          getDiagnostics={getDiagnostics}
-          onClose={() => setSettingsOpen(false)}
         />
       )}
 

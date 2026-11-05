@@ -190,11 +190,6 @@
 .pan-bar:focus-visible { border-radius: 8px; outline-offset: 0; }
 
 /* ---------- Barra de pestañas ---------- */
-.tab-bar { position: relative; z-index: 4; display: grid; flex: 0 0 auto; width: min(320px, calc(100% - 24px)); grid-template-columns: repeat(3, 1fr); gap: 4px; margin: 2px auto 12px; padding: 5px;
-  border: 1px solid var(--line); border-radius: 20px; }
-.tab-bar button { position: relative; display: flex; min-height: 44px; align-items: center; justify-content: center; gap: 7px; padding: 0 6px; border: 1px solid transparent; border-radius: 15px; background: none; color: var(--faint); font-size: var(--fs-xs); font-weight: 600; }
-.tab-bar button svg { width: 18px; height: 18px; flex: none; }
-.tab-bar button.active { color: var(--c-white); }
 
 /* ---------- Biblioteca (pantalla) ---------- */
 .lib-head { display: flex; flex: 0 0 auto; justify-content: space-between; gap: 12px; }
@@ -243,7 +238,6 @@
   .channel-head { justify-content: center; }
   .pan-thumb { width: 20px; height: 20px; }
   .channel-name strong { font-size: var(--fs-xs); }
-  .tab-bar { margin-bottom: 8px; }
 }
 @media (max-width: 820px) and (orientation: portrait) and (min-height: 700px) {
   .wave-panel .waveform { height: 88px; }
@@ -281,12 +275,6 @@
   .pan-readout { min-height: 14px; }
   .channel-name { flex-direction: row; justify-content: center; gap: 5px; }
   .master-readout { height: 36px; font-size: 12px; }
-  .app { display: grid; grid-template-columns: 64px minmax(0, 1fr); }
-  .topbar { grid-area: top; grid-template-areas: "brand hud transport tools"; }
-  .screen { grid-area: main; min-width: 0; }
-  .tab-bar { grid-area: rail; width: auto; height: auto; align-self: center; grid-template-columns: 1fr; margin: 0 0 0 max(8px, env(safe-area-inset-left)); padding: 4px; border-radius: 18px; gap: 4px; }
-  .tab-bar button { min-height: 46px; padding: 0; border-radius: 14px; }
-  .tab-bar button span { display: none; }
 
   .deck-main .artwork { width: 32px; height: 32px; }
   .deck-card { padding: 3px 24px 3px 3px; }
@@ -544,10 +532,10 @@
   --text: var(--c-text);
   --muted: var(--c-muted);
   --faint: var(--c-faint);
-  --accent: var(--c-silver-200);
-  --accent-2: var(--c-silver-100);
-  --accent-line: color-mix(in srgb, var(--c-white) 42%, transparent);
-  --accent-bg: color-mix(in srgb, var(--c-white) 14%, transparent);
+  --accent: var(--c-accent);
+  --accent-2: var(--c-accent-strong);
+  --accent-line: color-mix(in srgb, var(--c-accent) 45%, transparent);
+  --accent-bg: color-mix(in srgb, var(--c-accent) 14%, transparent);
   --success: var(--c-success);
   --amber: var(--c-warn);
   --panel: var(--c-panel);
@@ -726,9 +714,6 @@
 .pan-readout { color: var(--c-silver-200); }
 
 /* ---------- Barra de pestañas ---------- */
-.tab-bar { border-color: var(--c-line); background: color-mix(in srgb, var(--c-panel) 88%, transparent); box-shadow: inset 0 1px color-mix(in srgb, var(--c-white) 8%, transparent), 0 8px 24px color-mix(in srgb, var(--c-bg-0) 30%, transparent); }
-.tab-bar button { transition: color .3s ease, background .3s ease, border-color .3s ease, transform var(--t-fast) ease-out; }
-.tab-bar button:active { transform: scale(.95); }
 
 /* Transición entre pestañas con profundidad (solo transform + opacity) */
 .screen { animation: screen-depth .44s var(--ease-out); transform-origin: 50% 100%; }
@@ -1076,20 +1061,6 @@
    tarjeta Master con dB. (Se carga después de skin.css; usa las variables de styles/tokens.css.)
    ===================================================================== */
 
-/* Indicador que se desliza entre pestañas (solo transform) */
-.tab-bar::before {
-  content: ""; position: absolute; z-index: 0; top: 5px; bottom: 5px; left: 5px; width: calc((100% - 18px) / 3);
-  border: 1px solid var(--c-line-strong); border-radius: 15px; pointer-events: none;
-  background: linear-gradient(145deg, color-mix(in srgb, var(--c-white) 17%, transparent), color-mix(in srgb, var(--c-white) 5%, transparent));
-  box-shadow: inset 0 1px color-mix(in srgb, var(--c-white) 20%, transparent);
-  transform: translateX(calc(var(--tab-i, 1) * (100% + 4px)));
-  transition: transform .32s var(--ease-out);
-}
-.tab-bar button { z-index: 1; }
-.tab-bar button.active { border-color: transparent; background: none; box-shadow: none; }
-@media (max-height: 520px) and (orientation: landscape) {
-  .tab-bar::before { top: 4px; left: 4px; right: 4px; bottom: auto; width: auto; height: calc((100% - 16px) / 3); transform: translateY(calc(var(--tab-i, 1) * (100% + 4px))); border-radius: 14px; }
-}
 
 /* Canción cargada: ahora abre el reproductor ampliado */
 button.loaded-song { padding: 0; border: 0; background: none; color: inherit; text-align: left; cursor: pointer; }
@@ -1177,8 +1148,7 @@ button.loaded-song:active { transform: scale(.98); }
 
 /* Celular horizontal: el mini-reproductor ocupa su propia fila bajo el contenido (no tapa los canales) */
 @media (max-height: 520px) and (orientation: landscape) {
-  .app { grid-template-rows: auto minmax(0, 1fr) auto; grid-template-areas: "rail top" "rail main" "rail mini"; }
-  .mini-player { grid-area: mini; margin: 0 max(12px, var(--safe-r)) 6px 12px; padding: 4px 8px 4px 5px; border-radius: var(--r-md); }
+  .mini-player { margin: 0 max(12px, var(--safe-r)) 6px 12px; padding: 4px 8px 4px 5px; border-radius: var(--r-md); }
   .mini-main .artwork { width: 36px; height: 36px; }
   .mini-player .play-btn { height: var(--tap); }
 }

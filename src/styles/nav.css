@@ -1,0 +1,51 @@
+/* =====================================================================
+   Diseño nuevo · estructura general y barra de navegación inferior.
+   Se carga después de app.css. Solo usa variables de tokens.css. Se anima solo con transform y opacity.
+   ===================================================================== */
+
+/* ---------- Pantallas ---------- */
+.screen { position: relative; animation: screen-in .28s var(--ease-out); transform-origin: 50% 50%; }
+.screen[aria-label="Biblioteca"], .screen[aria-label="Ajustes"], .screen[aria-label="Diagnóstico"], .screen[aria-label="Setlist"] { gap: var(--sp-3); }
+
+/* ---------- Barra de navegación inferior (siempre visible) ---------- */
+.tab-bar {
+  position: relative; z-index: var(--z-bar); flex: 0 0 auto; display: grid; grid-template-columns: repeat(4, 1fr);
+  height: 64px; margin: 0; padding: 0 max(var(--sp-2), var(--safe-l)) 0 max(var(--sp-2), var(--safe-r));
+  border-top: 1px solid var(--c-line); background: var(--c-panel);
+}
+.tab-bar::before {
+  content: ""; position: absolute; top: -1px; left: max(var(--sp-2), var(--safe-l)); width: calc((100% - max(var(--sp-2), var(--safe-l)) - max(var(--sp-2), var(--safe-r))) / 4); height: 2px;
+  border-radius: 0 0 2px 2px; background: var(--c-accent); pointer-events: none;
+  transform: translateX(calc(var(--tab-i, 2) * 100%)); transition: transform .3s var(--ease-out);
+}
+.tab-bar button {
+  position: relative; display: flex; min-width: 0; flex-direction: column; align-items: center; justify-content: center; gap: 4px; padding: 0;
+  border: 0; background: none; color: var(--c-faint); font-size: var(--fs-xs); font-weight: 600; letter-spacing: .04em; touch-action: manipulation;
+  transition: color .2s ease;
+}
+.tab-bar button svg { width: 22px; height: 22px; flex: none; transition: transform var(--t-fast) var(--ease-out); }
+.tab-bar button:active svg { transform: scale(.88); }
+.tab-bar button.active { color: var(--c-accent); }
+.tab-bar button span { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Celular en horizontal: barra más baja, icono y texto en una línea */
+@media (max-height: 520px) and (orientation: landscape) {
+  .tab-bar { height: 48px; }
+  .tab-bar button { flex-direction: row; gap: var(--sp-2); }
+  .tab-bar button svg { width: 20px; height: 20px; }
+}
+
+/* ---------- Biblioteca como pestaña ---------- */
+.library-body { position: relative; display: flex; min-height: 0; flex: 1; flex-direction: column; }
+.library-body .library-subbar, .library-body .library-scroll { padding-left: 0; padding-right: 0; }
+.library-screen .source-switch { flex: none; margin-top: 0; }
+.settings-scroll { display: flex; min-height: 0; flex: 1; flex-direction: column; gap: var(--sp-3); overflow-y: auto; padding-bottom: var(--sp-3); }
+
+/* ---------- Tipografía: serifa para títulos y nombre de canción ---------- */
+.lib-head h1, .library-panel-heading strong, .player-copy h2, .loaded-song strong, .deck-main strong, .song-row strong, .mini-copy strong,
+.load-card h2, .auth-card h1, .setting-block strong { font-family: var(--font-serif); font-weight: 500; letter-spacing: 0; }
+.lib-head h1 { font-size: 30px; line-height: 1.1; }
+.loaded-song strong, .song-row strong, .deck-main strong, .mini-copy strong { font-size: 14px; }
+.player-copy h2 { font-size: clamp(24px, 5vw, 34px); }
+/* Números siempre tabulares en tiempos, BPM y valores */
+.tempo strong, .clock strong, .clock span, .player-times, .pan-readout, .master-readout, .wave-meta, .session-pill b { font-variant-numeric: tabular-nums; }

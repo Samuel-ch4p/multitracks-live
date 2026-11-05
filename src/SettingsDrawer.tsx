@@ -21,6 +21,8 @@ type Props = {
   onOpenProfiles: () => void;
   getDiagnostics: () => DiagnosticsInfo;
   onClose: () => void;
+  /** Como pantalla de la barra inferior (sin fondo ni botón CERRAR). */
+  embedded?: boolean;
 };
 
 const mb = (bytes: number) => `${Math.round(bytes / 1048576)} MB`;
@@ -28,11 +30,63 @@ const mb = (bytes: number) => `${Math.round(bytes / 1048576)} MB`;
 type Perf = { phase: string; stage: string; ms: number };
 
 /** Ajustes: normalización, efectos visuales, movimiento del sistema y Diagnóstico. */
-export default function SettingsDrawer({ normMode, onNormMode, onOpenProfiles, getDiagnostics, onClose }: Props) {
+export default function SettingsDrawer({ normMode, onNormMode, onOpenProfiles, getDiagnostics, onClose, embedded = false }: Props) {
   const [fx] = useFx();
   const { systemReduce, respect } = useMotion();
   const [view, setView] = useState<"settings" | "diag">("settings");
   const account = useAccount();
+  const title = view === "settings" ? "Ajustes" : "Diagnóstico";
+  const body = (
+    <>
+      {view === "settings" ? (
+        <>
+          <section className="setting-block">
+            <div><strong>Normalización</strong><small>Equilibra el volumen entre pistas y canciones.</small></div>
+            <div className="segmented-setting" role="radiogroup" aria-label="Normalización">
+              {NORM_MODES.map((mode) => (
+                <button key={mode} role="radio" aria-checked={normMode === mode} className={normMode === mode ? "active" : ""} onClick={() => onNormMode(mode)}>{NORM_MODE_LABEL[mode]}</button>
+              ))}
+            </div>
+          </section>
+
+          <section className="setting-block">
+            <div><strong>Efectos visuales</strong><small>«Reducidos» apaga los brillos y partículas más pesados y mantiene un aspecto limpio.</small></div>
+            <div className="segmented-setting" role="radiogroup" aria-label="Efectos visuales">
+              {(["full", "reduced"] as const).map((mode) => (
+                <button key={mode} role="radio" aria-checked={fx === mode} className={fx === mode ? "active" : ""} onClick={() => setFx(mode)}>{mode === "full" ? "Completos" : "Reducidos"}</button>
+              ))}
+            </div>
+          </section>
+
+          {systemReduce && (
+            <section className="setting-block">
+              <div><strong>El sistema pidió menos animaciones</strong><small>{respect ? "Se están respetando: no hay animaciones de movimiento." : "Las animaciones siguen activas, como elegiste."}</small></div>
+              <button className={`switch ${respect ? "on" : ""}`} role="switch" aria-checked={respect} onClick={() => setRespectSystemMotion(!respect)}>
+                <i /><span>{respect ? "Respetar al sistema" : "Ignorar al sistema"}</span>
+              </button>
+            </section>
+          )}
+
+          <button className="settings-link" onClick={onOpenProfiles}>Administrar perfiles de pistas</button>
+          <button className="settings-link" onClick={() => setView("diag")}>Diagnóstico</button>
+          {account && <button className="settings-link" onClick={account.signOut}>Cerrar sesión · {account.email}</button>}
+        </>
+      ) : (
+        <Diagnostics getDiagnostics={getDiagnostics} />
+      )}
+    </>
+  );
+  if (embedded) {
+    return (
+      <section className="screen settings-screen" aria-label={title}>
+        <div className="lib-head">
+          <div><span className="eyebrow">CRESCENDO LIVE</span><h1>{title}</h1></div>
+          {view === "diag" && <button className="pill-btn" onClick={() => setView("settings")}>VOLVER</button>}
+        </div>
+        <div className="settings-scroll settings-drawer">{body}</div>
+      </section>
+    );
+  }
   return (
     <div className="drawer-backdrop" onClick={onClose}>
       <aside className="drawer settings-drawer" onClick={(event) => event.stopPropagation()} aria-label={view === "settings" ? "Ajustes" : "Diagnóstico"}>
@@ -41,42 +95,7 @@ export default function SettingsDrawer({ normMode, onNormMode, onOpenProfiles, g
           <button className="pill-btn" onClick={view === "settings" ? onClose : () => setView("settings")}>{view === "settings" ? "CERRAR" : "VOLVER"}</button>
         </div>
 
-        {view === "settings" ? (
-          <>
-            <section className="setting-block">
-              <div><strong>Normalización</strong><small>Equilibra el volumen entre pistas y canciones.</small></div>
-              <div className="segmented-setting" role="radiogroup" aria-label="Normalización">
-                {NORM_MODES.map((mode) => (
-                  <button key={mode} role="radio" aria-checked={normMode === mode} className={normMode === mode ? "active" : ""} onClick={() => onNormMode(mode)}>{NORM_MODE_LABEL[mode]}</button>
-                ))}
-              </div>
-            </section>
-
-            <section className="setting-block">
-              <div><strong>Efectos visuales</strong><small>«Reducidos» apaga los brillos y partículas más pesados y mantiene un aspecto limpio.</small></div>
-              <div className="segmented-setting" role="radiogroup" aria-label="Efectos visuales">
-                {(["full", "reduced"] as const).map((mode) => (
-                  <button key={mode} role="radio" aria-checked={fx === mode} className={fx === mode ? "active" : ""} onClick={() => setFx(mode)}>{mode === "full" ? "Completos" : "Reducidos"}</button>
-                ))}
-              </div>
-            </section>
-
-            {systemReduce && (
-              <section className="setting-block">
-                <div><strong>El sistema pidió menos animaciones</strong><small>{respect ? "Se están respetando: no hay animaciones de movimiento." : "Las animaciones siguen activas, como elegiste."}</small></div>
-                <button className={`switch ${respect ? "on" : ""}`} role="switch" aria-checked={respect} onClick={() => setRespectSystemMotion(!respect)}>
-                  <i /><span>{respect ? "Respetar al sistema" : "Ignorar al sistema"}</span>
-                </button>
-              </section>
-            )}
-
-            <button className="settings-link" onClick={onOpenProfiles}>Administrar perfiles de pistas</button>
-            <button className="settings-link" onClick={() => setView("diag")}>Diagnóstico</button>
-            {account && <button className="settings-link" onClick={account.signOut}>Cerrar sesión · {account.email}</button>}
-          </>
-        ) : (
-          <Diagnostics getDiagnostics={getDiagnostics} />
-        )}
+        {body}
       </aside>
     </div>
   );
