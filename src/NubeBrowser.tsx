@@ -3,7 +3,9 @@ import { pistas } from "./format";
 import { useWindowed } from "./windowed";
 import { CloudIcon, LoadCard } from "./CloudParts";
 import { CloudError, friendlyCloudMessage } from "./cloud/errors";
-import { fetchSongFiles, loadCatalog, type SongProgress } from "./cloud/cloudSource";
+import { fetchSongFiles, isDownloading, loadCatalog, type SongProgress } from "./cloud/cloudSource";
+import { signOut } from "./cloud/auth";
+import { CONTACTO_SOPORTE } from "./cloud/config";
 import { isPlayable, type CatalogArtist } from "./cloud/catalog";
 import { buildIndex, foldQuery, searchIndex, type IndexData, type IndexSong } from "./searchIndex";
 import { parseSongTags } from "./songTags";
@@ -18,7 +20,6 @@ const SEARCH_DELAY_MS = 200;
 
 // Caché en memoria de la sesión (el catálogo es solo texto): al cerrar y reabrir el panel no se vuelve a consultar.
 let indexCache: IndexData | null = null;
-let downloadInFlight = false;
 
 const sizeLabel = (size?: number) => (size ? `${Math.round(size / 1048576)} MB` : "Multitrack");
 const mb = (bytes: number) => (bytes / 1048576).toFixed(bytes >= 10485760 ? 0 : 1);
@@ -35,6 +36,14 @@ function Tags({ song }: { song: IndexSong }) {
       {bpm && <i className="tag">{Math.round(bpm)} BPM</i>}
     </span>
   );
+}
+
+/** Mensaje de la tarjeta de error. Los errores de extracción ya vienen en español ("El ZIP está dañado…"). */
+function downloadMessage(e: unknown): string {
+  if (e instanceof CloudError) return e.isAccountState ? `${friendlyCloudMessage(e)} ${CONTACTO_SOPORTE}` : friendlyCloudMessage(e);
+  if (e instanceof RangeError) return "Este multitrack es demasiado grande para la memoria del dispositivo. Cierra otras apps e inténtalo de nuevo.";
+  if (e instanceof Error && !/fetch|network|abort/i.test(e.message)) return e.message;
+  return friendlyCloudMessage(e);
 }
 
 type Load = { stage: "download" | "extract"; percent: number | null; detail: string };
@@ -124,8 +133,7 @@ export default function NubeBrowser({ onSongLoaded }: Props) {
 
   async function addSong(item: IndexSong) {
     if (!isPlayable(item)) return;
-    if (downloadInFlight) { setError("Ya hay una canción descargándose. Espera a que termine."); return; }
-    downloadInFlight = true;
+    if (isDownloading()) { setError("Ya hay una canción descargándose. Espera a que termine."); return; }
     const controller = new AbortController();
     abortRef.current = controller;
     setSelected(item);
@@ -155,13 +163,10 @@ export default function NubeBrowser({ onSongLoaded }: Props) {
     } catch (e) {
       if (controller.signal.aborted || isAbort(e)) { if (mounted.current) setStatus("Descarga cancelada."); return; }
       console.error("Nube: error al descargar o extraer");
-      // Los errores de extracción ya vienen en español ("El ZIP está dañado…"); los de la nube usan su mensaje amable.
-      if (mounted.current) setLoadFail(e instanceof CloudError || e instanceof RangeError || !(e instanceof Error) || /fetch|network|abort/i.test(e.message)
-        ? (e instanceof RangeError ? "Este multitrack es demasiado grande para la memoria del dispositivo. Cierra otras apps e inténtalo de nuevo." : friendlyCloudMessage(e))
-        : e.message);
+      if (e instanceof CloudError && e.kind === "no_session") { void signOut(); return; }
+      if (mounted.current) setLoadFail(downloadMessage(e));
       setStatus("");
     } finally {
-      downloadInFlight = false;
       abortRef.current = null;
       setAdding(false);
     }
