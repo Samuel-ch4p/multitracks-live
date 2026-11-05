@@ -1,0 +1,35 @@
+/* =====================================================================
+   Diseño nuevo · Pads (cobre). Solo variables de tokens.css (--pad-*, --c-accent…). Estados: normal, presionado, activo, deshabilitado.
+   Sin sombras grandes; el brillo del pad activo se anima solo con opacity (y solo con Animaciones: Completas).
+   ===================================================================== */
+.pad-side { border-color: color-mix(in srgb, var(--c-accent) 22%, var(--c-line)); border-radius: var(--r-md); background: var(--c-panel); box-shadow: none; }
+.pad-panel { gap: var(--sp-3); padding: var(--sp-3); }
+.pad-title h2 { font-family: var(--font-serif); font-size: 16px; font-weight: 500; }
+.pad-chip { border-color: var(--c-line); color: var(--c-faint); font-size: var(--fs-xs); font-weight: 700; letter-spacing: .08em; }
+.pad-chip.on { border-color: var(--accent-line); background: var(--accent-bg); color: var(--c-accent-strong); }
+.pad-chip.on i { background: var(--c-accent); box-shadow: none; }
+
+/* Teclas de nota y modificadores (≥ 48 px de alto) */
+.pad-grid { gap: 6px; }
+.pad-mods { gap: 6px; }
+.pad-key, .pad-mod {
+  position: relative; min-height: 48px; border: 1px solid color-mix(in srgb, var(--c-accent) 30%, var(--c-line)); border-radius: var(--r-sm);
+  background: var(--c-card); box-shadow: none; color: var(--c-accent-strong); font-size: var(--fs-sm); font-weight: 700; touch-action: manipulation;
+  transition: transform var(--t-fast) var(--ease-out), background-color .15s ease, border-color .15s ease, color .15s ease;
+}
+.pad-mod { color: var(--c-muted); }
+.pad-key:hover:not(:disabled), .pad-mod:hover:not(:disabled) { border-color: var(--accent-line); box-shadow: none; }
+.pad-key:active:not(:disabled), .pad-mod:active:not(:disabled) { transform: scale(.95); background: color-mix(in srgb, var(--c-accent) 18%, var(--c-card)); }
+.pad-key.active, .pad-mod.active {
+  border-color: var(--c-accent); color: var(--c-bg-1); box-shadow: none; animation: none;
+  background: linear-gradient(145deg, var(--c-accent-strong), var(--c-metal-lo));
+}
+.pad-key.active::before { inset: -3px; border-radius: inherit; opacity: .35; box-shadow: 0 0 0 3px color-mix(in srgb, var(--c-accent) 45%, transparent); }
+:root[data-fx="full"] .pad-key.active::before { animation: pad-afterglow 2.2s ease-in-out infinite; }
+.pad-key::after, .pad-mod::after { background: radial-gradient(circle, color-mix(in srgb, var(--c-accent-strong) 55%, transparent), transparent 68%); }
+.pad-off { border-color: var(--c-line); background: var(--c-glass); color: var(--c-muted); }
+.pad-key:disabled, .pad-mod:disabled { opacity: .4; cursor: default; }
+.pad-volume .bpm-slider { accent-color: var(--c-accent); }
+
+/* Botón PAD de la barra superior */
+.pad-btn.is-running { border-color: var(--accent-line); background: var(--accent-bg); color: var(--c-accent-strong); box-shadow: none; }

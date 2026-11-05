@@ -73,11 +73,11 @@
   --fam-ok: var(--c-success);
   --fam-warn: var(--c-warn);
 
-  /* ---- Pads: neón morado suave ---- */
-  --pad-neon: #9b5cff;
-  --pad-neon-rgb: 155 92 255;
-  --pad-deep-1: #533997;
-  --pad-deep-2: #191230;
+  /* ---- Pads: cobre (mismo acento del diseño) ---- */
+  --pad-neon:var(--c-accent);
+  --pad-neon-rgb:231 160 106;
+  --pad-deep-1:#6e4326;
+  --pad-deep-2:#2a1a10;
 
   /* ---- Sombras y brillos (compuestos con los tokens de arriba) ---- */
   --sh-card: inset 0 1px color-mix(in srgb, var(--c-white) 7%, transparent), 0 10px 26px color-mix(in srgb, var(--c-black) 30%, transparent);

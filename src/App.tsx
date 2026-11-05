@@ -9,6 +9,7 @@ import "./styles/app.css";
 import "./styles/nav.css";
 import "./styles/mixer.css";
 import "./styles/library.css";
+import "./styles/pads.css";
 import ChannelScroll from "./ChannelScroll";
 import SetlistScreen from "./SetlistScreen";
 import NubeBrowser from "./NubeBrowser";
