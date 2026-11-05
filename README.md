@@ -1,6 +1,6 @@
 # Crescendo Live
 
-Reproductor/mezclador multitrack con Web Audio. Carga canciones desde MEGA o desde archivos del dispositivo (pistas sueltas, ZIP o RAR). Funciona sin servidor: la app Android lleva todo dentro.
+Reproductor/mezclador multitrack con Web Audio. Carga canciones desde la Nube Crescendo (con tu cuenta) o desde archivos del dispositivo (pistas sueltas, ZIP o RAR). Funciona sin servidor: la app Android lleva todo dentro.
 
 ## Desarrollo (PC)
 
@@ -25,7 +25,7 @@ El proyecto Android ya está en `android/` (Capacitor). Hay dos caminos:
 4. El APK queda en `android/app/build/outputs/apk/debug/app-debug.apk`.
 
 ## Instalar en el celular
-1. Pasa `app-debug.apk` al celular (WhatsApp, Drive, cable…).
+1. Pasa `app-debug.apk` al celular (WhatsApp, cable…).
 2. Ábrelo; si Android lo pide, permite **instalar apps de esta fuente**.
 3. Abre **Crescendo Live**.
 
@@ -39,6 +39,6 @@ Botón **CLICK** (arriba): BPM de 30 a 300 (escribirlo, ±1/±5, deslizador o TA
 - `src/App.tsx` reproductor, mezcla, transporte
 - `src/Fader.tsx`, `src/Waveform.tsx` faders y forma de onda
 - `src/archive.ts` ZIP/RAR, formatos y forma de onda
-- `src/MegaBrowser.tsx`, `src/LocalImport.tsx` fuentes de canciones
+- `src/NubeBrowser.tsx`, `src/cloud/`, `src/LocalImport.tsx` fuentes de canciones y acceso a la nube
 - `src/metronome.ts`, `src/Click.tsx` motor y panel del click
 - `capacitor.config.ts` datos de la app Android (nombre; el id interno sigue siendo `com.redline.multitracks` para que el APK nuevo se instale encima del anterior)

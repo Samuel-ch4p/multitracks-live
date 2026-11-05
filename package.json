@@ -11,7 +11,7 @@
     "android:sync": "npm run build && cap sync android",
     "android:open": "cap open android",
     "assets": "capacitor-assets generate --android",
-    "verify": "node tools/verify-normalize.ts && node tools/verify-families.ts && node tools/verify-pan-default.ts && node tools/verify-wav.ts && node tools/verify-drive.ts && node tools/verify-cloud.ts && node tools/verify-search.ts && node tools/verify-profiles.ts"
+    "verify": "node tools/verify-normalize.ts && node tools/verify-families.ts && node tools/verify-pan-default.ts && node tools/verify-wav.ts && node tools/verify-cloud.ts && node tools/verify-search.ts && node tools/verify-profiles.ts"
   },
   "dependencies": {
     "@capacitor/android": "^7.6.9",
@@ -22,7 +22,6 @@
     "@supabase/supabase-js": "^2.119.0",
     "fflate": "^0.8.3",
     "libarchive.js": "^2.0.2",
-    "megajs": "^1.3.10",
     "react": "^19.2.8",
     "react-dom": "^19.2.8"
   },

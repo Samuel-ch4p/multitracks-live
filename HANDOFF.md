@@ -435,3 +435,11 @@ Se recorrieron en el navegador (vivo, Mezcla, Ajustes, Diagnóstico, Pads, Click
 
 ## Rendimiento
 Sin animaciones nuevas. Se quitó `filter` del `transition` de `.channel` (ya no se usaba). Las mediciones de la sección anterior no se repitieron tras este cambio de color.
+
+## Nube propia (login + catálogo + descargas) — reemplaza a Google Drive y MEGA
+- `src/cloud/`: `config.ts` (VITE_CRESCENDO_API_URL, VITE_SUPABASE_URL, VITE_SUPABASE_PUBLISHABLE_KEY; `CONTACTO_SOPORTE` editable), `auth.ts` (supabase-js: sesión persistente, refresco, token con refresco si faltan <5 min), `device.ts` (UUID único), `storage.ts` (interfaz `CloudStorage`; Electron puede llamar `setCloudStorage`), `api.ts` (cabeceras Bearer + X-Device-Id/Label, 401 → refresca una vez), `errors.ts` (contrato de errores → mensajes en español), `catalog.ts` (GET /catalog con ETag, caché de texto), `stream.ts` + `cloudSource.ts` (GET /file en UNA petición, streaming a Blob, sin reintentos automáticos).
+- `AuthGate.tsx` envuelve la app (main.tsx): login/registro/olvidé contraseña, verificación de cuenta contra /catalog (pendiente, vencida, bloqueada, límite de dispositivos). En `npm run dev` sin variables de nube deja pasar (modo demo).
+- RAR y 7z: se muestran "Próximamente" y no se descargan (ahorra el límite diario). La importación local de .rar sigue funcionando.
+- Descarga: se usa fetch en streaming y no `@capacitor/filesystem downloadFile` (en 7.1.9 está obsoleto, no se puede cancelar y ante 403/429 no entrega el cuerpo JSON, así que no se podrían distinguir "membresía vencida" de "límite diario"). `@capacitor/filesystem` quedó instalado sin usarse.
+- `LoadCard` recibe porcentaje numérico (antes lo leía del texto con una regex rota y la barra siempre salía indeterminada).
+- Pruebas: `npm run verify` (incluye `tools/verify-cloud.ts` y `tools/verify-search.ts`).

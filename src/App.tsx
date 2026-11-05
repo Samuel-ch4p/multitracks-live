@@ -6,9 +6,7 @@ import MarkerEditor from "./MarkerEditor";
 import { MARKER_COLORS, dismissHint, hintDismissed, loadMarkers, saveMarkers, type Marker } from "./markers";
 import MemoryDialog, { type MemorySong } from "./MemoryDialog";
 import "./styles/app.css";
-import MegaBrowser from "./MegaBrowser";
 import NubeBrowser from "./NubeBrowser";
-import { CLOUD_SOURCE } from "./cloudConfig";
 import { perfBegin, perfEnd, perfStep } from "./perf";
 import ProfileDrawer from "./ProfileDrawer";
 import {
@@ -1423,7 +1421,7 @@ export default function App() {
             </div>
             {source === "local"
               ? <div className="library-scroll"><LocalImport onSongLoaded={addSong} /></div>
-              : CLOUD_SOURCE === "mega" ? <MegaBrowser onSongLoaded={addSong} /> : <NubeBrowser onSongLoaded={addSong} />}
+              : <NubeBrowser onSongLoaded={addSong} />}
           </aside>
         </div>
       )}

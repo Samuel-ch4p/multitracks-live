@@ -19,3 +19,10 @@
 # If you keep the line number information, uncomment this to
 # hide the original source file name.
 #-renamesourcefileattribute SourceFile
+
+# Capacitor: el puente nativo usa reflexión (anotaciones @CapacitorPlugin / @PluginMethod)
+-keep class com.getcapacitor.** { *; }
+-keep @com.getcapacitor.annotation.CapacitorPlugin public class * { @com.getcapacitor.annotation.PermissionCallback <methods>; @com.getcapacitor.annotation.ActivityCallback <methods>; @com.getcapacitor.PluginMethod public <methods>; }
+-keepattributes *Annotation*,Signature,InnerClasses,EnclosingMethod
+-keep class com.capacitorjs.plugins.** { *; }
+-dontwarn com.getcapacitor.**
