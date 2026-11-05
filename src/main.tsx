@@ -10,6 +10,7 @@ import { applyFx } from "./effects";
 import { watchVisibility } from "./visibility";
 import { applyMotion } from "./motion";
 import App from "./App.tsx";
+import AuthGate from "./AuthGate.tsx";
 
 // Limpieza: borra cualquier copia de canciones que una versión de prueba anterior haya dejado en el teléfono.
 try { indexedDB.deleteDatabase("crescendo-songs"); } catch { /* sin almacenamiento */ }
@@ -20,7 +21,9 @@ watchVisibility();
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
-    <App />
+    <AuthGate>
+      <App />
+    </AuthGate>
   </StrictMode>
 );
 

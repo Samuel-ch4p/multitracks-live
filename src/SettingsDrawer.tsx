@@ -4,6 +4,7 @@ import { setRespectSystemMotion, useMotion } from "./motion";
 import { fpsSnapshot } from "./fpsMonitor";
 import { NORM_MODES, NORM_MODE_LABEL, type NormMode } from "./normConfig.ts";
 import { pistas } from "./format";
+import { useAccount } from "./AuthGate";
 
 export type DiagnosticsInfo = {
   audio: { state: string; sampleRate: number; baseLatency: number; outputLatency: number } | null;
@@ -31,6 +32,7 @@ export default function SettingsDrawer({ normMode, onNormMode, onOpenProfiles, g
   const [fx] = useFx();
   const { systemReduce, respect } = useMotion();
   const [view, setView] = useState<"settings" | "diag">("settings");
+  const account = useAccount();
   return (
     <div className="drawer-backdrop" onClick={onClose}>
       <aside className="drawer settings-drawer" onClick={(event) => event.stopPropagation()} aria-label={view === "settings" ? "Ajustes" : "Diagnóstico"}>
@@ -70,6 +72,7 @@ export default function SettingsDrawer({ normMode, onNormMode, onOpenProfiles, g
 
             <button className="settings-link" onClick={onOpenProfiles}>Administrar perfiles de pistas</button>
             <button className="settings-link" onClick={() => setView("diag")}>Diagnóstico</button>
+            {account && <button className="settings-link" onClick={account.signOut}>Cerrar sesión · {account.email}</button>}
           </>
         ) : (
           <Diagnostics getDiagnostics={getDiagnostics} />

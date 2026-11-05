@@ -1,0 +1,17 @@
+/* Pantallas de acceso (inicio de sesión, registro, cuenta pendiente). Solo variables de tokens.css. */
+.auth-screen { position: fixed; inset: 0; z-index: 50; display: flex; align-items: center; justify-content: center; overflow-y: auto; padding: max(20px, env(safe-area-inset-top)) 20px max(20px, env(safe-area-inset-bottom)); background: linear-gradient(180deg, var(--c-bg-2), var(--c-bg-1)); color: var(--c-text); }
+.auth-card { display: flex; width: 100%; max-width: 380px; flex-direction: column; gap: 12px; padding: 24px 20px; border: 1px solid var(--c-line); border-radius: 16px; background: var(--c-panel); }
+.auth-card h1 { margin: 0; font-size: 18px; font-weight: 700; text-align: center; }
+.auth-card p { margin: 0; color: var(--c-muted); font-size: 13px; line-height: 1.5; text-align: center; }
+.auth-mark { display: block; width: 56px; height: 56px; margin: 0 auto 4px; }
+.auth-card label { display: flex; flex-direction: column; gap: 6px; }
+.auth-card label span { color: var(--c-faint); font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
+.auth-card input { min-height: 46px; padding: 0 12px; border: 1px solid var(--c-edge); border-radius: 10px; background: var(--c-bg-1); color: var(--c-text); font-size: 16px; }
+.auth-card input:focus { border-color: var(--c-silver); outline: none; }
+.auth-primary { min-height: 48px; margin-top: 4px; border: 1px solid var(--c-line-strong); border-radius: 12px; background: var(--grad-metal); color: var(--c-bg-1); font-size: 12px; font-weight: 800; letter-spacing: .1em; touch-action: manipulation; }
+.auth-primary:disabled { opacity: .6; }
+.auth-link { min-height: 40px; background: none; border: 0; color: var(--c-muted); font-size: 13px; text-decoration: underline; touch-action: manipulation; }
+.auth-card p.auth-error { padding: 8px 10px; border: 1px solid color-mix(in srgb, var(--c-danger) 32%, transparent); border-radius: 8px; background: color-mix(in srgb, var(--c-danger) 24%, transparent); color: var(--c-danger-soft); }
+.auth-card p.auth-info { padding: 8px 10px; border: 1px solid var(--c-line); border-radius: 8px; background: var(--c-glass); color: var(--c-text); }
+.auth-card p.auth-contact { color: var(--c-text); }
+.auth-card p.auth-note { font-size: 12px; color: var(--c-faint); }
