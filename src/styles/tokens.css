@@ -68,6 +68,17 @@
   --fam-guide-rgb: 155 92 255;
   --fam-vocal: #ff4fa3;
   --fam-vocal-rgb: 255 79 163;
+  /* Relleno del carril de cada fader por familia: mismo tono que la franja, con luminosidad y saturación equilibradas
+     para que ninguno grite sobre el fondo azul noche (todos ~70 % de luminosidad). Un canal sin familia usa --c-fader-fill (cobre). */
+  --fill-rhythm: #ed5a65;
+  --fill-harmony: #6e97f7;
+  --fill-guide: #af7bf4;
+  --fill-vocal: #f471b3;
+  --fill-neutral: var(--c-silver);
+  /* Morado como TEXTO (p. ej. "PARA EL EQUIPO"): mismo tono que Click y Guía, contraste > 4,5:1 sobre el fondo oscuro */
+  --c-guide-text: var(--fill-guide);
+  /* Color de los segmentos iluminados de los medidores (hoy cobre en todos; aquí se puede pintar con el color del canal más adelante) */
+  --c-meter: var(--c-accent);
   --fam-neutral: var(--c-silver);
   --fam-neutral-rgb: 211 215 220;
   --fam-ok: var(--c-success);

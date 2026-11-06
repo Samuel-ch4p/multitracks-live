@@ -283,7 +283,7 @@ const ChannelStrip = memo(function ChannelStrip({ track, displayName, dimmed, on
     bindMeterElements(String(track.id), rootRef.current, fillRef.current);
     return () => bindMeterElements(String(track.id), null, null);
   }, [track.id]);
-  const style = { "--channel-color": family.color, "--channel-rgb": family.rgb } as React.CSSProperties;
+  const style = { "--channel-color": family.color, "--channel-rgb": family.rgb, "--c-canal": family.fill } as React.CSSProperties;
   return (
     <article
       ref={rootRef}

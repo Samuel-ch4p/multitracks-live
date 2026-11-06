@@ -9,12 +9,13 @@
  */
 export type Family = "guide" | "vocal" | "rhythm" | "harmony" | "neutral";
 
-export const FAMILY_COLORS: Record<Family, { color: string; rgb: string }> = {
-  rhythm: { color: "var(--fam-rhythm)", rgb: "var(--fam-rhythm-rgb)" },
-  harmony: { color: "var(--fam-harmony)", rgb: "var(--fam-harmony-rgb)" },
-  guide: { color: "var(--fam-guide)", rgb: "var(--fam-guide-rgb)" },
-  vocal: { color: "var(--fam-vocal)", rgb: "var(--fam-vocal-rgb)" },
-  neutral: { color: "var(--fam-neutral)", rgb: "var(--fam-neutral-rgb)" },
+/** color/rgb: franja del canal · fill: relleno del carril del fader (versión equilibrada del mismo tono). */
+export const FAMILY_COLORS: Record<Family, { color: string; rgb: string; fill: string }> = {
+  rhythm: { color: "var(--fam-rhythm)", rgb: "var(--fam-rhythm-rgb)", fill: "var(--fill-rhythm)" },
+  harmony: { color: "var(--fam-harmony)", rgb: "var(--fam-harmony-rgb)", fill: "var(--fill-harmony)" },
+  guide: { color: "var(--fam-guide)", rgb: "var(--fam-guide-rgb)", fill: "var(--fill-guide)" },
+  vocal: { color: "var(--fam-vocal)", rgb: "var(--fam-vocal-rgb)", fill: "var(--fill-vocal)" },
+  neutral: { color: "var(--fam-neutral)", rgb: "var(--fam-neutral-rgb)", fill: "var(--fill-neutral)" },
 };
 
 const KEYWORDS: Record<Exclude<Family, "neutral">, string[]> = {
