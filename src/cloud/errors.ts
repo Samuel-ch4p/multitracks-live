@@ -1,8 +1,9 @@
 export type CloudErrorKind =
-  | "config" | "network" | "no_session" | "pending" | "expired" | "blocked" | "device_limit" | "daily_limit"
+  | "config" | "network" | "no_session" | "pending" | "expired" | "blocked" | "paused" | "device_limit" | "usage_limit"
   | "not_found" | "server" | "cancelled" | "other";
 
-type Extra = { expires_at?: string; max_devices?: number; daily_limit?: number };
+/** Solo datos que se pueden mostrar: nunca contadores de uso ni números de límites. */
+type Extra = { expires_at?: string };
 
 export class CloudError extends Error {
   kind: CloudErrorKind;
@@ -16,7 +17,15 @@ export class CloudError extends Error {
   }
   /** Estados de cuenta que se muestran en pantalla completa y no se arreglan reintentando la descarga. */
   get isAccountState() {
-    return this.kind === "pending" || this.kind === "expired" || this.kind === "blocked" || this.kind === "device_limit";
+    return this.kind === "pending" || this.kind === "expired" || this.kind === "blocked" || this.kind === "paused" || this.kind === "device_limit";
+  }
+  /** Errores que se resuelven escribiendo a soporte: la pantalla ofrece el botón de WhatsApp / correo. */
+  get showsSupport() {
+    return this.isAccountState || this.kind === "usage_limit";
+  }
+  /** Afectan a todas las descargas siguientes: una cola se detiene en vez de seguir intentando. */
+  get blocksAll() {
+    return this.kind === "no_session" || this.isAccountState || this.kind === "usage_limit";
   }
 }
 
@@ -27,19 +36,19 @@ export async function errorFromResponse(resp: Response): Promise<CloudError> {
   const code = typeof body.error === "string" ? body.error : "";
   const extra: Extra = {
     expires_at: typeof body.expires_at === "string" ? body.expires_at : undefined,
-    max_devices: typeof body.max_devices === "number" ? body.max_devices : undefined,
-    daily_limit: typeof body.daily_limit === "number" ? body.daily_limit : undefined,
   };
   const s = resp.status;
+  // Límites de uso (diario, mensual o 429 sin motivo): un solo caso, con mensaje suave y sin cifras.
+  if (code === "daily_limit" || code === "monthly_limit" || s === 429) return new CloudError("usage_limit", s, extra, code);
   if (s === 401) return new CloudError("no_session", s, extra, code);
   if (s === 403) {
     if (code === "not_active" || code === "not_member") return new CloudError("pending", s, extra, code);
     if (code === "expired") return new CloudError("expired", s, extra, code);
     if (code === "blocked") return new CloudError("blocked", s, extra, code);
+    if (code === "paused") return new CloudError("paused", s, extra, code); // cuenta en pausa por uso inusual (el servidor la activará después)
     if (code === "device_limit") return new CloudError("device_limit", s, extra, code);
     return new CloudError("other", s, extra, code);
   }
-  if (s === 429) return new CloudError("daily_limit", s, extra, code);
   if (s === 404) return new CloudError("not_found", s, extra, code);
   if (s >= 500) return new CloudError("server", s, extra, code);
   return new CloudError("other", s, extra, code); // incluye 400 bad_device (bug nuestro)
@@ -61,8 +70,9 @@ export function friendlyCloudMessage(error: unknown): string {
       case "pending": return "Tu cuenta aún no está activa.";
       case "expired": { const d = formatDate(error.extra.expires_at); return d ? `Tu membresía venció el ${d}.` : "Tu membresía venció."; }
       case "blocked": return "Cuenta bloqueada, contáctanos.";
-      case "device_limit": return `Esta cuenta ya está en ${error.extra.max_devices ?? 2} dispositivos. Escríbenos para cambiar de dispositivo.`;
-      case "daily_limit": return `Llegaste al límite de ${error.extra.daily_limit ?? "canciones"} canciones por hoy. Vuelve mañana.`;
+      case "paused": return "Tu cuenta está en pausa por uso inusual. Escríbenos por soporte.";
+      case "device_limit": return "Esta cuenta ya está en uso en el máximo de dispositivos. Escríbenos para cambiar de dispositivo.";
+      case "usage_limit": return "Alcanzaste el uso máximo por ahora. Inténtalo más tarde o escríbenos por soporte.";
       case "not_found": return "Esta canción no está disponible por ahora. Intenta de nuevo más tarde.";
       case "server": return "La Nube Crescendo tuvo un problema. Intenta de nuevo en unos minutos.";
       case "cancelled": return "Descarga cancelada.";

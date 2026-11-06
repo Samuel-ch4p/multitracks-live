@@ -58,7 +58,7 @@ export async function runSetlistQueue(refs: SavedSong[], deps: Deps): Promise<{ 
         for (const rest of refs.slice(index)) results.push({ title: rest.title, ok: false, reason: "Cancelada." });
         return { results, cancelled: true };
       }
-      if (e instanceof CloudError && (e.kind === "no_session" || e.isAccountState)) {
+      if (e instanceof CloudError && e.blocksAll) {
         results.push({ title: ref.title, ok: false, reason: friendlyCloudMessage(e) });
         for (const rest of refs.slice(index + 1)) results.push({ title: rest.title, ok: false, reason: "No se intentó." });
         return { results, cancelled: false, stopReason: friendlyCloudMessage(e) };

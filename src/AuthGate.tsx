@@ -120,6 +120,8 @@ function ProblemScreen({ error, email, onRetry, onSignOut }: { error: CloudError
     error.kind === "pending" ? ["PENDIENTE DE ACTIVACIÓN", "Tu cuenta aún no está activa"]
     : error.kind === "expired" ? ["MEMBRESÍA VENCIDA", "Tu membresía venció"]
     : error.kind === "blocked" ? ["CUENTA BLOQUEADA", "Cuenta bloqueada"]
+    : error.kind === "paused" ? ["CUENTA EN PAUSA", "Tu cuenta está en pausa"]
+    : error.kind === "usage_limit" ? ["USO MÁXIMO", "Uso máximo por ahora"]
     : error.kind === "device_limit" ? ["LÍMITE DE DISPOSITIVOS", "Demasiados dispositivos"]
     : ["SIN VERIFICAR", "No pudimos verificar tu cuenta"];
   const message = error.kind === "pending"
@@ -131,13 +133,13 @@ function ProblemScreen({ error, email, onRetry, onSignOut }: { error: CloudError
       <p>{message}</p>
       {error.kind === "pending" && email && <div className="auth-email"><span>Cuenta registrada</span><strong>{email}</strong></div>}
       <div className="auth-actions">
-        {error.isAccountState && (
+        {error.showsSupport && (
           <button className="auth-primary" onClick={() => void openExternal(whatsappLink(supportMessage(error.kind, email)))}>{whatsappLabel}</button>
         )}
-        <button className={error.isAccountState ? "auth-secondary" : "auth-primary"} onClick={onRetry}>REINTENTAR</button>
+        <button className={error.showsSupport ? "auth-secondary" : "auth-primary"} onClick={onRetry}>REINTENTAR</button>
         <button className="auth-link" onClick={onSignOut}>Cerrar sesión</button>
       </div>
-      {error.isAccountState
+      {error.showsSupport
         ? <p className="auth-contact">WhatsApp {CONTACTO_SOPORTE.whatsappDisplay}</p>
         : <p className="auth-hint">{supportHint()}</p>}
     </Screen>
@@ -149,6 +151,8 @@ function supportMessage(kind: CloudError["kind"], email: string): string {
   const account = email ? ` (${email})` : "";
   if (kind === "pending") return `Hola, creé mi cuenta en Crescendo Live${email ? ` con el correo ${email}` : ""} y quiero activar mi membresía.`;
   if (kind === "expired") return email ? `Hola, quiero renovar mi membresía de Crescendo Live. Mi correo es ${email}.` : "Hola, quiero renovar mi membresía de Crescendo Live.";
+  if (kind === "paused") return `Hola, mi cuenta de Crescendo Live${account} aparece en pausa por uso inusual. ¿Me pueden ayudar?`;
+  if (kind === "usage_limit") return `Hola, alcancé el uso máximo en Crescendo Live${account} y necesito ayuda.`;
   if (kind === "blocked") return `Hola, mi cuenta de Crescendo Live${account} aparece bloqueada. ¿Me pueden ayudar?`;
   return `Hola, mi cuenta de Crescendo Live${account} llegó al límite de dispositivos y quiero cambiar de dispositivo.`;
 }

@@ -156,3 +156,9 @@
 /* Fin de lista por ventanas: el observador carga más solo; el botón es el respaldo para llegar siempre al final */
 .window-sentinel { display: flex; justify-content: center; padding: var(--sp-3) 0 var(--sp-2); }
 .lib-more { min-height: 44px; padding: 0 var(--sp-4); border: 1px solid var(--c-line-strong); border-radius: 999px; background: var(--c-glass); color: var(--c-muted); font-size: var(--fs-sm); font-weight: 600; touch-action: manipulation; }
+
+/* Aviso de uso máximo (suave, con botones de soporte) */
+.lib-limit { display: flex; flex-direction: column; gap: var(--sp-2); }
+.lib-limit p { margin: 0; }
+.support-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: var(--sp-2); }
+.support-actions .pill-btn { min-height: var(--tap); }

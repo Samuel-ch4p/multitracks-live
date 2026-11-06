@@ -1,5 +1,17 @@
 import type { CSSProperties, ReactNode } from "react";
 import BrandMark from "./BrandMark";
+import { mailtoLink, whatsappLink } from "./cloud/config";
+import { openExternal } from "./externalLink";
+
+/** Botones de soporte (WhatsApp y correo, de CONTACTO_SOPORTE). `reason` va escrito en el mensaje. */
+export function SupportActions({ reason, className = "" }: { reason: string; className?: string }) {
+  return (
+    <div className={`support-actions ${className}`}>
+      <button className="pill-btn primary" onClick={() => void openExternal(whatsappLink(`Hola, ${reason}`))}>SOPORTE POR WHATSAPP</button>
+      <button className="pill-btn" onClick={() => void openExternal(mailtoLink("Soporte Crescendo Live", `Hola, ${reason}`))}>CORREO</button>
+    </div>
+  );
+}
 
 type LoadCardProps = {
   /** Etapa: define el título de la tarjeta. */
@@ -13,10 +25,12 @@ type LoadCardProps = {
   onCancel?: () => void;
   onRetry?: () => void;
   onClose?: () => void;
+  /** Si hay motivo, la tarjeta de error ofrece escribir a soporte (límite de uso, cuenta en pausa). */
+  supportReason?: string;
 };
 
 /** Tarjeta de progreso de descarga / extracción de una canción. */
-export function LoadCard({ stage, percent, detail, fileName, error, onCancel, onRetry, onClose }: LoadCardProps) {
+export function LoadCard({ stage, percent, detail, fileName, error, onCancel, onRetry, onClose, supportReason }: LoadCardProps) {
   const title = stage === "download" ? "Descargando canción" : "Preparando pistas";
   if (error) {
     return (
@@ -26,6 +40,7 @@ export function LoadCard({ stage, percent, detail, fileName, error, onCancel, on
           <span className="eyebrow">NO SE PUDO CARGAR</span>
           <h2>{fileName || "Multitrack"}</h2>
           <p className="load-error-text">{error}</p>
+          {supportReason && <SupportActions reason={supportReason} />}
           <div className="load-actions">
             {onClose && <button className="pill-btn" onClick={onClose}>CERRAR</button>}
             {onRetry && <button className="pill-btn primary" onClick={onRetry}>REINTENTAR</button>}

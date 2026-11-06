@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { pistas } from "./format";
 import { useWindowed } from "./windowed";
-import { CloudIcon, LoadCard } from "./CloudParts";
+import { CloudIcon, LoadCard, SupportActions } from "./CloudParts";
 import { CloudError, friendlyCloudMessage } from "./cloud/errors";
 import { fetchSongFiles, isDownloading, loadCatalog, type SongProgress } from "./cloud/cloudSource";
 import { signOut } from "./cloud/auth";
@@ -29,6 +29,7 @@ const songsLabel = (n: number) => `${n} ${n === 1 ? "canción" : "canciones"}`;
 /** Mensaje de la tarjeta de error. Los errores de extracción ya vienen en español ("El ZIP está dañado…"). */
 function downloadMessage(e: unknown): string {
   if (e instanceof CloudError) {
+    if (e.kind === "paused" || e.kind === "usage_limit") return friendlyCloudMessage(e); // el mensaje ya dirige a soporte y la tarjeta trae el botón
     if (e.isAccountState) return `${friendlyCloudMessage(e)} Escríbenos por WhatsApp al ${CONTACTO_SOPORTE.whatsappDisplay}.`;
     return e.kind === "network" || e.kind === "server" || e.kind === "other" ? `${friendlyCloudMessage(e)} ${supportHint()}` : friendlyCloudMessage(e);
   }
@@ -64,6 +65,7 @@ export default function NubeBrowser({ onSongLoaded }: Props) {
   const [status, setStatus] = useState("");
   const [load, setLoad] = useState<Load>({ stage: "download", percent: null, detail: "" });
   const [loadFail, setLoadFail] = useState<string | null>(null);
+  const [loadFailKind, setLoadFailKind] = useState<string | null>(null);
   /** Límite diario alcanzado (lo informa el servidor al intentar descargar). */
   const [limit, setLimit] = useState<string | null>(null);
   const [filter, setFilter] = useState<Filter>("all");
@@ -146,6 +148,7 @@ export default function NubeBrowser({ onSongLoaded }: Props) {
     setAdding(true);
     setError("");
     setLoadFail(null);
+    setLoadFailKind(null);
     setLoad({ stage: "download", percent: null, detail: "" });
     const started = performance.now();
     let lastShown = 0;
@@ -170,8 +173,8 @@ export default function NubeBrowser({ onSongLoaded }: Props) {
       if (controller.signal.aborted || isAbort(e)) { if (mounted.current) setStatus("Descarga cancelada."); return; }
       console.error("Nube: error al descargar o extraer");
       if (e instanceof CloudError && e.kind === "no_session") { void signOut(); return; }
-      if (e instanceof CloudError && e.kind === "daily_limit") setLimit(friendlyCloudMessage(e));
-      if (mounted.current) setLoadFail(downloadMessage(e));
+      if (e instanceof CloudError && e.kind === "usage_limit") setLimit(friendlyCloudMessage(e));
+      if (mounted.current) { setLoadFail(downloadMessage(e)); setLoadFailKind(e instanceof CloudError ? e.kind : null); }
       setStatus("");
     } finally {
       abortRef.current = null;
@@ -213,7 +216,7 @@ export default function NubeBrowser({ onSongLoaded }: Props) {
         </button>
         {isSelected && playable && (
           <button className="song-add" disabled={busy || !!limit} onClick={() => void addSong(song)}>
-            {adding ? "PROCESANDO…" : limit ? "LÍMITE DIARIO ALCANZADO" : "＋ AÑADIR A MI SETLIST"}
+            {adding ? "PROCESANDO…" : limit ? "USO MÁXIMO POR AHORA" : "＋ AÑADIR A MI SETLIST"}
           </button>
         )}
       </div>
@@ -258,7 +261,7 @@ export default function NubeBrowser({ onSongLoaded }: Props) {
         )}
       </div>
 
-      {limit && <p className="lib-limit" role="status">{limit}</p>}
+      {limit && <div className="lib-limit" role="status"><p>{limit}</p><SupportActions reason="alcancé el uso máximo en Crescendo Live y necesito ayuda." /></div>}
 
       <div className="library-scroll">
         {(status || error) && index && (
@@ -334,6 +337,7 @@ export default function NubeBrowser({ onSongLoaded }: Props) {
           onCancel={adding ? cancelAdd : undefined}
           onRetry={loadFail && selected && !limit ? () => void addSong(selected) : undefined}
           onClose={() => setLoadFail(null)}
+          supportReason={loadFailKind === "usage_limit" ? "alcancé el uso máximo en Crescendo Live y necesito ayuda." : loadFailKind === "paused" ? "mi cuenta de Crescendo Live aparece en pausa por uso inusual. ¿Me pueden ayudar?" : undefined}
         />
       )}
     </>
