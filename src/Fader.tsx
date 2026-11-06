@@ -1,4 +1,5 @@
 import { useRef } from "react";
+import { lockAxis } from "./gesture";
 
 type Props = {
   value: number; // 0..100
@@ -9,16 +10,35 @@ type Props = {
 
 const clamp = (n: number) => Math.min(100, Math.max(0, n));
 
-/** Fader vertical con puntero (táctil y mouse) y teclado. Cápsula fina sobre un carril delgado; el número aparece al arrastrar. */
+type TouchGesture = {
+  id: number;
+  x: number;
+  y: number;
+  /** pending: aún dentro de la zona muerta · drag: eje vertical fijado, mueve el fader · scroll: eje horizontal, no se toca nada. */
+  mode: "pending" | "drag" | "scroll";
+  originY: number;
+  originValue: number;
+};
+
+/**
+ * Fader vertical con puntero (táctil y mouse) y teclado. Cabeza en barra vertical sobre un carril delgado; el número aparece al arrastrar.
+ * Con el dedo: touch-action pan-x (la lista de canales sigue desplazándose) y bloqueo de eje: tras una zona muerta de 8 px, si el
+ * movimiento es horizontal no se cambia ningún valor; si es vertical, el fader se mueve en relativo (sin saltos) hasta soltar.
+ * Un toque corto con el dedo no cambia el volumen (doble toque: 80).
+ */
 export default function Fader({ value, onChange, label, dimmed }: Props) {
   const railRef = useRef<HTMLDivElement>(null);
   const rootRef = useRef<HTMLDivElement>(null);
-  // El fader (touch-action: none) es solo del fader: con el dedo, un toque corto salta a esa altura y arrastrar lo mueve.
-  // Para desplazar la lista de canales se arrastra desde fuera de la zona del fader (cabecera, medidor, nombre).
-  const gesture = useRef<{ id: number; x: number; y: number; time: number; engaged: boolean } | null>(null);
+  const gesture = useRef<TouchGesture | null>(null);
+  const valueRef = useRef(value);
+  valueRef.current = value;
 
-  // Mientras se arrastra, la perilla sigue al dedo sin retraso; al soltar o al cambiar por toque/teclado se desliza con inercia (CSS).
+  // Mientras se arrastra, la cabeza sigue al dedo sin retraso; al soltar o al cambiar por toque/teclado se desliza con inercia (CSS).
   const setDragging = (on: boolean) => rootRef.current?.classList.toggle("is-dragging", on);
+
+  function railHeight() {
+    return railRef.current?.getBoundingClientRect().height || 1;
+  }
 
   function fromPointer(clientY: number) {
     const rail = railRef.current;
@@ -40,7 +60,7 @@ export default function Fader({ value, onChange, label, dimmed }: Props) {
       aria-valuenow={value}
       onPointerDown={(event) => {
         if (event.pointerType === "touch") {
-          gesture.current = { id: event.pointerId, x: event.clientX, y: event.clientY, time: performance.now(), engaged: false };
+          gesture.current = { id: event.pointerId, x: event.clientX, y: event.clientY, mode: "pending", originY: event.clientY, originValue: valueRef.current };
           return;
         }
         event.currentTarget.setPointerCapture(event.pointerId);
@@ -50,25 +70,26 @@ export default function Fader({ value, onChange, label, dimmed }: Props) {
       onPointerMove={(event) => {
         const g = gesture.current;
         if (g && g.id === event.pointerId) {
-          if (!g.engaged) {
-            const dy = Math.abs(event.clientY - g.y);
-            if (dy < 4) return;
-            g.engaged = true;
+          if (g.mode === "scroll") return;
+          if (g.mode === "pending") {
+            const axis = lockAxis(event.clientX - g.x, event.clientY - g.y);
+            if (axis === "pending") return;
+            if (axis === "horizontal") { g.mode = "scroll"; return; }
+            g.mode = "drag";
+            g.originY = event.clientY; // el arrastre parte de aquí: la cabeza no da un salto al decidirse el eje
+            g.originValue = valueRef.current;
             event.currentTarget.setPointerCapture(event.pointerId);
             setDragging(true);
+            return;
           }
-          fromPointer(event.clientY);
+          onChange(Math.round(clamp(g.originValue + ((g.originY - event.clientY) / railHeight()) * 100)));
           return;
         }
         if (event.currentTarget.hasPointerCapture(event.pointerId)) fromPointer(event.clientY);
       }}
       onPointerUp={(event) => {
         setDragging(false);
-        const g = gesture.current;
-        gesture.current = null;
-        // Toque corto y quieto: salta a esa altura.
-        if (g && g.id === event.pointerId && !g.engaged && performance.now() - g.time < 300
-          && Math.abs(event.clientX - g.x) < 6 && Math.abs(event.clientY - g.y) < 6) fromPointer(event.clientY);
+        if (gesture.current?.id === event.pointerId) gesture.current = null;
       }}
       onPointerCancel={() => { gesture.current = null; setDragging(false); }}
       onLostPointerCapture={() => setDragging(false)}
