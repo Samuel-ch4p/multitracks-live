@@ -27,13 +27,13 @@
 .mx-scroll[data-left="1"]::before, .mx-scroll[data-right="1"]::after { opacity: 1; }
 .mx-sep { flex: none; width: 1px; margin: 4px 2px; background: var(--c-line-strong); }
 .mx-team {
-  position: relative; display: flex; flex: none; gap: 4px; padding-left: 22px;
-  border-radius: var(--r-sm); background: color-mix(in srgb, var(--c-accent) 4%, transparent);
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--c-accent) 24%, transparent);
+  position: relative; display: flex; flex: none; gap: 4px; padding-left: 28px; /* carril propio de 28 px para el rótulo: nada se le encima */
+  border-radius: var(--r-sm); background: color-mix(in srgb, var(--c-guide-text) 5%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--c-guide-text) 26%, transparent);
 }
 .mx-team-label {
-  position: absolute; top: 0; bottom: 0; left: 0; display: grid; width: 20px; place-items: center; transform: rotate(180deg);
-  color: var(--c-accent); font-size: var(--fs-xs); font-weight: 700; letter-spacing: .14em; white-space: nowrap; writing-mode: vertical-rl;
+  position: absolute; z-index: 4; top: 0; bottom: 0; left: 0; display: grid; width: 26px; min-height: 0; place-items: center; overflow: hidden; transform: rotate(180deg);
+  color: var(--c-guide-text); font-size: 12px; font-weight: 600; letter-spacing: .1em; text-transform: uppercase; white-space: nowrap; writing-mode: vertical-rl;
 }
 .mx-team > .channel { width: clamp(78px, 9vw, 100px); }
 .channel.master { flex: 0 0 clamp(96px, 12vw, 130px); }
