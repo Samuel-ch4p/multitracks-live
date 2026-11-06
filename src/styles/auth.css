@@ -46,7 +46,7 @@
 .art-faders > span { position: relative; width: 44px; height: 100%; }
 .art-faders > span::before { content: ""; position: absolute; top: 0; bottom: 0; left: 50%; width: 6px; transform: translateX(-50%); border-radius: 3px; background: var(--c-bg-0); box-shadow: inset 0 0 0 1px var(--c-line-strong); }
 .art-faders i { position: absolute; bottom: 0; left: 50%; width: 3px; transform: translateX(-50%); border-radius: 2px; background: var(--c-fader-fill); }
-.art-faders b { position: absolute; left: 50%; width: 11px; height: 34px; transform: translate(-50%, 50%); border-radius: 4px; background: linear-gradient(90deg, color-mix(in srgb, var(--c-silver) 62%, var(--c-bg-0)), var(--c-text) 36%, var(--c-silver) 64%, color-mix(in srgb, var(--c-silver) 55%, var(--c-bg-0))); box-shadow: 0 1px 3px color-mix(in srgb, var(--c-black) 55%, transparent); }
+.art-faders b { position: absolute; left: 50%; width: 40px; height: 18px; transform: translate(-50%, 50%); border-radius: 9px; background: linear-gradient(180deg, var(--c-text), var(--c-silver)); box-shadow: 0 1px 3px color-mix(in srgb, var(--c-black) 55%, transparent); }
 
 /* Formularios: inicio de sesión, registro y recuperar contraseña */
 .auth-card { display: flex; width: min(400px, 100%); flex-direction: column; gap: var(--sp-4); padding: var(--sp-5) var(--sp-5); border: 1px solid var(--c-line); border-radius: var(--r-xl); background: var(--c-panel); }

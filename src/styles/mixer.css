@@ -4,8 +4,8 @@
    ===================================================================== */
 
 /* ---------- Medidas del mezclador (se ajustan a la altura de la pantalla) ---------- */
-.channels-box { --mx-ch-w: clamp(92px, 11vw, 124px); --mx-head: 32px; --mx-pan: 38px; --mx-name: 20px; --mx-pad: 6px; --fd-cap-h: 38px; --fd-cap-w: 12px; --fd-m: calc(var(--fd-cap-h) / 2); }
-@media (max-height: 420px) { .channels-box { --mx-head: 28px; --mx-pan: 32px; --mx-name: 16px; --mx-pad: 4px; --fd-cap-h: 34px; } }
+.channels-box { --mx-ch-w: clamp(92px, 11vw, 124px); --mx-head: 32px; --mx-pan: 38px; --mx-name: 20px; --mx-pad: 6px; }
+@media (max-height: 420px) { .channels-box { --mx-head: 28px; --mx-pan: 32px; --mx-name: 16px; --mx-pad: 4px; } }
 @media (min-height: 640px) { .channels-box { --mx-head: 40px; --mx-pan: 44px; --mx-name: 24px; --mx-pad: 8px; } }
 
 /* ---------- Tablero: canales normales | separador | PARA EL EQUIPO | MASTER ---------- */
@@ -86,27 +86,25 @@
 .channel:hover .channel-remove, .channel-remove:focus-visible { opacity: 1; }
 @media (hover: none) { .channel-remove { display: none; } }
 
-/* ---------- Fader: barra vertical de metal satinado sobre un carril oscuro y delgado ---------- */
+/* ---------- Fader: cápsula clara y fina sobre un carril oscuro y delgado ---------- */
 .fader-wrap { position: relative; display: flex; min-height: 0; justify-content: center; }
-/* Zona táctil: solo el carril y la cabeza (40 px de ancho). pan-x deja que el navegador siga desplazando la lista en horizontal;
+/* Zona táctil: solo el carril y la cabeza (44 px de ancho). pan-x deja que el navegador siga desplazando la lista en horizontal;
    Fader.tsx bloquea el eje (zona muerta de 8 px) para que ese deslizamiento nunca cambie el volumen. */
-.fader { position: relative; display: flex; width: 40px; height: 100%; justify-content: center; touch-action: pan-x; cursor: ns-resize; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+.fader { position: relative; display: flex; width: 44px; height: 100%; justify-content: center; touch-action: pan-x; cursor: ns-resize; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
 .fader:focus-visible { outline: 2px solid var(--c-accent); outline-offset: -2px; border-radius: 8px; }
-.fader-rail { position: relative; width: 40px; margin: var(--fd-m) 0; }
+.fader-rail { position: relative; width: 44px; margin: 14px 0; }
 .fader-groove { position: absolute; top: -8px; bottom: -8px; left: 50%; width: 8px; transform: translateX(-50%); border-radius: 4px; background: var(--c-bg-0); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--c-white) 12%, transparent), inset 0 2px 3px color-mix(in srgb, var(--c-black) 60%, transparent); }
 .fader-fill { position: absolute; bottom: 0; left: 50%; width: 4px; transform: translateX(-50%); border-radius: 2px; background: linear-gradient(to top, color-mix(in srgb, var(--c-fader-fill) 65%, var(--c-bg-0)), var(--c-fader-fill)); opacity: .9; }
 .fader-cap {
-  position: absolute; left: 50%; width: var(--fd-cap-w); height: var(--fd-cap-h); transform: translate(-50%, 50%); border-radius: 4px;
-  /* metal satinado: luz suave en el centro y bordes un poco más oscuros */
-  background: linear-gradient(90deg, color-mix(in srgb, var(--c-silver) 62%, var(--c-bg-0)) 0%, var(--c-text) 36%, var(--c-silver) 64%, color-mix(in srgb, var(--c-silver) 55%, var(--c-bg-0)) 100%);
-  background-color: var(--c-silver); border: 1px solid color-mix(in srgb, var(--c-white) 40%, transparent);
-  box-shadow: 0 1px 3px color-mix(in srgb, var(--c-black) 55%, transparent);
+  position: absolute; left: 50%; width: 44px; height: 20px; transform: translate(-50%, 50%); border-radius: 10px;
+  background: linear-gradient(180deg, var(--c-text) 0%, var(--c-silver) 100%); background-color: var(--c-silver);
+  border: 1px solid color-mix(in srgb, var(--c-white) 55%, transparent); box-shadow: 0 1px 3px color-mix(in srgb, var(--c-black) 55%, transparent);
   transition: box-shadow .15s ease;
 }
-.fader-cap i { position: absolute; top: 22%; bottom: 22%; left: 50%; width: 2px; margin-left: -1px; border-radius: 1px; background: color-mix(in srgb, var(--c-bg-0) 28%, transparent); }
+.fader-cap i { position: absolute; top: 50%; right: 28%; left: 28%; height: 2px; margin-top: -1px; border-radius: 1px; background: color-mix(in srgb, var(--c-bg-0) 30%, transparent); }
 .fader:not(.is-dragging) .fader-fill { transition: height .18s var(--ease-out); }
 .fader:not(.is-dragging) .fader-cap { transition: bottom .18s var(--ease-out), box-shadow .15s ease; }
-.fader.is-dragging .fader-cap { box-shadow: 0 0 0 5px color-mix(in srgb, var(--c-accent) 20%, transparent), 0 1px 3px color-mix(in srgb, var(--c-black) 55%, transparent); }
+.fader.is-dragging .fader-cap { box-shadow: 0 0 0 7px color-mix(in srgb, var(--c-accent) 20%, transparent), 0 1px 3px color-mix(in srgb, var(--c-black) 55%, transparent); }
 .fader-value, .pan-value {
   position: absolute; z-index: 5; left: 50%; bottom: calc(100% + 8px); padding: 2px 8px; border: 1px solid var(--accent-line); border-radius: 8px; background: var(--c-card-2);
   color: var(--c-accent-strong); font-size: 14px; font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1.3; pointer-events: none;
@@ -118,7 +116,7 @@
 
 /* ---------- Medidor segmentado fino con degradado cálido y zona de pico ---------- */
 .channel-meter {
-  position: absolute; top: var(--fd-m); bottom: var(--fd-m); left: 4px; width: 9px; overflow: hidden; border-radius: 2px; background: var(--c-card-2); pointer-events: none;
+  position: absolute; top: 14px; bottom: 14px; left: 4px; width: 9px; overflow: hidden; border-radius: 2px; background: var(--c-card-2); pointer-events: none;
   -webkit-mask-image: repeating-linear-gradient(to top, var(--c-black) 0 3px, transparent 3px 5px); mask-image: repeating-linear-gradient(to top, var(--c-black) 0 3px, transparent 3px 5px);
 }
 .channel-meter::before { content: ""; position: absolute; top: 0; right: 0; left: 0; height: 14%; background: color-mix(in srgb, var(--c-accent-strong) 30%, transparent); }
@@ -135,7 +133,7 @@
 .pan-center { position: absolute; top: 50%; left: 50%; display: block; width: 1px; height: 10px; transform: translate(-50%, -50%); background: var(--c-line-strong); }
 .pan-fill { position: absolute; top: 50%; height: 4px; transform: translateY(-50%); border-radius: 1px; background: var(--c-fader-fill); opacity: .85; }
 .pan-thumb { position: absolute; top: 50%; width: 18px; height: 18px; transform: translate(-50%, -50%); border-radius: 50%; background: var(--c-silver); border: 1px solid color-mix(in srgb, var(--c-white) 55%, transparent); box-shadow: 0 1px 3px color-mix(in srgb, var(--c-black) 55%, transparent); transition: box-shadow .15s ease; }
-.pan-bar.is-dragging .pan-thumb { box-shadow: 0 0 0 5px color-mix(in srgb, var(--c-accent) 20%, transparent), 0 1px 3px color-mix(in srgb, var(--c-black) 55%, transparent); }
+.pan-bar.is-dragging .pan-thumb { box-shadow: 0 0 0 7px color-mix(in srgb, var(--c-accent) 20%, transparent), 0 1px 3px color-mix(in srgb, var(--c-black) 55%, transparent); }
 .pan-bar:focus-visible { border-radius: 8px; outline: 2px solid var(--c-accent); outline-offset: 0; }
 
 /* ---------- Repertorio: pestañas compactas ---------- */
@@ -202,6 +200,9 @@
   .wave-meta { height: 18px; }
   .channels-box { --mx-head: 28px; --mx-pan: 34px; --mx-name: 16px; --mx-pad: 4px; }
   .channel { gap: 2px; padding: 4px 3px 3px; }
+  .fader-rail { margin: 11px 0; }
+  .fader-cap { height: 18px; border-radius: 9px; }
+  .channel-meter { top: 11px; bottom: 11px; }
   .live-status { display: none; }
 }
 
