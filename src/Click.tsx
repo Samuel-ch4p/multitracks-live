@@ -1,4 +1,4 @@
-import { useState, useSyncExternalStore } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import { BPM_MAX, BPM_MIN, type ClickOutput, type ClickSound, type Metronome } from "./metronome";
 
 type Props = {
@@ -45,6 +45,24 @@ function Segmented<T extends string | number>({ label, value, options, onChange,
       {hint && <p className="hint">{hint}</p>}
     </div>
   );
+}
+
+/**
+ * Punto de pulso del botón CLICK de la barra superior. Se enciende justo cuando suena cada tiempo (la misma señal del metrónomo que
+ * usan los puntos del panel) y el primer tiempo con acento se marca más. Es un componente aparte para que solo él se repinte en cada pulso.
+ */
+export function ClickPulse({ metronome }: { metronome: Metronome }) {
+  const state = useSyncExternalStore(metronome.subscribe, metronome.getState);
+  const beat = useSyncExternalStore(metronome.subscribeBeat, metronome.getBeat);
+  const [lit, setLit] = useState(false);
+  const accented = state.accent && beat === 0;
+  useEffect(() => {
+    if (!state.running || beat < 0) return;
+    setLit(true);
+    const timer = window.setTimeout(() => setLit(false), accented ? 150 : 90);
+    return () => window.clearTimeout(timer);
+  }, [beat, state.running, accented]);
+  return <i className={`click-pulse ${state.running ? "is-on" : ""} ${state.running && lit ? "is-lit" : ""} ${accented ? "is-accent" : ""}`} aria-hidden="true" />;
 }
 
 export default function Click({ metronome, onClose }: Props) {

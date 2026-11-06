@@ -1,0 +1,71 @@
+/* =====================================================================
+   Diseño nuevo · Click (botón de la barra superior, indicador de pulso y panel de ajustes).
+   Se carga al final: sustituye el aspecto anterior sin tocar la lógica del metrónomo. Solo variables de tokens.css.
+   Respeta el ajuste Animaciones (data-fx): Completas = el pulso escala y se ilumina; Reducidas = solo cambia de color;
+   Desactivadas = parpadeo instantáneo (el indicador sigue marcando el pulso porque es información, no decoración).
+   ===================================================================== */
+
+/* ---------- Barra superior: BPM y botón CLICK ---------- */
+.tempo { border-color: var(--c-line); border-radius: var(--r-sm); background: var(--c-card); box-shadow: none; position: relative; }
+.tempo::after, .click-btn::after { content: ""; position: absolute; inset: -4px 0; } /* zona táctil de al menos 44 px de alto */
+.tempo strong { color: var(--c-accent-strong); font-family: var(--font-serif); font-weight: 500; }
+.tempo small { color: var(--c-faint); }
+.tempo:active { background: var(--c-card-2); }
+
+.click-btn { position: relative; min-width: 64px; border-color: var(--c-line); border-radius: var(--r-sm); background: var(--c-card); box-shadow: none; color: var(--c-muted); }
+.click-btn:not(.is-running):hover { background: var(--c-card); }
+.click-btn.is-running, .click-btn.is-running:hover {
+  border-color: var(--accent-line); background: color-mix(in srgb, var(--c-accent) 14%, var(--c-card)); color: var(--c-accent-strong); box-shadow: none;
+}
+.click-btn.is-running svg { filter: none; }
+.click-btn .btn-label { letter-spacing: .08em; }
+
+/* Indicador de pulso: punto en la esquina del botón */
+.click-pulse {
+  position: absolute; top: 6px; right: 6px; width: 7px; height: 7px; border-radius: 50%; pointer-events: none;
+  background: var(--c-grey-2); opacity: .55; transition: opacity .14s ease, background-color .14s ease, transform .14s var(--ease-out);
+}
+.click-pulse.is-on { background: var(--c-accent); opacity: .85; }
+.click-pulse.is-lit { background: var(--c-accent-strong); opacity: 1; transform: scale(1.25); transition-duration: 0s; }
+/* Primer tiempo con acento: más marcado (más grande, más claro y con halo) */
+.click-pulse.is-lit.is-accent { background: var(--c-white); transform: scale(1.9); box-shadow: 0 0 0 3px color-mix(in srgb, var(--c-accent) 45%, transparent); }
+:root[data-fx="reduced"] .click-pulse, :root[data-fx="off"] .click-pulse { transform: none !important; box-shadow: none !important; }
+:root[data-fx="reduced"] .click-pulse.is-lit.is-accent, :root[data-fx="off"] .click-pulse.is-lit.is-accent { background: var(--c-white); }
+
+/* ---------- Panel de ajustes del Click ---------- */
+.click-drawer { gap: var(--sp-4); background: var(--c-panel); border-left: 1px solid var(--c-line-strong); }
+.click-drawer .drawer-head h2 { font-family: var(--font-serif); font-size: 22px; font-weight: 500; }
+.click-drawer .drawer-head .pill-btn { min-height: var(--tap); min-width: var(--tap); padding: 0 var(--sp-4); }
+
+.bpm-box { gap: var(--sp-3); padding: var(--sp-4) var(--sp-3); border: 1px solid var(--c-line); border-radius: var(--r-md); background: var(--c-card); box-shadow: none; }
+.step-btn { min-width: var(--tap); height: var(--tap); border: 1px solid var(--c-line-strong); border-radius: var(--r-xs); background: var(--c-glass); color: var(--c-text); }
+.step-btn:active:not(:disabled) { background: var(--c-glass-strong); }
+.step-btn:disabled { opacity: .35; }
+.bpm-field input { color: var(--c-accent-strong); font-family: var(--font-serif); font-weight: 500; }
+.bpm-field span { color: var(--c-faint); }
+
+/* Deslizadores (tempo y volumen): mismo carril y cabeza que el resto de la app */
+.click-drawer .bpm-slider { height: var(--tap); background: none; accent-color: var(--c-fader-fill); touch-action: pan-y; }
+
+/* Puntos de pulso del compás: el primero (acento) es más grande y de cobre */
+.beat-dots { min-height: 24px; gap: 10px; }
+.beat-dot { width: 12px; height: 12px; background: var(--c-grey-1); box-shadow: none; transition: background-color .08s ease, transform .08s var(--ease-out), box-shadow .08s ease; }
+.beat-dot.first { width: 16px; height: 16px; background: color-mix(in srgb, var(--c-accent) 30%, var(--c-grey-1)); box-shadow: none; }
+.beat-dot.on { background: var(--c-accent-strong); box-shadow: 0 0 0 3px color-mix(in srgb, var(--c-accent) 30%, transparent); transform: scale(1.2); }
+.beat-dot.first.on { background: var(--c-white); box-shadow: 0 0 0 5px color-mix(in srgb, var(--c-accent) 45%, transparent); transform: scale(1.3); }
+:root[data-fx="reduced"] .beat-dot, :root[data-fx="reduced"] .beat-dot.on, :root[data-fx="off"] .beat-dot, :root[data-fx="off"] .beat-dot.on { transform: none; }
+
+.click-actions { gap: var(--sp-2); }
+.click-actions button { min-height: 52px; border-radius: var(--r-sm); letter-spacing: .1em; }
+.tap-btn { border: 1px solid var(--c-line-strong); background: var(--c-glass); color: var(--c-text); }
+.tap-btn:active { background: var(--c-glass-strong); }
+.click-start { border: 1px solid var(--c-text); background: var(--grad-metal); color: var(--c-bg-1) !important; box-shadow: none; }
+.click-start.is-running { border-color: color-mix(in srgb, var(--c-danger) 55%, transparent); background: color-mix(in srgb, var(--c-danger) 22%, var(--c-card)); color: var(--c-danger-soft) !important; }
+
+/* Opciones (pulsos, subdivisión, acento, sonido, salida): mismo control segmentado de Ajustes */
+.click-drawer .setting { gap: var(--sp-2); }
+.click-drawer .setting-label { color: var(--c-faint); letter-spacing: .12em; }
+.click-drawer .hint { color: var(--c-faint); font-size: var(--fs-xs); line-height: 1.45; }
+.click-drawer .seg { flex-wrap: wrap; gap: 4px; padding: 4px; border: 1px solid var(--c-line); border-radius: var(--r-sm); background: var(--c-bg-2); }
+.click-drawer .seg button { min-width: var(--tap); min-height: var(--tap); border: 1px solid transparent; border-radius: 9px; background: none; color: var(--c-muted) !important; font-size: var(--fs-sm); }
+.click-drawer .seg button[aria-pressed="true"] { border-color: var(--accent-line); background: var(--accent-bg); color: var(--c-accent-strong) !important; }

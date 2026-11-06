@@ -11,6 +11,7 @@ import "./styles/mixer.css";
 import "./styles/library.css";
 import "./styles/pads.css";
 import "./styles/setlists.css";
+import "./styles/click.css";
 import ChannelScroll from "./ChannelScroll";
 import SetlistScreen from "./SetlistScreen";
 import SavedSetlists from "./SavedSetlists";
@@ -33,7 +34,7 @@ import { bindAnalyser, bindMeterElements, setMetersActive, startDemoMeters } fro
 import { useFx } from "./effects";
 import ScrubBar from "./ScrubBar";
 import { HeaderClock, ElapsedText, RemainingText, getClock, setClock, useProgress } from "./clock";
-import Click from "./Click";
+import Click, { ClickPulse } from "./Click";
 import Splash from "./Splash";
 import Pads from "./Pads";
 import { PadEngine, type PadSettings } from "./padEngine";
@@ -1314,7 +1315,7 @@ export default function App() {
             aria-pressed={click.running}
             aria-label="Activar o detener el click"
           >
-            <Icon name="metronome" /><span className="btn-label">CLICK</span>
+            <Icon name="metronome" /><span className="btn-label">CLICK</span><ClickPulse metronome={metronome} />
           </button>
           <button
             className={`glass-btn pad-btn ${padState.playing ? "is-running" : ""} ${padOpen ? "is-open" : ""}`}
