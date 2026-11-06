@@ -17,6 +17,7 @@ import SetlistScreen from "./SetlistScreen";
 import SavedSetlists from "./SavedSetlists";
 import { defaultSetlistName, saveSession, type SavedSession, type SavedSong, type SongConfig, type SongRef } from "./setlistStore";
 import { useUserId } from "./AuthGate";
+import { setAudioActive } from "./inactivity";
 import NubeBrowser from "./NubeBrowser";
 import { perfBegin, perfEnd, perfStep } from "./perf";
 import ProfileDrawer from "./ProfileDrawer";
@@ -1001,6 +1002,8 @@ export default function App() {
   }, [statusMessage]);
 
   useWakeLock(playing || click.running || padState.playing);
+  // La sesión nunca se cierra por inactividad mientras suena algo (pistas, click o pad).
+  useEffect(() => { setAudioActive(playing || click.running || padState.playing); }, [playing, click.running, padState.playing]);
   useEffect(() => { setMetersActive(playing); }, [playing]);
   const [fx, setFx] = useFx();
   const [markers, setMarkers] = useState<Marker[]>([]);

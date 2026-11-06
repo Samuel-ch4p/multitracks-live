@@ -28,3 +28,12 @@ export const mailtoLink = (subject: string, body = "") =>
 
 /** Línea discreta para errores que no se resuelven reintentando. */
 export const supportHint = () => `Si el problema continúa, escríbenos a ${CONTACTO_SOPORTE.email}.`;
+
+/**
+ * Cierre de sesión por ausencia e inactividad. Se mide con marcas de tiempo guardadas, no con temporizadores
+ * (en Android el WebView se suspende en segundo plano y los temporizadores se congelan). Ver inactivity.ts.
+ */
+/** Minutos fuera de la app (sin audio sonando al salir) tras los cuales se pide iniciar sesión de nuevo. */
+export const GRACIA_FUERA_MIN = 10;
+/** Minutos sin interacción y sin audio (en primer plano), o fuera de la app con audio al salir, tras los cuales se cierra la sesión. */
+export const INACTIVIDAD_MIN = 60;

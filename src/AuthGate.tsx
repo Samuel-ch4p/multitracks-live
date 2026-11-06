@@ -5,6 +5,7 @@ import { apiGet } from "./cloud/api";
 import { currentSession, friendlyAuthMessage, sendPasswordReset, signIn, signOut, signUp, supabase } from "./cloud/auth";
 import { CONTACTO_SOPORTE, cloudConfigured, supportHint, whatsappLink } from "./cloud/config";
 import { openExternal } from "./externalLink";
+import { expiredOnStart, startInactivityWatch } from "./inactivity";
 import { CloudError, friendlyCloudMessage } from "./cloud/errors";
 import "./styles/auth.css";
 
@@ -32,6 +33,16 @@ type Phase =
 export default function AuthGate({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [phase, setPhase] = useState<Phase>(() => (DEV_BYPASS ? { name: "ok" } : { name: "boot" }));
+  // Aviso en la pantalla de acceso tras un cierre por ausencia o inactividad.
+  const [inactivityNotice, setInactivityNotice] = useState(false);
+
+  /** Cierre local (esta app en este teléfono; no cierra otros dispositivos). No borra cultos ni configuración guardados. */
+  const expire = useCallback(async () => {
+    await signOut();
+    setSession(null);
+    setInactivityNotice(true);
+    setPhase({ name: "out" });
+  }, []);
 
   // Comprueba la cuenta con la API (el catálogo es la primera petición real; también valida dispositivo y membresía).
   const check = useCallback(async () => {
@@ -53,7 +64,9 @@ export default function AuthGate({ children }: { children: ReactNode }) {
     void currentSession().then((s) => {
       if (!alive) return;
       setSession(s);
-      if (s) void check(); else setPhase({ name: "out" });
+      if (!s) { setPhase({ name: "out" }); return; }
+      // Arranque en frío: si se salió hace más de lo permitido, se pide iniciar sesión de nuevo.
+      void expiredOnStart().then((expired) => { if (!alive) return; if (expired) void expire(); else void check(); });
     }).catch(() => alive && setPhase({ name: "out" }));
     const { data } = supabase().auth.onAuthStateChange((event, s) => {
       if (!alive) return;
@@ -61,7 +74,14 @@ export default function AuthGate({ children }: { children: ReactNode }) {
       else if (event === "TOKEN_REFRESHED" || event === "USER_UPDATED") setSession(s);
     });
     return () => { alive = false; data.subscription.unsubscribe(); };
-  }, [check]);
+  }, [check, expire]);
+
+  // Con sesión abierta y verificada: vigila ausencia e inactividad (marcas de tiempo, nunca con audio sonando ni descargas).
+  const signedIn = phase.name === "ok" && !DEV_BYPASS;
+  useEffect(() => {
+    if (!signedIn) return;
+    return startInactivityWatch(() => void expire());
+  }, [signedIn, expire]);
 
   const account = useMemo<Account | null>(
     () => (session ? { email: session.user.email ?? "", userId: session.user.id, signOut: () => { void signOut().then(() => { setSession(null); setPhase({ name: "out" }); }); } } : null),
@@ -73,7 +93,7 @@ export default function AuthGate({ children }: { children: ReactNode }) {
   }
   if (phase.name === "boot") return null; // el logo de arranque de index.html sigue visible
   if (phase.name === "out") {
-    return <AuthScreen onSignedIn={(s) => { setSession(s); void check(); }} />;
+    return <AuthScreen notice={inactivityNotice} onSignedIn={(s) => { setInactivityNotice(false); setSession(s); void check(); }} />;
   }
   if (phase.name === "checking") return <Screen title="Verificando tu cuenta…" busy><div className="auth-spinner" aria-hidden="true" /><p>Un momento.</p></Screen>;
   if (phase.name === "problem") {
@@ -151,7 +171,7 @@ function WelcomeArt() {
 
 type Mode = "welcome" | "in" | "up" | "reset";
 
-function AuthScreen({ onSignedIn }: { onSignedIn: (session: Session) => void }) {
+function AuthScreen({ onSignedIn, notice }: { onSignedIn: (session: Session) => void; notice: boolean }) {
   const [mode, setMode] = useState<Mode>("welcome");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -205,6 +225,7 @@ function AuthScreen({ onSignedIn }: { onSignedIn: (session: Session) => void }) 
               <button className="auth-primary" onClick={() => go("in")}>INICIAR SESIÓN</button>
               <button className="auth-secondary" onClick={() => go("up")}>CREAR CUENTA</button>
             </div>
+            {notice && <p className="auth-info" role="status">Cerramos tu sesión por inactividad</p>}
             <small className="auth-caption">Acceso seguro · Crescendo Live</small>
           </div>
           <WelcomeArt />
@@ -241,6 +262,7 @@ function AuthScreen({ onSignedIn }: { onSignedIn: (session: Session) => void }) 
               </span>
             </label>
           )}
+          {notice && !error && !info && <p className="auth-info" role="status">Cerramos tu sesión por inactividad</p>}
           {error && <p className="auth-error" role="alert">{error}</p>}
           {info && <p className="auth-info" role="status">{info}</p>}
           <button className="auth-primary" type="submit" disabled={busy}>
