@@ -32,3 +32,17 @@
 .sheet-failed strong { font-size: var(--fs-sm); }
 .sheet-failed small { color: var(--c-muted); font-size: var(--fs-xs); }
 @media (max-height: 420px) { .sheet { padding: var(--sp-3) var(--sp-4); gap: var(--sp-2); } .sheet h2 { font-size: 18px; } .sheet-failed { max-height: 90px; } }
+
+/* Tarjeta "Continuar" de la sesión autoguardada */
+.continue-card { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-3); padding: var(--sp-3) var(--sp-4); border: 1px solid var(--accent-line); border-radius: var(--r-md); background: color-mix(in srgb, var(--c-accent) 8%, var(--c-card)); }
+.continue-card .song-copy { min-width: 0; }
+.continue-card strong { overflow: hidden; font-family: var(--font-serif); font-size: 17px; font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
+.continue-card small { color: var(--c-muted); font-size: var(--fs-xs); }
+.continue-card .pill-btn { flex: none; min-height: 44px; padding: 0 var(--sp-4); }
+
+/* La tarjeta "Continuar" va arriba de todo (antes de la lista); el resto de "Mis cultos" queda debajo */
+.saved-setlists { display: contents; }
+.saved-setlists > * { order: 2; }
+.setlist-body > .setlist-list { order: 1; }
+.saved-setlists > .continue-card { order: 0; flex: none; }
+.saved-setlists > .saved-head { margin-top: var(--sp-2); }

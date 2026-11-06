@@ -8,12 +8,16 @@ import { openExternal } from "./externalLink";
 import { CloudError, friendlyCloudMessage } from "./cloud/errors";
 import "./styles/auth.css";
 
-type Account = { email: string; signOut: () => void };
+type Account = { email: string; userId: string; signOut: () => void };
 const AccountContext = createContext<Account | null>(null);
 
 /** Cuenta con sesión iniciada (null en desarrollo sin nube configurada). Sirve para el botón "Cerrar sesión". */
 // eslint-disable-next-line react-refresh/only-export-components
 export const useAccount = () => useContext(AccountContext);
+
+/** Dueño de los datos locales (cultos, sesión). En desarrollo sin nube no hay cuenta: "dev". */
+// eslint-disable-next-line react-refresh/only-export-components
+export const useUserId = () => useContext(AccountContext)?.userId ?? "dev";
 
 /** En desarrollo sin variables de nube se deja pasar para poder usar el modo demo; en producción nunca. */
 const DEV_BYPASS = import.meta.env.DEV && !cloudConfigured;
@@ -60,7 +64,7 @@ export default function AuthGate({ children }: { children: ReactNode }) {
   }, [check]);
 
   const account = useMemo<Account | null>(
-    () => (session ? { email: session.user.email ?? "", signOut: () => { void signOut().then(() => { setSession(null); setPhase({ name: "out" }); }); } } : null),
+    () => (session ? { email: session.user.email ?? "", userId: session.user.id, signOut: () => { void signOut().then(() => { setSession(null); setPhase({ name: "out" }); }); } } : null),
     [session]
   );
 

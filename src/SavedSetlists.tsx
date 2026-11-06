@@ -1,17 +1,29 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
-import { defaultSetlistName, loadSetlists, newId, persistSetlists, type SavedSetlist, type SongRef } from "./setlistStore";
+import { loadSession, loadSetlists, newId, persistSetlists, type SavedSession, type SavedSetlist, type SavedSong, type SongConfig, type SongRef } from "./setlistStore";
 import { runSetlistQueue, type QueueResult } from "./setlistQueue";
 import { signOut } from "./cloud/auth";
 import type { SongProgress } from "./cloud/cloudSource";
 
 type Props = {
+  /** Dueño de los datos guardados (user_id de la cuenta). */
+  userId: string;
   /** Canciones del setlist actual; `ref` solo existe en las que vienen de la nube. */
   current: { name: string; ref?: SongRef }[];
+  /** Nombre del culto en curso (sugerido al guardar). */
+  sessionName: string;
+  onSessionName: (name: string) => void;
+  /** Canciones de la nube del setlist actual con la configuración del mezclador de cada una. */
+  getSnapshot: () => { songs: SavedSong[]; master: number };
+  /** Avisa mientras se carga un culto (el autoguardado espera). */
+  onBusyChange: (busy: boolean) => void;
   /** Vacía el setlist actual (false si hay algo en curso). */
   onClear: () => boolean;
   /** Añade una canción cargada (false si no se pudo, por ejemplo sin memoria). */
-  onAddSong: (name: string, files: File[], options: { inMemory: true; tone: string | null; bpm: number | null; ref: SongRef; noPrompt: true }) => boolean;
+  onAddSong: (name: string, files: File[], options: { inMemory: true; tone: string | null; bpm: number | null; ref: SongRef; config?: SongConfig; master?: number; noPrompt: true }) => boolean;
 };
+
+/** Lo mínimo que hace falta para cargar: un culto guardado o la sesión autoguardada. */
+type Loadable = { name: string; songs: SavedSong[]; master?: number };
 
 const svg: Record<"edit" | "copy" | "trash" | "save", ReactNode> = {
   edit: <path d="m4 20 4-1 11-11-3-3L5 16l-1 4ZM14 7l3 3" />,
@@ -25,10 +37,10 @@ type Dialog =
   | { kind: "save"; name: string; skipped: number }
   | { kind: "rename"; list: SavedSetlist; name: string }
   | { kind: "delete"; list: SavedSetlist }
-  | { kind: "replace"; list: SavedSetlist };
+  | { kind: "replace"; list: Loadable };
 
 type Queue = {
-  list: SavedSetlist;
+  list: Loadable;
   index: number;
   total: number;
   title: string;
@@ -39,13 +51,16 @@ type Queue = {
 };
 
 const when = (time: number) => (time ? new Date(time).toLocaleDateString("es", { day: "numeric", month: "short" }).replace(".", "") : "");
+const count = (n: number) => `${n} ${n === 1 ? "canción" : "canciones"}`;
 
 /**
- * "Mis setlists": guarda el setlist actual como referencias a canciones de la nube y lo vuelve a cargar en cola.
- * Nunca guarda audio; las canciones de "Este dispositivo" no se pueden restaurar y se omiten al guardar.
+ * "Mis cultos": la sesión autoguardada ("Continuar") y los cultos guardados con nombre. Se guardan como referencias a canciones
+ * de la nube más la configuración del mezclador de cada una, y se vuelven a cargar en cola. Nunca se guarda audio; las
+ * canciones de "Este dispositivo" no se pueden restaurar y se omiten.
  */
-export default function SavedSetlists({ current, onClear, onAddSong }: Props) {
+export default function SavedSetlists({ userId, current, sessionName, onSessionName, getSnapshot, onBusyChange, onClear, onAddSong }: Props) {
   const [lists, setLists] = useState<SavedSetlist[]>([]);
+  const [pending, setPending] = useState<SavedSession | null>(null);
   const [ready, setReady] = useState(false);
   const [dialog, setDialog] = useState<Dialog | null>(null);
   const [note, setNote] = useState("");
@@ -56,14 +71,16 @@ export default function SavedSetlists({ current, onClear, onAddSong }: Props) {
 
   useEffect(() => {
     let alive = true;
-    void loadSetlists().then((loaded) => { if (alive) { setLists(loaded); setReady(true); } });
-    return () => { alive = false; };
-  }, []);
+    void Promise.all([loadSetlists(userId), loadSession(userId)]).then(([loaded, session]) => {
+      if (alive) { setLists(loaded); setPending(session); setReady(true); }
+    });
+    return () => { alive = false; setReady(false); };
+  }, [userId]);
 
   const store = useCallback(async (next: SavedSetlist[]) => {
     setLists(next);
-    if (!(await persistSetlists(next))) setNote("No se pudo guardar en este dispositivo.");
-  }, []);
+    if (!(await persistSetlists(userId, next))) setNote("No se pudo guardar en este dispositivo.");
+  }, [userId]);
 
   const cloudCount = current.filter((song) => song.ref).length;
   const skipped = current.length - cloudCount;
@@ -74,7 +91,7 @@ export default function SavedSetlists({ current, onClear, onAddSong }: Props) {
       setNote(current.length === 0 ? "Tu setlist está vacío: añade canciones de la nube para guardarlo." : "Solo se pueden guardar canciones de la nube. Las de «Este dispositivo» no se guardan.");
       return;
     }
-    setDialog({ kind: "save", name: defaultSetlistName(), skipped });
+    setDialog({ kind: "save", name: sessionName, skipped });
   }
 
   function confirmDialog() {
@@ -83,9 +100,10 @@ export default function SavedSetlists({ current, onClear, onAddSong }: Props) {
     if (dialog.kind === "save") {
       if (!name) return;
       const now = Date.now();
-      const songs = current.flatMap((song) => (song.ref ? [{ id: song.ref.id, key: song.ref.key, title: song.ref.title }] : []));
-      void store([{ id: newId(), name, createdAt: now, updatedAt: now, songs }, ...lists]);
-      setNote(`Guardado «${name}» con ${songs.length} ${songs.length === 1 ? "canción" : "canciones"} de la nube.${dialog.skipped > 0 ? ` ${dialog.skipped} de «Este dispositivo» no se guardan (no se pueden restaurar).` : ""}`);
+      const { songs, master } = getSnapshot();
+      void store([{ id: newId(), name, createdAt: now, updatedAt: now, master, songs }, ...lists]);
+      onSessionName(name);
+      setNote(`Guardado «${name}» con ${count(songs.length)} de la nube y su configuración del mezclador.${dialog.skipped > 0 ? ` ${dialog.skipped} de «Este dispositivo» no se guardan (no se pueden restaurar).` : ""}`);
     } else if (dialog.kind === "rename") {
       if (!name) return;
       void store(lists.map((l) => (l.id === dialog.list.id ? { ...l, name, updatedAt: Date.now() } : l)));
@@ -101,18 +119,20 @@ export default function SavedSetlists({ current, onClear, onAddSong }: Props) {
 
   function duplicate(list: SavedSetlist) {
     const now = Date.now();
-    void store([{ ...list, id: newId(), name: `${list.name} (copia)`, createdAt: now, updatedAt: now, songs: list.songs.map((s) => ({ ...s })) }, ...lists]);
+    void store([{ ...list, id: newId(), name: `${list.name} (copia)`, createdAt: now, updatedAt: now, songs: JSON.parse(JSON.stringify(list.songs)) as SavedSong[] }, ...lists]);
   }
 
-  function askLoad(list: SavedSetlist) {
+  function askLoad(list: Loadable) {
     setNote("");
-    if (list.songs.length === 0) { setNote("Este setlist no tiene canciones."); return; }
+    if (list.songs.length === 0) { setNote("Este culto no tiene canciones."); return; }
     if (current.length > 0) setDialog({ kind: "replace", list });
     else void start(list);
   }
 
-  async function start(list: SavedSetlist) {
-    if (!onClear()) { setNote("Espera a que termine lo que está en curso antes de cargar otro setlist."); return; }
+  async function start(list: Loadable) {
+    onBusyChange(true); // el autoguardado espera: vaciar el setlist para cargar no debe pisar lo guardado
+    if (!onClear()) { onBusyChange(false); setNote("Espera a que termine lo que está en curso antes de cargar otro culto."); return; }
+    onSessionName(list.name);
     const controller = new AbortController();
     abortRef.current = controller;
     setQueue({ list, index: 0, total: list.songs.length, title: list.songs[0]?.title ?? "", percent: null, detail: "", done: null });
@@ -123,31 +143,43 @@ export default function SavedSetlists({ current, onClear, onAddSong }: Props) {
         ? { ...q, percent: p.total ? Math.min(100, Math.round((p.received / p.total) * 100)) : null, detail: `Descargando · ${(p.received / 1048576).toFixed(0)} de ${(p.total / 1048576).toFixed(0)} MB` }
         : { ...q, percent: p.total ? Math.round((p.done / p.total) * 100) : null, detail: `Preparando pistas · ${p.done} de ${p.total}` }) : q)),
       signal: controller.signal,
+      master: list.master,
     });
     abortRef.current = null;
     if (outcome.results.some((r) => !r.ok && /sesión terminó/i.test(r.reason ?? ""))) void signOut();
     setQueue((q) => (q ? { ...q, done: outcome } : q));
+    onBusyChange(false);
   }
 
   const done = queue?.done ?? null;
   const loaded = done ? done.results.filter((r) => r.ok).length : 0;
   const failed = done ? done.results.filter((r) => !r.ok) : [];
+  const showContinue = ready && !!pending && current.length === 0 && !queue;
 
   return (
-    <section className="saved-setlists" aria-label="Mis setlists">
+    <section className="saved-setlists" aria-label="Mis cultos">
+      {showContinue && pending && (
+        <div className="continue-card" role="group" aria-label="Continuar la sesión anterior">
+          <span className="song-copy">
+            <strong>Continuar: {pending.name} ({count(pending.songs.length)})</strong>
+            <small>No se descarga nada hasta que toques Cargar.</small>
+          </span>
+          <button className="pill-btn primary" onClick={() => void start(pending)}>CARGAR</button>
+        </div>
+      )}
       <div className="saved-head">
-        <h3 className="lib-title">MIS SETLISTS</h3>
+        <h3 className="lib-title">MIS CULTOS</h3>
         <button className="settings-action compact" onClick={askSave}><Glyph name="save" />Guardar el actual</button>
       </div>
       {note && <p className="status-message saved-note" role="status">{note}</p>}
-      {ready && lists.length === 0 && <p className="saved-empty">Aún no guardaste ningún setlist. Arma uno con canciones de la nube y toca «Guardar el actual»: solo se guardan los nombres y el orden, nunca el audio.</p>}
+      {ready && lists.length === 0 && <p className="saved-empty">Aún no guardaste ningún culto. Arma uno con canciones de la nube y toca «Guardar el actual»: se guardan los nombres, el orden y tu mezcla de cada canción, nunca el audio.</p>}
       <div className="saved-list">
         {lists.map((list) => (
           <article className="saved-card" key={list.id}>
             <button className="saved-main" onClick={() => askLoad(list)} aria-label={`Cargar ${list.name}`}>
               <span className="song-copy">
                 <strong>{list.name}</strong>
-                <small>{list.songs.length} {list.songs.length === 1 ? "canción" : "canciones"}{list.updatedAt ? ` · ${when(list.updatedAt)}` : ""}</small>
+                <small>{count(list.songs.length)}{list.updatedAt ? ` · ${when(list.updatedAt)}` : ""}</small>
               </span>
               <span className="saved-load">CARGAR</span>
             </button>
@@ -161,11 +193,11 @@ export default function SavedSetlists({ current, onClear, onAddSong }: Props) {
       </div>
 
       {dialog && !queue && (
-        <div className="sheet-layer" role="dialog" aria-modal="true" aria-label="Setlists">
+        <div className="sheet-layer" role="dialog" aria-modal="true" aria-label="Cultos">
           <form className="sheet" onSubmit={(event) => { event.preventDefault(); confirmDialog(); }}>
             {(dialog.kind === "save" || dialog.kind === "rename") && (
               <>
-                <h2>{dialog.kind === "save" ? "Guardar setlist" : "Renombrar setlist"}</h2>
+                <h2>{dialog.kind === "save" ? "Guardar culto" : "Renombrar culto"}</h2>
                 <label className="auth-field">
                   <span>Nombre</span>
                   <input autoFocus maxLength={60} value={dialog.name} onChange={(event) => setDialog({ ...dialog, name: event.target.value })} />
@@ -173,11 +205,11 @@ export default function SavedSetlists({ current, onClear, onAddSong }: Props) {
                 {dialog.kind === "save" && dialog.skipped > 0 && <p className="sheet-note">{dialog.skipped} {dialog.skipped === 1 ? "canción de «Este dispositivo» no se guardará" : "canciones de «Este dispositivo» no se guardarán"}: no se pueden restaurar desde la nube.</p>}
               </>
             )}
-            {dialog.kind === "delete" && (<><h2>Borrar setlist</h2><p>¿Borrar «{dialog.list.name}»? Esto no se puede deshacer.</p></>)}
+            {dialog.kind === "delete" && (<><h2>Borrar culto</h2><p>¿Borrar «{dialog.list.name}»? Esto no se puede deshacer.</p></>)}
             {dialog.kind === "replace" && (
               <>
                 <h2>Cargar «{dialog.list.name}»</h2>
-                <p>Se reemplazará tu setlist actual ({current.length} {current.length === 1 ? "canción" : "canciones"}) y se descargarán las {dialog.list.songs.length} del guardado desde la nube, una tras otra.</p>
+                <p>Se reemplazará tu setlist actual ({count(current.length)}) y se descargarán las {dialog.list.songs.length} del guardado desde la nube, una tras otra.</p>
               </>
             )}
             <div className="sheet-actions">
@@ -191,7 +223,7 @@ export default function SavedSetlists({ current, onClear, onAddSong }: Props) {
       )}
 
       {queue && (
-        <div className="sheet-layer" role="dialog" aria-modal="true" aria-label="Cargando setlist">
+        <div className="sheet-layer" role="dialog" aria-modal="true" aria-label="Cargando culto">
           <div className="sheet">
             {!done ? (
               <>
@@ -204,7 +236,7 @@ export default function SavedSetlists({ current, onClear, onAddSong }: Props) {
               </>
             ) : (
               <>
-                <span className="eyebrow">{done.cancelled ? "CARGA CANCELADA" : loaded === 0 ? "NO SE PUDO CARGAR" : failed.length > 0 ? "SETLIST CARGADO CON AVISOS" : "SETLIST CARGADO"}</span>
+                <span className="eyebrow">{done.cancelled ? "CARGA CANCELADA" : loaded === 0 ? "NO SE PUDO CARGAR" : failed.length > 0 ? "CULTO CARGADO CON AVISOS" : "CULTO CARGADO"}</span>
                 <h2>{loaded} de {queue.total} {queue.total === 1 ? "canción cargada" : "canciones cargadas"}</h2>
                 {done.stopReason && <p>{done.stopReason}</p>}
                 {failed.length > 0 && (

@@ -14,7 +14,8 @@ import "./styles/setlists.css";
 import ChannelScroll from "./ChannelScroll";
 import SetlistScreen from "./SetlistScreen";
 import SavedSetlists from "./SavedSetlists";
-import type { SongRef } from "./setlistStore";
+import { defaultSetlistName, saveSession, type SavedSession, type SavedSong, type SongConfig, type SongRef } from "./setlistStore";
+import { useUserId } from "./AuthGate";
 import NubeBrowser from "./NubeBrowser";
 import { perfBegin, perfEnd, perfStep } from "./perf";
 import ProfileDrawer from "./ProfileDrawer";
@@ -35,8 +36,8 @@ import { HeaderClock, ElapsedText, RemainingText, getClock, setClock, useProgres
 import Click from "./Click";
 import Splash from "./Splash";
 import Pads from "./Pads";
-import { PadEngine } from "./padEngine";
-import { Metronome } from "./metronome";
+import { PadEngine, type PadSettings } from "./padEngine";
+import { Metronome, type ClickSettings } from "./metronome";
 import { computePeaks } from "./archive";
 import type { TrackStats } from "./analysis.ts";
 import { limiterCurve, planNormalization } from "./normalizer.ts";
@@ -65,6 +66,8 @@ type Song = {
   bpm?: number | null;
   /** Referencia a la canción de la nube (para guardar setlists). Las de "Este dispositivo" no la tienen. */
   ref?: SongRef;
+  /** Configuración guardada con el culto del que viene la canción (perfil aplicado, entre otras). */
+  config?: SongConfig;
 };
 
 /**
@@ -437,6 +440,8 @@ export default function App() {
   const musicBusRef = useRef<GainNode | null>(null);
   // Mezcla (volumen, paneo, mute, solo) de cada canción, para recuperarla al volver a ella. Solo en memoria.
   const mixesRef = useRef<Map<number, Map<string, Pick<Track, "volume" | "pan" | "muted" | "solo">>>>(new Map());
+  // Ajustes de click y pad con los que se usó cada canción (se guardan al salir de ella y se aplican al volver). Solo en memoria.
+  const extrasRef = useRef<Map<number, { click?: Partial<ClickSettings>; pad?: Partial<PadSettings> }>>(new Map());
 
   masterVolumeRef.current = masterVolume;
 
@@ -567,13 +572,24 @@ export default function App() {
     setPeaks(null);
   }
 
+  /** Ajustes de click y pad tal como están ahora. */
+  function currentExtras(): { click: ClickSettings; pad: PadSettings } {
+    const { bpm, beats, subdivision, accent, sound, output, volume } = metronome.getState();
+    const padNow = pad.getState();
+    return { click: { bpm, beats, subdivision, accent, sound, output, volume }, pad: { note: padNow.note, sharp: padNow.sharp, minor: padNow.minor, volume: padNow.volume } };
+  }
+
   function loadSong(song: Song) {
     const leaving = activeSongIdRef.current;
     if (leaving !== null && tracksRef.current.length && playlistRef.current.some((item) => item.id === leaving)) {
       mixesRef.current.set(leaving, new Map(tracksRef.current.map((t) => [t.file.name, { volume: t.volume, pan: t.pan, muted: t.muted, solo: t.solo }])));
     }
+    if (leaving !== null && playlistRef.current.some((item) => item.id === leaving)) extrasRef.current.set(leaving, currentExtras());
     disposeActiveTracks();
     const saved = mixesRef.current.get(song.id);
+    const extras = extrasRef.current.get(song.id);
+    if (extras?.click) metronome.set(extras.click);
+    if (extras?.pad && !pad.getState().playing) pad.set(extras.pad); // con el pad sonando no se cambia el acorde por sorpresa
     // Perfil de arranque: canción > predeterminado > fábrica. Lo que el usuario movió en esta sesión (saved) manda sobre todo.
     const songKey = songKeyOf(song.files);
     const display = trackDisplayNames(song.files.map((file) => file.name.replace(/\.[^/.]+$/, "")));
@@ -598,10 +614,10 @@ export default function App() {
     setStatusMessage(`${song.name} · ${pistas(song.files.length)}`);
   }
 
-  const [memoryPrompt, setMemoryPrompt] = useState<{ name: string; files: File[]; tone?: string | null; bpm?: number | null; ref?: SongRef } | null>(null);
+  const [memoryPrompt, setMemoryPrompt] = useState<{ name: string; files: File[]; tone?: string | null; bpm?: number | null; ref?: SongRef; config?: SongConfig } | null>(null);
   const [, setMemoryVersion] = useState(0);
 
-  const addSong = useCallback((name: string, files: File[], options?: { inMemory?: boolean; force?: boolean; tone?: string | null; bpm?: number | null; ref?: SongRef; noPrompt?: boolean }): boolean => {
+  const addSong = useCallback((name: string, files: File[], options?: { inMemory?: boolean; force?: boolean; tone?: string | null; bpm?: number | null; ref?: SongRef; config?: SongConfig; master?: number; noPrompt?: boolean }): boolean => {
     if (!Array.isArray(files) || files.length === 0) {
       setStatusMessage(`No se pudo añadir ${name}: no contiene pistas válidas.`);
       return false;
@@ -612,16 +628,26 @@ export default function App() {
     if (!options?.force && memoryBytes > 0 && used + memoryBytes > memoryBudget()) {
       // Al cargar un setlist guardado no se abre el diálogo (la hoja de progreso informa el motivo): la canción no se añade.
       if (options?.noPrompt) return false;
-      setMemoryPrompt({ name, files, tone: options?.tone, bpm: options?.bpm, ref: options?.ref });
+      setMemoryPrompt({ name, files, tone: options?.tone, bpm: options?.bpm, ref: options?.ref, config: options?.config });
       setStatusMessage(`Memoria llena: elige qué quitar para añadir ${name}.`);
       return false;
     }
-    const song: Song = { id: nextId(), name, files, memoryBytes, tone: options?.tone, bpm: options?.bpm, ref: options?.ref };
+    const song: Song = { id: nextId(), name, files, memoryBytes, tone: options?.tone, bpm: options?.bpm, ref: options?.ref, config: options?.config };
+    const config = options?.config;
+    if (config) {
+      // Configuración guardada del culto: la mezcla manda sobre los perfiles al activar la canción; los marcadores sustituyen a los locales.
+      if (config.tracks.length > 0) mixesRef.current.set(song.id, new Map(config.tracks.map((t) => [t.fileName, { volume: t.volume, pan: t.pan, muted: t.muted, solo: t.solo }])));
+      if (config.markers) saveMarkers(songKeyOf(files), config.markers);
+      if (config.click || config.pad) extrasRef.current.set(song.id, { click: config.click, pad: config.pad });
+    }
     const next = [...playlistRef.current, song];
     playlistRef.current = next;
     setPlaylist(next);
     setStatusMessage(`${name} añadida a la lista (${pistas(files.length)}).`);
-    if (activeSongIdRef.current === null) loadSong(song);
+    if (activeSongIdRef.current === null) {
+      loadSong(song);
+      if (options?.master != null) setMasterVolume(options.master);
+    }
     return true;
     // loadSong solo toca refs y estado de React; no depende de renders previos.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -655,6 +681,8 @@ export default function App() {
     playlistRef.current = [];
     setPlaylist([]);
     mixesRef.current.clear();
+    extrasRef.current.clear();
+    peaksCacheRef.current.clear();
     disposeActiveTracks();
     activeSongIdRef.current = null;
     setActiveSongId(null);
@@ -680,6 +708,8 @@ export default function App() {
     playlistRef.current = next;
     setPlaylist(next);
     mixesRef.current.delete(songId);
+    extrasRef.current.delete(songId);
+    peaksCacheRef.current.delete(songId);
     if (songId !== activeSongIdRef.current) return;
     if (next.length > 0) activateSong(next[0]);
     else {
@@ -1099,6 +1129,52 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // ---- Cultos: sesión actual con autoguardado (solo referencias y configuración; nunca audio) ----
+  const userId = useUserId();
+  const [sessionName, setSessionName] = useState(() => defaultSetlistName());
+  const [queueBusy, setQueueBusy] = useState(false);
+  const sessionDirtyRef = useRef(false);
+
+  /** Canciones de la nube del setlist con la configuración con la que están ahora. Las de "Este dispositivo" no se pueden restaurar. */
+  function snapshotSongs(): SavedSong[] {
+    const activeId = activeSongIdRef.current;
+    const out: SavedSong[] = [];
+    for (const song of playlistRef.current) {
+      if (!song.ref) continue;
+      const live = song.id === activeId && tracksRef.current.length > 0;
+      const mix = live
+        ? tracksRef.current.map((t) => ({ fileName: t.file.name, volume: t.volume, pan: t.pan, muted: t.muted, solo: t.solo }))
+        : [...(mixesRef.current.get(song.id) ?? [])].map(([fileName, m]) => ({ fileName, ...m }));
+      const extras = live ? currentExtras() : extrasRef.current.get(song.id);
+      out.push({
+        ...song.ref,
+        tone: song.tone ?? null,
+        bpm: song.bpm ?? null,
+        config: { tracks: mix, profile: live ? profileSource : song.config?.profile, markers: loadMarkers(songKeyOf(song.files)), click: extras?.click, pad: extras?.pad },
+      });
+    }
+    return out;
+  }
+  const snapshotRef = useRef<() => SavedSession | null>(() => null);
+  snapshotRef.current = () => {
+    const songs = snapshotSongs();
+    return songs.length === 0 ? null : { name: sessionName, updatedAt: Date.now(), master: masterVolumeRef.current, songs };
+  };
+
+  // Autoguardado: tras cada cambio (con una pausa corta) y al pasar a segundo plano. No toca nada mientras se carga un culto
+  // ni antes de que haya algo de la nube en el setlist (así la tarjeta "Continuar" sigue intacta al abrir la app).
+  useEffect(() => {
+    if (queueBusy) return;
+    if (playlist.some((song) => song.ref)) sessionDirtyRef.current = true;
+    if (!sessionDirtyRef.current) return;
+    // Nunca se borra solo: vaciar el setlist no destruye lo guardado.
+    const write = () => { if (playlistRef.current.some((song) => song.ref)) void saveSession(userId, snapshotRef.current()); };
+    const timer = window.setTimeout(write, 700);
+    const onHide = () => { if (document.visibilityState === "hidden") { window.clearTimeout(timer); write(); } };
+    document.addEventListener("visibilitychange", onHide);
+    return () => { window.clearTimeout(timer); document.removeEventListener("visibilitychange", onHide); };
+  }, [playlist, tracks, masterVolume, markers, click, padState.note, padState.sharp, padState.minor, padState.volume, profileSource, activeSongId, sessionName, userId, queueBusy]);
+
   const activeIndex = playlist.findIndex((song) => song.id === activeSongId);
   const hasSolo = tracks.some((track) => track.solo);
   const displayNames = trackDisplayNames(tracks.map((track) => track.name));
@@ -1292,7 +1368,12 @@ export default function App() {
           onAdd={openLibrary}
           extra={
             <SavedSetlists
+              userId={userId}
               current={playlist.map((song) => ({ name: song.name, ref: song.ref }))}
+              sessionName={sessionName}
+              onSessionName={setSessionName}
+              getSnapshot={() => ({ songs: snapshotSongs(), master: masterVolumeRef.current })}
+              onBusyChange={setQueueBusy}
               onClear={clearSetlist}
               onAddSong={(name, files, options) => addSong(name, files, options)}
             />
@@ -1464,7 +1545,7 @@ export default function App() {
           songs={memoryView.songs}
           freeBytes={memoryView.freeBytes}
           onRemove={(id) => { removeSong(id); setMemoryVersion((version) => version + 1); }}
-          onConfirm={() => { addSong(memoryPrompt.name, memoryPrompt.files, { inMemory: true, force: true, tone: memoryPrompt.tone, bpm: memoryPrompt.bpm, ref: memoryPrompt.ref }); setMemoryPrompt(null); }}
+          onConfirm={() => { addSong(memoryPrompt.name, memoryPrompt.files, { inMemory: true, force: true, tone: memoryPrompt.tone, bpm: memoryPrompt.bpm, ref: memoryPrompt.ref, config: memoryPrompt.config }); setMemoryPrompt(null); }}
           onCancel={() => { setMemoryPrompt(null); setStatusMessage("Canción no añadida."); }}
         />
       )}
