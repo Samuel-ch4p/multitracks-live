@@ -5,7 +5,7 @@
 
 /* ---------- Medidas del mezclador (se ajustan a la altura de la pantalla) ---------- */
 .channels-box { --mx-ch-w: clamp(92px, 11vw, 124px); --mx-head: 32px; --mx-pan: 38px; --mx-name: 20px; --mx-pad: 6px; }
-@media (max-height: 420px) { .channels-box { --mx-head: 28px; --mx-pan: 32px; --mx-name: 16px; --mx-pad: 4px; } }
+@media (max-height: 420px) { .channels-box { --mx-head: 32px; --mx-pan: 32px; --mx-name: 16px; --mx-pad: 4px; } }
 @media (min-height: 640px) { .channels-box { --mx-head: 40px; --mx-pan: 44px; --mx-name: 24px; --mx-pad: 8px; } }
 
 /* ---------- Tablero: canales normales | separador | PARA EL EQUIPO | MASTER ---------- */
@@ -56,13 +56,14 @@
 .channel.is-dimmed { opacity: .4; }
 
 .channel-head { display: flex; align-items: center; min-height: 0; }
-.chip-row { display: flex; width: 100%; gap: 3px; }
+/* La fila ocupa TODO el alto de la cabecera: antes quedaba en altura automática (17 px) y los chips M/S nunca llenaban su fila. Hueco de 6 px entre M y S. */
+.chip-row { display: flex; width: 100%; height: 100%; gap: 6px; }
 .chip {
   position: relative; display: grid; min-width: 0; flex: 1; place-items: center; height: 100%; padding: 0;
   border: 1px solid var(--c-line); border-radius: 8px; background: var(--c-glass); color: var(--c-muted); font-size: var(--fs-sm); font-weight: 700; touch-action: manipulation;
   transition: background-color .15s ease, color .15s ease, border-color .15s ease, transform var(--t-fast) var(--ease-out);
 }
-.chip::after { content: ""; position: absolute; inset: -4px -2px; } /* zona táctil más amplia que el botón visible */
+.chip::after { content: ""; position: absolute; inset: -4px -3px; } /* zona táctil más amplia que el botón visible; -3px = mitad del hueco, así M y S no se solapan */
 .chip:active { transform: scale(.94); }
 .chip.mute.active { border-color: color-mix(in srgb, var(--c-danger) 60%, transparent); background: color-mix(in srgb, var(--c-danger) 24%, transparent); color: var(--c-danger-soft); }
 .chip.solo.active { border-color: var(--c-accent); background: var(--c-accent); color: var(--c-bg-1); }
@@ -203,7 +204,7 @@
   .deck-card { padding-left: 10px; }
   .wave-panel .waveform { height: 40px; }
   .wave-meta { height: 18px; }
-  .channels-box { --mx-head: 28px; --mx-pan: 34px; --mx-name: 16px; --mx-pad: 4px; }
+  .channels-box { --mx-head: 32px; --mx-pan: 34px; --mx-name: 16px; --mx-pad: 4px; }
   .channel { gap: 2px; padding: 4px 3px 3px; }
   .fader-rail { margin: 11px 0; }
   .fader-cap { height: 18px; border-radius: 9px; }
@@ -262,3 +263,19 @@
 .channel.master .channel-name strong { font-weight: 700; letter-spacing: .08em; }
 .fader-value, .pan-value { font-size: 13px; font-weight: 700; }
 @media (max-height: 420px) { .channel-name strong { font-size: 12px; } .channel-name small { font-size: 11px; } }
+
+/* =====================================================================
+   Detener / Reiniciar con la canción sonando: hay que mantener pulsado (App.tsx useHoldToConfirm). La barra se llena en 450 ms.
+   Aviso de pantalla lenta mientras suena: fichita en la cabecera (no tapa los faders).
+   ===================================================================== */
+.hold-btn { position: relative; }
+.hold-btn::before {
+  content: ""; position: absolute; inset: 0; border-radius: inherit; pointer-events: none; background: color-mix(in srgb, var(--c-accent) 38%, transparent);
+  transform: scaleX(0); transform-origin: left center; opacity: 0;
+}
+.hold-btn.is-holding::before { opacity: 1; transform: scaleX(1); transition: transform 450ms linear, opacity 80ms linear; }
+.slow-chip {
+  position: relative; flex: none; height: 32px; padding: 0 10px; border: 1px solid color-mix(in srgb, var(--c-accent) 55%, transparent); border-radius: 999px;
+  background: color-mix(in srgb, var(--c-accent) 16%, transparent); color: var(--c-accent-strong); font: 700 11px var(--font-sans); letter-spacing: .06em; white-space: nowrap; touch-action: manipulation;
+}
+.slow-chip::after { content: ""; position: absolute; inset: -6px -3px; }

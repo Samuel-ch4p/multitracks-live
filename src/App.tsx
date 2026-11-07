@@ -218,6 +218,38 @@ function useMediaQuery(query: string) {
   );
 }
 
+const HOLD_MS = 450;
+/**
+ * Guardia contra toques accidentales en acciones que cortan el canto (Detener, Reiniciar): mientras `guarded` (suena la canción) hay que
+ * mantener pulsado HOLD_MS (la barra del botón se va llenando); un toque corto solo avisa. Con `guarded` apagado actúa con un toque.
+ * El teclado (Enter/Espacio) y los lectores de pantalla siguen activando con una sola pulsación.
+ */
+function useHoldToConfirm(action: () => void, guarded: boolean, onShortTap: () => void) {
+  const [holding, setHolding] = useState(false);
+  const timer = useRef(0);
+  const fired = useRef(false);
+  const actionRef = useRef(action);
+  useEffect(() => { actionRef.current = action; });
+  const cancel = useCallback(() => { window.clearTimeout(timer.current); timer.current = 0; setHolding(false); }, []);
+  useEffect(() => () => window.clearTimeout(timer.current), []);
+  // Si la canción deja de sonar a mitad de la pulsación, la cuenta se anula sin tocar el estado desde un efecto.
+  useEffect(() => { if (!guarded) { window.clearTimeout(timer.current); timer.current = 0; } }, [guarded]);
+  return {
+    className: `hold-btn${holding && guarded ? " is-holding" : ""}`,
+    onPointerDown: () => {
+      if (!guarded) return;
+      fired.current = false;
+      setHolding(true);
+      timer.current = window.setTimeout(() => { fired.current = true; timer.current = 0; setHolding(false); actionRef.current(); }, HOLD_MS);
+    },
+    onPointerUp: () => { const early = timer.current !== 0; cancel(); if (guarded && early && !fired.current) onShortTap(); },
+    onPointerLeave: cancel,
+    onPointerCancel: cancel,
+    onContextMenu: (event: { preventDefault: () => void }) => { if (guarded) event.preventDefault(); },
+    onClick: (event: { detail: number }) => { if (!guarded || event.detail === 0) actionRef.current(); },
+  };
+}
+
 /** Mantiene la pantalla encendida mientras `active` (en vivo el celular no debe dormirse). */
 function useWakeLock(active: boolean) {
   useEffect(() => {
@@ -942,6 +974,10 @@ export default function App() {
     return stopFpsWatch;
   }, [playing, fx]);
 
+  // Detener y Reiniciar cortan el canto: con la canción sonando piden mantener pulsado (ver useHoldToConfirm).
+  const holdStop = useHoldToConfirm(() => void stopAll(), playing, () => setStatusMessage("Mantén pulsado para detener"));
+  const holdRestart = useHoldToConfirm(() => void playAll(), playing, () => setStatusMessage("Mantén pulsado para reiniciar"));
+
   // Solo en desarrollo: inspección de las ganancias reales del grafo (para comprobar la normalización).
   useEffect(() => {
     if (!import.meta.env.DEV) return;
@@ -1269,7 +1305,7 @@ export default function App() {
               ? <svg viewBox="0 0 24 24"><path d="M7 5h4v14H7zM13 5h4v14h-4z" /></svg>
               : <svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z" /></svg>}
           </button>
-          <button className="icon-btn" onClick={() => void stopAll()} disabled={resetting || tracks.length === 0} aria-label="Detener">
+          <button {...holdStop} className={`icon-btn ${holdStop.className}`} disabled={resetting || tracks.length === 0} aria-label="Detener" title={playing ? "Mantén pulsado para detener" : "Detener"}>
             <svg viewBox="0 0 24 24"><path d="M6 6h12v12H6z" /></svg>
           </button>
           <button className="icon-btn" onClick={() => stepSong(1)} disabled={resetting || activeIndex < 0 || activeIndex >= playlist.length - 1} aria-label="Canción siguiente">
@@ -1278,8 +1314,14 @@ export default function App() {
         </div>
 
         <div className="top-tools">
+          {/* Mientras suena, el aviso de pantalla lenta es esta fichita en la cabecera (no tapa los faders); al detener, aparece el cuadro de siempre. */}
+          {slowPrompt && playing && (
+            <button className="slow-chip" onClick={() => { setFx("reduced"); setSlowPrompt(false); setStatusMessage("Animaciones: Reducidas"); }} title="La pantalla va lenta: pasar a animaciones reducidas">
+              LENTA · REDUCIR
+            </button>
+          )}
           <span className={`sync-chip ${playing ? "playing" : ready ? "ready" : ""}`} role="status" title={syncLabel} aria-label={syncLabel}><i /><b className="sync-label">{syncLabel}</b></span>
-          <button className="glass-btn restart-btn" onClick={() => void playAll()} disabled={resetting || tracks.length === 0} aria-label="Reiniciar desde el principio">
+          <button {...holdRestart} className={`glass-btn restart-btn ${holdRestart.className}`} disabled={resetting || tracks.length === 0} aria-label="Reiniciar desde el principio" title={playing ? "Mantén pulsado para reiniciar" : "Reiniciar desde el principio"}>
             <Icon name="restart" /><span>REINICIAR</span>
           </button>
         </div>
@@ -1490,7 +1532,7 @@ export default function App() {
         />
       )}
 
-      {slowPrompt && (
+      {slowPrompt && !playing && (
         <div className="slow-prompt" role="alertdialog" aria-label="Fotogramas lentos">
           <span>La pantalla va lenta. ¿Pasar a animaciones reducidas?</span>
           <button className="pill-btn" onClick={() => setSlowPrompt(false)}>NO, GRACIAS</button>
