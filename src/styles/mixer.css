@@ -279,3 +279,11 @@
   background: color-mix(in srgb, var(--c-accent) 16%, transparent); color: var(--c-accent-strong); font: 700 11px var(--font-sans); letter-spacing: .06em; white-space: nowrap; touch-action: manipulation;
 }
 .slow-chip::after { content: ""; position: absolute; inset: -6px -3px; }
+
+/* Aviso "Pista eliminada · DESHACER" (5 s): a diferencia de los demás avisos, este sí recibe toques */
+.undo-toast { gap: 12px; padding-right: 8px; pointer-events: auto; }
+.undo-btn {
+  position: relative; flex: none; height: 34px; padding: 0 14px; border: 1px solid color-mix(in srgb, var(--c-accent) 55%, transparent); border-radius: 999px;
+  background: color-mix(in srgb, var(--c-accent) 16%, transparent); color: var(--c-accent-strong); font: 700 12px var(--font-sans); letter-spacing: .06em; touch-action: manipulation;
+}
+.undo-btn::after { content: ""; position: absolute; inset: -6px -4px; }

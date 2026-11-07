@@ -219,6 +219,8 @@ function useMediaQuery(query: string) {
 }
 
 const HOLD_MS = 450;
+/** Tiempo para deshacer al quitar una pista con la ×. */
+const UNDO_MS = 5000;
 /**
  * Guardia contra toques accidentales en acciones que cortan el canto (Detener, Reiniciar): mientras `guarded` (suena la canción) hay que
  * mantener pulsado HOLD_MS (la barra del botón se va llenando); un toque corto solo avisa. Con `guarded` apagado actúa con un toque.
@@ -420,6 +422,9 @@ export default function App() {
   const [paused, setPaused] = useState(false);
   const [resetting, setResetting] = useState(false);
   const [statusMessage, setStatusMessage] = useState("");
+  // Última pista quitada con la ×: se conserva UNDO_MS para poder deshacer (ver removeTrack / undoRemoval).
+  const [removedName, setRemovedName] = useState<string | null>(null);
+  const pendingRemoval = useRef<{ track: Track; index: number; timer: number } | null>(null);
   const [songName, setSongName] = useState("Añade una canción");
   // El tiempo y la duración viven en clock.tsx (fuera de React) para que el segundero no repinte el mezclador.
   const [masterVolume, setMasterVolume] = useState(85);
@@ -592,6 +597,7 @@ export default function App() {
     loadTokenRef.current++;
     mediaReadyRef.current = new Set();
     setQueuedPlay(false);
+    finalizePendingRemoval();
     for (const track of tracksRef.current) releaseTrack(track);
     tracksRef.current = [];
     setTracks([]);
@@ -870,17 +876,49 @@ export default function App() {
     }
   }
 
+  /** Suelta de verdad la pista quitada (pasados UNDO_MS o al cambiar de canción): a partir de aquí ya no se puede deshacer. */
+  function finalizePendingRemoval() {
+    const pending = pendingRemoval.current;
+    if (!pending) return;
+    window.clearTimeout(pending.timer);
+    pendingRemoval.current = null;
+    setRemovedName(null);
+    releaseTrack(pending.track);
+  }
+
   function removeTrack(id: number) {
     if (busyRef.current) return;
-    const track = tracksRef.current.find((item) => item.id === id);
-    if (!track) return;
-    releaseTrack(track);
+    const index = tracksRef.current.findIndex((item) => item.id === id);
+    if (index < 0) return;
+    const track = tracksRef.current[index];
+    finalizePendingRemoval(); // solo se puede deshacer la última pista quitada
+    track.audio.pause(); // no se libera todavía: queda lista UNDO_MS por si se deshace
     const next = tracksRef.current.filter((item) => item.id !== id);
     tracksRef.current = next;
     setTracks(next);
     // Sin pistas no hay nada sonando: si no, el estado quedaba en "REPRODUCIENDO" con el botón bloqueado y la pantalla encendida.
     if (next.length === 0) setPlayState(false, false);
-    setStatusMessage("Pista eliminada del mezclador.");
+    pendingRemoval.current = { track, index, timer: window.setTimeout(finalizePendingRemoval, UNDO_MS) };
+    setRemovedName(track.name);
+  }
+
+  /** Devuelve al mezclador la última pista quitada, en su lugar, sincronizada con las demás y sonando si la canción suena. */
+  function undoRemoval() {
+    const pending = pendingRemoval.current;
+    if (!pending) return;
+    window.clearTimeout(pending.timer);
+    pendingRemoval.current = null;
+    setRemovedName(null);
+    const rest = tracksRef.current;
+    const list = [...rest];
+    list.splice(Math.min(pending.index, list.length), 0, pending.track);
+    if (rest.length > 0) {
+      try { pending.track.audio.currentTime = pickLead(rest).currentTime; } catch { /* sin metadatos aún: la corrección de desfase la alcanza */ }
+    }
+    tracksRef.current = list;
+    setTracks(list);
+    applyMix(list);
+    if (playingRef.current) void pending.track.audio.play().catch(() => undefined);
   }
 
   function togglePlay() {
@@ -1084,6 +1122,8 @@ export default function App() {
 
   useEffect(() => {
     return () => {
+      window.clearTimeout(pendingRemoval.current?.timer);
+      if (pendingRemoval.current) releaseTrack(pendingRemoval.current.track);
       for (const track of tracksRef.current) releaseTrack(track);
       if (contextRef.current) void contextRef.current.close();
       contextRef.current = null;
@@ -1448,6 +1488,12 @@ export default function App() {
             <div className="load-progress" style={{ "--pct": tracks.length ? readyCount / tracks.length : 0 } as React.CSSProperties}><span /></div>
           </div>
           <button className="pill-btn" onClick={() => { setQueuedPlay(false); void playAll(true); }} disabled={resetting}>TOCAR YA</button>
+        </div>
+      )}
+      {removedName && !memoryPrompt && !markerDraft && (
+        <div className="app-toast undo-toast" role="status" aria-live="polite" key="undo">
+          <span>Pista «{removedName}» eliminada</span>
+          <button className="undo-btn" onClick={undoRemoval}>DESHACER</button>
         </div>
       )}
       {statusMessage && !memoryPrompt && !markerDraft && (
