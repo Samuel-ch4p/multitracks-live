@@ -51,9 +51,16 @@
 .channel.master { border-color: color-mix(in srgb, var(--c-accent) 36%, transparent); background: linear-gradient(180deg, color-mix(in srgb, var(--c-accent) 8%, var(--c-panel)), var(--c-panel) 55%); }
 .channel.master::before { background: var(--c-accent); }
 .channel.is-muted { --channel-color: var(--c-grey-4); --channel-rgb: 118 128 143; }
-.channel.is-muted .fader-wrap, .channel.is-muted .pan, .channel.is-muted .channel-name { opacity: .5; }
+/* Canal silenciado o atenuado por un solo: se atenúa lo gráfico (fader, medidor, paneo, franja de color), NO el texto.
+   Antes la opacidad del contenedor dejaba las etiquetas a ~2,4:1; ahora el texto va en --c-faint (≥ 4,5:1 sobre el panel). */
+.channel.is-muted .fader-wrap, .channel.is-muted .pan-track, .channel.is-muted .pan-center, .channel.is-muted .pan-fill, .channel.is-muted .pan-thumb { opacity: .5; }
+.channel.is-muted .pan-bar.is-dragging .pan-thumb { opacity: 1; }
+.channel.is-muted .channel-name strong, .channel.is-muted .channel-name small { color: var(--c-faint); }
 .channel.is-soloed { border-color: color-mix(in srgb, var(--c-accent) 55%, transparent); }
-.channel.is-dimmed { opacity: .4; }
+.channel.is-dimmed { border-color: color-mix(in srgb, var(--c-line) 55%, transparent); }
+.channel.is-dimmed::before, .channel.is-dimmed .fader-wrap, .channel.is-dimmed .pan-track, .channel.is-dimmed .pan-center, .channel.is-dimmed .pan-fill, .channel.is-dimmed .pan-thumb, .channel.is-dimmed .family-dot { opacity: .4; }
+.channel.is-dimmed .pan-bar.is-dragging .pan-thumb { opacity: 1; }
+.channel.is-dimmed .channel-name strong, .channel.is-dimmed .channel-name small, .channel.is-dimmed .pan-readout, .channel.is-dimmed .chip:not(.active) { color: var(--c-faint); }
 
 .channel-head { display: flex; align-items: center; min-height: 0; }
 /* La fila ocupa TODO el alto de la cabecera: antes quedaba en altura automática (17 px) y los chips M/S nunca llenaban su fila. Hueco de 6 px entre M y S. */
