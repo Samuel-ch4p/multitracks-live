@@ -30,6 +30,24 @@ export const mailtoLink = (subject: string, body = "") =>
 export const supportHint = () => `Si el problema continúa, escríbenos a ${CONTACTO_SOPORTE.email}.`;
 
 /**
+ * Memoria para canciones cargadas (solo RAM; nada se guarda en el dispositivo). El setlist admite cualquier número de canciones
+ * (son referencias); se mantienen cargadas la activa, la anterior inmediata y las siguientes que quepan. Medido: una canción
+ * cargada ocupa ≈ 1,0× el tamaño de sus archivos, con un pico de ≈ 1,25× mientras se carga.
+ */
+export const MEMORIA = {
+  /** Fracción de la RAM del dispositivo (navigator.deviceMemory) que pueden ocupar las canciones cargadas. */
+  fraccion: 0.2,
+  /** Tope inferior y superior del presupuesto, en MB (3–4 GB de RAM → 0,8 GB). */
+  minMB: 600,
+  maxMB: 1500,
+  /** Canciones que se intentan mantener cargadas antes y después de la activa. */
+  anteriores: 1,
+  siguientes: 2,
+  /** Margen de pico al descargar y extraer una canción (medido ≈ 1,25×). */
+  factorPico: 1.3,
+} as const;
+
+/**
  * Cierre de sesión por ausencia e inactividad. Se mide con marcas de tiempo guardadas, no con temporizadores
  * (en Android el WebView se suspende en segundo plano y los temporizadores se congelan). Ver inactivity.ts.
  */

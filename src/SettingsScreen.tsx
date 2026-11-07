@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useState, useSyncExternalStore, type ReactNode } from "react";
 import { setFx, useFx, type FxMode } from "./effects";
 import { setRespectSystemMotion, useMotion } from "./motion";
 import { fpsSnapshot } from "./fpsMonitor";
@@ -7,6 +7,7 @@ import { pistas } from "./format";
 import { useAccount } from "./AuthGate";
 import { CONTACTO_SOPORTE, mailtoLink, whatsappLink } from "./cloud/config";
 import { openExternal } from "./externalLink";
+import { getPreload, setPreload, subscribePreload } from "./preload";
 import { clearTemporaryData, formatDate, getDefaultMaster, loadMembership, setDefaultMaster, statusLabel, type Membership } from "./account";
 import "./styles/settings.css";
 
@@ -60,6 +61,7 @@ export default function SettingsScreen({ normMode, onNormMode, getDiagnostics }:
   const account = useAccount();
   const [membership, setMembership] = useState<Membership | null>(null);
   const [master, setMaster] = useState(getDefaultMaster);
+  const preload = useSyncExternalStore(subscribePreload, getPreload);
   const [cleaned, setCleaned] = useState(false);
 
   // Membresía: solo si hay sesión. Si la consulta falla, la tarjeta de membresía no se muestra.
@@ -107,6 +109,11 @@ export default function SettingsScreen({ normMode, onNormMode, getDiagnostics }:
                   />
                   <output>{master}%</output>
                 </div>
+              </Row>
+              <Row title="Precargar siguiente canción" hint="Mientras suena la actual, descarga la siguiente del setlist en segundo plano. Si lo apagas, se descarga al elegirla.">
+                <button className={`switch ${preload ? "on" : ""}`} role="switch" aria-checked={preload} onClick={() => setPreload(!preload)}>
+                  <i /><span>{preload ? "Activado" : "Apagado"}</span>
+                </button>
               </Row>
               <Row title="Normalización" hint="Equilibra el volumen entre pistas y canciones." stacked>
                 <div className="segmented-setting" role="radiogroup" aria-label="Normalización">

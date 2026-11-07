@@ -2,7 +2,6 @@ import { useCallback, useEffect, useRef, useState, type ReactNode } from "react"
 import { loadSession, loadSetlists, newId, persistSetlists, type SavedSession, type SavedSetlist, type SavedSong, type SongConfig, type SongRef } from "./setlistStore";
 import { runSetlistQueue, type QueueResult } from "./setlistQueue";
 import { signOut } from "./cloud/auth";
-import type { SongProgress } from "./cloud/cloudSource";
 
 type Props = {
   /** Dueño de los datos guardados (user_id de la cuenta). */
@@ -18,8 +17,8 @@ type Props = {
   onBusyChange: (busy: boolean) => void;
   /** Vacía el setlist actual (false si hay algo en curso). */
   onClear: () => boolean;
-  /** Añade una canción cargada (false si no se pudo, por ejemplo sin memoria). */
-  onAddSong: (name: string, files: File[], options: { inMemory: true; tone: string | null; bpm: number | null; ref: SongRef; config?: SongConfig; master?: number; noPrompt: true }) => boolean;
+  /** Añade una canción de la nube al setlist como referencia (no descarga: la ventana de memoria de la app decide cuándo). */
+  onAddRef: (item: { id: string; key: string; title: string; size: number; tone: string | null; bpm: number | null }, options: { config?: SongConfig; master?: number }) => boolean;
 };
 
 /** Lo mínimo que hace falta para cargar: un culto guardado o la sesión autoguardada. */
@@ -58,7 +57,7 @@ const count = (n: number) => `${n} ${n === 1 ? "canción" : "canciones"}`;
  * de la nube más la configuración del mezclador de cada una, y se vuelven a cargar en cola. Nunca se guarda audio; las
  * canciones de "Este dispositivo" no se pueden restaurar y se omiten.
  */
-export default function SavedSetlists({ userId, current, sessionName, onSessionName, getSnapshot, onBusyChange, onClear, onAddSong }: Props) {
+export default function SavedSetlists({ userId, current, sessionName, onSessionName, getSnapshot, onBusyChange, onClear, onAddRef }: Props) {
   const [lists, setLists] = useState<SavedSetlist[]>([]);
   const [pending, setPending] = useState<SavedSession | null>(null);
   const [ready, setReady] = useState(false);
@@ -66,8 +65,8 @@ export default function SavedSetlists({ userId, current, sessionName, onSessionN
   const [note, setNote] = useState("");
   const [queue, setQueue] = useState<Queue | null>(null);
   const abortRef = useRef<AbortController | null>(null);
-  const addRef = useRef(onAddSong);
-  useEffect(() => { addRef.current = onAddSong; });
+  const addRef = useRef(onAddRef);
+  useEffect(() => { addRef.current = onAddRef; });
 
   useEffect(() => {
     let alive = true;
@@ -137,17 +136,16 @@ export default function SavedSetlists({ userId, current, sessionName, onSessionN
     abortRef.current = controller;
     setQueue({ list, index: 0, total: list.songs.length, title: list.songs[0]?.title ?? "", percent: null, detail: "", done: null });
     const outcome = await runSetlistQueue(list.songs, {
-      addSong: (title, files, options) => addRef.current(title, files, options),
-      onStart: (index, total, title) => setQueue((q) => (q ? { ...q, index, total, title, percent: null, detail: "" } : q)),
-      onProgress: (p: SongProgress) => setQueue((q) => (q ? (p.stage === "download"
-        ? { ...q, percent: p.total ? Math.min(100, Math.round((p.received / p.total) * 100)) : null, detail: `Descargando · ${(p.received / 1048576).toFixed(0)} de ${(p.total / 1048576).toFixed(0)} MB` }
-        : { ...q, percent: p.total ? Math.round((p.done / p.total) * 100) : null, detail: `Preparando pistas · ${p.done} de ${p.total}` }) : q)),
+      addRef: (item, options) => addRef.current(item, options),
+      onStart: (index, total, title) => setQueue((q) => (q ? { ...q, index, total, title, percent: null, detail: "Armando la lista" } : q)),
       signal: controller.signal,
       master: list.master,
     });
     abortRef.current = null;
     if (outcome.results.some((r) => !r.ok && /sesión terminó/i.test(r.reason ?? ""))) void signOut();
-    setQueue((q) => (q ? { ...q, done: outcome } : q));
+    // Todo bien: la hoja se cierra sola y la app descarga la primera canción (con su propio aviso de progreso); si hubo avisos, se muestran.
+    const clean = !outcome.cancelled && !outcome.stopReason && outcome.results.every((r) => r.ok);
+    setQueue((q) => (q && !clean ? { ...q, done: outcome } : null));
     onBusyChange(false);
   }
 

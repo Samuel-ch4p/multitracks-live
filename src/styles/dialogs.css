@@ -18,7 +18,7 @@ html.has-modal, html.has-modal body { overscroll-behavior: none; touch-action: n
 .drawer::-webkit-scrollbar { display: none; }
 
 /* Tarjetas: nunca más altas que la pantalla; el contenido se desplaza solo si hace falta, sin barra */
-.app .load-card, .app .sheet, .app .marker-card, .app .memory-card {
+.app .load-card, .app .sheet, .app .marker-card {
   max-height: calc(100dvh - 16px - env(safe-area-inset-top) - env(safe-area-inset-bottom)); overflow-y: auto; overscroll-behavior: contain; touch-action: pan-y; scrollbar-width: none;
 }
 .load-card::-webkit-scrollbar, .sheet::-webkit-scrollbar { display: none; }

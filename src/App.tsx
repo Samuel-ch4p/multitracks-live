@@ -4,7 +4,13 @@ import SettingsScreen, { type DiagnosticsInfo } from "./SettingsScreen";
 import { startFpsWatch, stopFpsWatch } from "./fpsMonitor";
 import MarkerEditor from "./MarkerEditor";
 import { MARKER_COLORS, dismissHint, hintDismissed, loadMarkers, saveMarkers, type Marker } from "./markers";
-import MemoryDialog, { type MemorySong } from "./MemoryDialog";
+import { LoadCard } from "./CloudParts";
+import { planWindow, memoryBudgetBytes, type PlanSong } from "./memoryPlan";
+import { MEMORIA } from "./cloud/config";
+import { fetchSongFiles, type CatalogSong, type SongProgress } from "./cloud/cloudSource";
+import { CloudError, friendlyCloudMessage } from "./cloud/errors";
+import { signOut } from "./cloud/auth";
+import { getPreload, subscribePreload } from "./preload";
 import "./styles/app.css";
 import "./styles/nav.css";
 import "./styles/mixer.css";
@@ -63,6 +69,10 @@ type Song = {
   files: File[];
   /** Bytes que esta canción ocupa en la memoria del dispositivo (descargas de la nube). 0 si sus archivos están en disco. */
   memoryBytes: number;
+  /** Tamaño en la nube (catálogo): sirve para planear la ventana de memoria antes de descargar. 0 en las de «Este dispositivo». */
+  sizeBytes: number;
+  /** Clave estable de la canción (marcadores); se calcula al cargarla y se conserva al liberarla. */
+  songKey?: string;
   /** Tono y BPM que informa el catálogo de la nube (si no vienen, se leen del nombre). */
   tone?: string | null;
   bpm?: number | null;
@@ -73,13 +83,12 @@ type Song = {
 };
 
 /**
- * Presupuesto de memoria para canciones descargadas (cada una queda en memoria: nada se guarda en el dispositivo).
- * Al añadir una más allá del presupuesto se quitan del repertorio las más antiguas que no estén sonando
- * (volver a añadirlas es un toque en la Nube). Sin esto, un repertorio de varias canciones agota la memoria del celular.
+ * Presupuesto para las canciones cargadas en RAM (ver MEMORIA en cloud/config.ts y memoryPlan.ts). El setlist admite cualquier número de
+ * canciones: solo se mantienen cargadas la activa, la anterior y las siguientes que quepan. En desarrollo, ?budgetMB=400 simula un celular chico.
  */
 function memoryBudget(): number {
-  const gb = (navigator as Navigator & { deviceMemory?: number }).deviceMemory ?? 4; // el navegador la reporta redondeada y con tope de 8
-  return Math.min(1.5, Math.max(0.6, gb * 0.2)) * 1024 ** 3;
+  const dev = import.meta.env.DEV ? Number(new URLSearchParams(window.location.search).get("budgetMB")) : 0;
+  return memoryBudgetBytes((navigator as Navigator & { deviceMemory?: number }).deviceMemory, MEMORIA, dev || undefined);
 }
 
 type AudioChannel = {
@@ -645,29 +654,35 @@ export default function App() {
 
   function activateSong(song: Song) {
     if (busyRef.current) return;
+    // Una canción de la nube que ya no está cargada (o aún no): queda activa y la ventana la descarga (con aviso de progreso).
+    if (song.files.length === 0 && song.ref) { setActiveUnloaded(song); return; }
     loadSong(song);
     setStatusMessage(`${song.name} · ${pistas(song.files.length)}`);
   }
 
-  const [memoryPrompt, setMemoryPrompt] = useState<{ name: string; files: File[]; tone?: string | null; bpm?: number | null; ref?: SongRef; config?: SongConfig } | null>(null);
-  const [, setMemoryVersion] = useState(0);
+  // ---- Ventana de canciones cargadas (memoryPlan.ts): el setlist son referencias; solo algunas están cargadas en RAM ----
+  const [loadInfo, setLoadInfo] = useState<{ id: number; percent: number | null } | null>(null);
+  const [fg, setFg] = useState<{ id: number; stage: "download" | "extract"; percent: number | null; detail: string; fileName: string; error: string | null; supportReason?: string } | null>(null);
+  const [loaderTick, setLoaderTick] = useState(0);
+  const preloadOn = useSyncExternalStore(subscribePreload, getPreload);
+  const loaderRef = useRef<{ id: number; controller: AbortController; foreground: boolean } | null>(null);
+  /** Canciones que el usuario canceló o cerró con error: no se reintentan solas hasta que las toque o pulse REINTENTAR. */
+  const cancelledRef = useRef<Set<number>>(new Set());
+  const retryRef = useRef<Map<number, { tries: number; until: number }>>(new Map());
+  /** Motivo (límite de uso, cuenta) por el que se detienen las precargas; se limpia al pedir una canción a mano. */
+  const blockedRef = useRef<string | null>(null);
+  const waitingNoticeRef = useRef<number | null>(null);
+  const warnedNextRef = useRef<number | null>(null);
+  /** Bytes ya recibidos de la descarga en curso (se suman a lo cargado para comprobar el presupuesto). */
+  const inflightBytesRef = useRef(0);
 
-  const addSong = useCallback((name: string, files: File[], options?: { inMemory?: boolean; force?: boolean; tone?: string | null; bpm?: number | null; ref?: SongRef; config?: SongConfig; master?: number; noPrompt?: boolean }): boolean => {
+  const addSong = useCallback((name: string, files: File[], options?: { inMemory?: boolean; tone?: string | null; bpm?: number | null; ref?: SongRef; config?: SongConfig; master?: number }): boolean => {
     if (!Array.isArray(files) || files.length === 0) {
       setStatusMessage(`No se pudo añadir ${name}: no contiene pistas válidas.`);
       return false;
     }
     const memoryBytes = options?.inMemory ? files.reduce((sum, file) => sum + file.size, 0) : 0;
-    // Presupuesto de memoria: si no cabe, no se quita nada en silencio; se pregunta qué quitar (MemoryDialog).
-    const used = playlistRef.current.reduce((sum, item) => sum + item.memoryBytes, 0);
-    if (!options?.force && memoryBytes > 0 && used + memoryBytes > memoryBudget()) {
-      // Al cargar un setlist guardado no se abre el diálogo (la hoja de progreso informa el motivo): la canción no se añade.
-      if (options?.noPrompt) return false;
-      setMemoryPrompt({ name, files, tone: options?.tone, bpm: options?.bpm, ref: options?.ref, config: options?.config });
-      setStatusMessage(`Memoria llena: elige qué quitar para añadir ${name}.`);
-      return false;
-    }
-    const song: Song = { id: nextId(), name, files, memoryBytes, tone: options?.tone, bpm: options?.bpm, ref: options?.ref, config: options?.config };
+    const song: Song = { id: nextId(), name, files, memoryBytes, sizeBytes: 0, songKey: songKeyOf(files), tone: options?.tone, bpm: options?.bpm, ref: options?.ref, config: options?.config };
     const config = options?.config;
     if (config) {
       // Configuración guardada del culto: la mezcla manda sobre los perfiles al activar la canción; los marcadores sustituyen a los locales.
@@ -688,17 +703,203 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const memoryView = (() => {
-    if (!memoryPrompt) return null;
-    const used = playlistRef.current.reduce((sum, item) => sum + item.memoryBytes, 0);
-    const songs: MemorySong[] = playlistRef.current
-      .filter((item) => item.memoryBytes > 0)
-      .map((item) => ({ id: item.id, name: item.name, tracks: item.files.length, bytes: item.memoryBytes, locked: item.id === activeSongIdRef.current && playingRef.current }));
-    return { songs, freeBytes: memoryBudget() - used, bytes: memoryPrompt.files.reduce((sum, file) => sum + file.size, 0) };
-  })();
+  /** Añade una canción de la nube como REFERENCIA (no descarga nada): la ventana de memoria decide cuándo cargarla. */
+  const addSongRef = useCallback((item: { id: string; key: string; title: string; size: number; tone?: string | null; bpm?: number | null }, options?: { config?: SongConfig; master?: number }): boolean => {
+    const song: Song = { id: nextId(), name: item.title, files: [], memoryBytes: 0, sizeBytes: item.size, tone: item.tone, bpm: item.bpm, ref: { id: item.id, key: item.key, title: item.title }, config: options?.config };
+    const config = options?.config;
+    if (config) {
+      if (config.tracks.length > 0) mixesRef.current.set(song.id, new Map(config.tracks.map((t) => [t.fileName, { volume: t.volume, pan: t.pan, muted: t.muted, solo: t.solo }])));
+      if (config.click || config.pad) extrasRef.current.set(song.id, { click: config.click, pad: config.pad });
+    }
+    const next = [...playlistRef.current, song];
+    playlistRef.current = next;
+    setPlaylist(next);
+    setStatusMessage(`${item.title} añadida a la lista.`);
+    if (activeSongIdRef.current === null) {
+      setActiveUnloaded(song);
+      if (options?.master != null) setMasterVolume(options.master);
+    } else {
+      setLoaderTick((tick) => tick + 1);
+    }
+    return true;
+    // setActiveUnloaded solo toca refs y estado de React.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  /** Deja la canción como activa aunque aún no esté cargada (la descarga la gestiona schedule()). */
+  function setActiveUnloaded(song: Song) {
+    const leaving = activeSongIdRef.current;
+    if (leaving !== null && tracksRef.current.length && playlistRef.current.some((item) => item.id === leaving)) {
+      mixesRef.current.set(leaving, new Map(tracksRef.current.map((t) => [t.file.name, { volume: t.volume, pan: t.pan, muted: t.muted, solo: t.solo }])));
+    }
+    if (leaving !== null && playlistRef.current.some((item) => item.id === leaving)) extrasRef.current.set(leaving, currentExtras());
+    disposeActiveTracks();
+    cancelledRef.current.delete(song.id);
+    retryRef.current.delete(song.id);
+    activeSongIdRef.current = song.id;
+    setActiveSongId(song.id);
+    setSongName(song.name);
+    setMarkers([]);
+    setLoaderTick((tick) => tick + 1);
+  }
+
+  const toCatalogSong = (song: Song): CatalogSong => ({
+    id: song.ref?.id ?? "", artistId: "", title: song.name, key: song.ref?.key ?? "", size: song.sizeBytes, format: "zip",
+    bpm: song.bpm ?? null, tone: song.tone ?? null, modTime: null,
+  });
+  const toPlanSong = (song: Song): PlanSong => {
+    const loaded = song.files.length > 0;
+    return { id: song.id, cloud: !!song.ref, loaded, bytes: loaded ? song.memoryBytes || song.files.reduce((sum, file) => sum + file.size, 0) : song.sizeBytes };
+  };
+
+  /** Una canción terminó de descargarse: pasa a estar cargada; si es la activa, se monta en el mezclador. */
+  function commitLoaded(id: number, files: File[]) {
+    const list = playlistRef.current;
+    const index = list.findIndex((song) => song.id === id);
+    if (index < 0) return; // se quitó mientras descargaba: sus archivos se sueltan solos
+    const songKey = songKeyOf(files);
+    // En desarrollo, las canciones de la nube falsa («dev://») cuentan por el tamaño del catálogo falso, no por sus pistas de prueba.
+    const fake = import.meta.env.DEV && list[index].ref?.key.startsWith("dev://") && !(window as unknown as { __devNet?: { real: boolean } }).__devNet?.real;
+    const song: Song = { ...list[index], files, memoryBytes: fake ? list[index].sizeBytes : files.reduce((sum, file) => sum + file.size, 0), songKey };
+    if (song.config?.markers) saveMarkers(songKey, song.config.markers);
+    const next = [...list];
+    next[index] = song;
+    playlistRef.current = next;
+    setPlaylist(next);
+    if (activeSongIdRef.current === id && tracksRef.current.length === 0) loadSong(song);
+    setLoaderTick((tick) => tick + 1);
+  }
+
+  /** Libera de verdad una canción de la nube que queda fuera de la ventana: suelta sus archivos (y con ellos sus Blobs). */
+  function releaseSong(id: number) {
+    const list = playlistRef.current;
+    const index = list.findIndex((song) => song.id === id);
+    if (index < 0 || id === activeSongIdRef.current) return;
+    const song = list[index];
+    if (!song.ref || song.files.length === 0) return;
+    const next = [...list];
+    next[index] = { ...song, files: [], memoryBytes: 0 };
+    playlistRef.current = next;
+    setPlaylist(next);
+  }
+
+  const RETRY_MS = [4000, 10000, 20000, 40000, 60000];
+
+  async function runDownload(song: Song, foreground: boolean) {
+    const controller = new AbortController();
+    loaderRef.current = { id: song.id, controller, foreground };
+    if (foreground) blockedRef.current = null;
+    setLoadInfo({ id: song.id, percent: null });
+    if (foreground) setFg({ id: song.id, stage: "download", percent: null, detail: "", fileName: song.name, error: null });
+    const started = performance.now();
+    let lastShown = 0;
+    const onProgress = (p: SongProgress) => {
+      const now = performance.now();
+      if (p.stage === "download" && now - lastShown < 250) return;
+      lastShown = now;
+      inflightBytesRef.current = p.stage === "download" ? p.received : song.sizeBytes;
+      const percent = p.stage === "download" ? (p.total ? Math.min(100, Math.round((p.received / p.total) * 100)) : null) : (p.total ? Math.round((p.done / p.total) * 100) : null);
+      setLoadInfo({ id: song.id, percent: p.stage === "download" ? percent : 100 });
+      if (foreground) {
+        const speed = p.stage === "download" ? p.received / 1048576 / Math.max((now - started) / 1000, 0.1) : 0;
+        const detail = p.stage === "download" ? `${(p.received / 1048576).toFixed(0)} de ${(p.total / 1048576).toFixed(0)} MB · ${speed.toFixed(1)} MB/s` : `Pista ${p.done} de ${p.total}`;
+        setFg((current) => (current && current.id === song.id ? { ...current, stage: p.stage, percent, detail } : current));
+      }
+    };
+    try {
+      const files = await fetchSongFiles(toCatalogSong(song), onProgress, controller.signal);
+      if (controller.signal.aborted) throw new CloudError("cancelled");
+      loaderRef.current = null;
+      inflightBytesRef.current = 0;
+      retryRef.current.delete(song.id);
+      setLoadInfo(null);
+      if (foreground) setFg(null);
+      commitLoaded(song.id, files);
+    } catch (error) {
+      loaderRef.current = null;
+      inflightBytesRef.current = 0;
+      setLoadInfo(null);
+      if (controller.signal.aborted || (error instanceof CloudError && error.kind === "cancelled")) {
+        setFg((current) => (current && current.id === song.id && !current.error ? null : current));
+        setLoaderTick((tick) => tick + 1);
+        return;
+      }
+      if (error instanceof CloudError && error.kind === "no_session") { void signOut(); return; }
+      const message = friendlyCloudMessage(error);
+      if (foreground) {
+        cancelledRef.current.add(song.id);
+        setFg((current) => ({ ...(current ?? { id: song.id, stage: "download" as const, percent: null, detail: "", fileName: song.name }), error: message, supportReason: error instanceof CloudError && error.showsSupport ? "me salió un error al descargar una canción" : undefined }));
+        return;
+      }
+      if (error instanceof CloudError && error.blocksAll) {
+        blockedRef.current = message;
+        setStatusMessage(`No se pudo precargar la siguiente. ${message}`);
+        return;
+      }
+      // Fallo de red o del servidor en segundo plano: se reintenta solo, con pausas crecientes, sin tocar el audio de la actual.
+      const tries = (retryRef.current.get(song.id)?.tries ?? 0) + 1;
+      const delay = RETRY_MS[Math.min(tries - 1, RETRY_MS.length - 1)];
+      retryRef.current.set(song.id, { tries, until: Date.now() + delay });
+      window.setTimeout(() => setLoaderTick((tick) => tick + 1), delay + 50);
+    }
+  }
+
+  /** Decide qué soltar y qué descargar según la ventana (activa, anterior y siguientes) y el presupuesto. Se llama tras cada cambio. */
+  function schedule() {
+    const list = playlistRef.current;
+    const activeId = activeSongIdRef.current;
+    const activeIndex = list.findIndex((song) => song.id === activeId);
+    const plan = planWindow(list.map(toPlanSong), activeIndex, memoryBudget(), MEMORIA, getPreload());
+    // 1) Soltar lo que sale de la ventana ANTES de empezar nada nuevo: la memoria nunca pasa del presupuesto.
+    for (const id of plan.release) releaseSong(id);
+    // 2) Una descarga en curso que ya no hace falta (o que estorba a la de la activa) se corta.
+    const current = loaderRef.current;
+    const activeSong = list[activeIndex];
+    const activeNeedsLoad = !!activeSong && !!activeSong.ref && activeSong.files.length === 0 && !cancelledRef.current.has(activeSong.id);
+    if (current && (!plan.keep.includes(current.id) || (activeNeedsLoad && !current.foreground && current.id !== activeId))) current.controller.abort();
+    // Aviso discreto si la siguiente no cabe junto a la actual
+    if (plan.waiting !== null && activeSong && activeSong.files.length > 0 && waitingNoticeRef.current !== plan.waiting) {
+      waitingNoticeRef.current = plan.waiting;
+      setStatusMessage("Siguiente en cola: no cabe junto a la actual; se cargará al liberar memoria.");
+    } else if (plan.waiting === null) waitingNoticeRef.current = null;
+    // 3) Empezar la siguiente descarga (una a la vez)
+    if (loaderRef.current || busyRef.current) return;
+    for (const id of plan.load) {
+      const song = list.find((item) => item.id === id);
+      if (!song || cancelledRef.current.has(id)) continue;
+      const retry = retryRef.current.get(id);
+      if (retry && retry.until > Date.now()) continue;
+      const foreground = id === activeId;
+      // Las precargas esperan a que la activa termine de prepararse, y no se hacen si algo las detuvo (límite de uso).
+      if (!foreground && (blockedRef.current || !preparedRef.current)) continue;
+      void runDownload(song, foreground);
+      return;
+    }
+  }
+
+  function cancelForeground() {
+    if (fg) cancelledRef.current.add(fg.id);
+    loaderRef.current?.controller.abort();
+    setFg(null);
+    setStatusMessage("Descarga cancelada. Toca la canción para reintentar.");
+  }
+  function retryForeground() {
+    if (fg) { cancelledRef.current.delete(fg.id); retryRef.current.delete(fg.id); }
+    blockedRef.current = null;
+    setFg(null);
+    setLoaderTick((tick) => tick + 1);
+  }
+  function closeForeground() {
+    setFg(null);
+    setStatusMessage("No se cargó la canción. Toca la canción para reintentar.");
+  }
 
   function selectSong(song: Song) {
-    if (song.id === activeSongIdRef.current || busyRef.current) return;
+    if (busyRef.current) return;
+    if (song.id === activeSongIdRef.current) {
+      if (song.files.length === 0 && song.ref) { cancelledRef.current.delete(song.id); retryRef.current.delete(song.id); blockedRef.current = null; setLoaderTick((tick) => tick + 1); }
+      return;
+    }
     activateSong(song);
   }
 
@@ -713,6 +914,11 @@ export default function App() {
   /** Vacía el setlist actual (igual que quitar todas las canciones). Devuelve false si hay una operación en curso. */
   function clearSetlist(): boolean {
     if (busyRef.current) return false;
+    loaderRef.current?.controller.abort();
+    cancelledRef.current.clear();
+    retryRef.current.clear();
+    blockedRef.current = null;
+    setFg(null);
     playlistRef.current = [];
     setPlaylist([]);
     mixesRef.current.clear();
@@ -739,6 +945,10 @@ export default function App() {
 
   function removeSong(songId: number) {
     if (busyRef.current) return;
+    if (loaderRef.current?.id === songId) loaderRef.current.controller.abort();
+    cancelledRef.current.delete(songId);
+    retryRef.current.delete(songId);
+    setFg((current) => (current?.id === songId ? null : current));
     const next = playlistRef.current.filter((song) => song.id !== songId);
     playlistRef.current = next;
     setPlaylist(next);
@@ -998,6 +1208,8 @@ export default function App() {
   }, [statusMessage]);
 
   useEffect(() => startModalGuard(), []);
+  // Al cerrar la app se corta cualquier descarga en curso.
+  useEffect(() => () => loaderRef.current?.controller.abort(), []);
   useWakeLock(playing || click.running || padState.playing);
   // La sesión nunca se cierra por inactividad mientras suena algo (pistas, click o pad).
   useEffect(() => { setAudioActive(playing || click.running || padState.playing); }, [playing, click.running, padState.playing]);
@@ -1031,11 +1243,23 @@ export default function App() {
   // Solo en desarrollo: canciones sintéticas para ver y medir la interfaz (window.__demo("Nombre", 13)).
   useEffect(() => {
     if (!import.meta.env.DEV) return;
-    window.__demo = async (title = "Todo de nuevo", count = 13, fakeMB = 0) => {
-      const { makeDemoSong } = await import("./devDemo");
-      addSong(title, makeDemoSong(title, count, 60, fakeMB), { inMemory: fakeMB > 0 });
+    window.__demoCloud = (count = 10, mb = 300) => {
+      for (let i = 1; i <= count; i++) addSongRef({ id: `dev-${i}`, key: `dev://song-${i}`, title: `Canción ${i}`, size: mb * 1048576 });
     };
-  }, [addSong]);
+    window.__mem = () => {
+      const list = playlistRef.current;
+      const used = list.filter((song) => song.ref).reduce((sum, song) => sum + song.memoryBytes, 0);
+      return {
+        budget: memoryBudget(), used, inflight: inflightBytesRef.current, activeIndex: list.findIndex((song) => song.id === activeSongIdRef.current),
+        songs: list.map((song) => ({ name: song.name, loaded: song.files.length > 0, mb: Math.round(song.memoryBytes / 1048576) })),
+        downloading: loaderRef.current ? list.findIndex((song) => song.id === loaderRef.current?.id) : -1,
+      };
+    };
+    window.__demo = async (title = "Todo de nuevo", count = 13, fakeMB = 0, seconds = 60, rate = 22050, stereo = false) => {
+      const { makeDemoSong } = await import("./devDemo");
+      addSong(title, makeDemoSong(title, count, seconds, fakeMB, undefined, { rate, stereo }), { inMemory: fakeMB > 0 });
+    };
+  }, [addSong, addSongRef]);
 
   // Solo en desarrollo, con ?demo en la dirección: canciones falsas (la primera con 10 pistas), medidores animados y una pista en mute,
   // para revisar el diseño con todo visible. Todo este bloque se elimina del APK de producción (import.meta.env.DEV).
@@ -1088,11 +1312,12 @@ export default function App() {
     try { localStorage.setItem(NORM_MODE_KEY, normMode); } catch { /* sin almacenamiento */ }
   }, [normMode]);
 
+  const activeLoaded = (playlist.find((song) => song.id === activeSongId)?.files.length ?? 0) > 0;
   // Forma de onda y análisis de nivel de la canción activa (una vez por canción; al volver a ella ya está hecho).
   useEffect(() => {
     const song = playlistRef.current.find((item) => item.id === activeSongId);
-    if (!song) {
-      setPeaksLoading(false); // sin canción activa no hay nada que analizar (evita dejar el aviso "Analizando…" pegado)
+    if (!song || song.files.length === 0) {
+      setPeaksLoading(false); // sin canción activa (o aún sin descargar) no hay nada que analizar (evita dejar el aviso "Analizando…" pegado)
       return;
     }
     const cached = peaksCacheRef.current.get(song.id);
@@ -1121,7 +1346,8 @@ export default function App() {
       })
       .finally(() => { if (!cancelled) setPeaksLoading(false); });
     return () => { cancelled = true; };
-  }, [activeSongId]);
+    // activeLoaded: una canción de la nube activa se analiza cuando termina de descargarse, no al elegirla.
+  }, [activeSongId, activeLoaded]);
 
   useEffect(() => {
     return () => {
@@ -1203,6 +1429,30 @@ export default function App() {
   const ready = tracks.length > 0 && !resetting && !preparing;
   const syncLabel = preparing ? `Preparando pistas… ${readyCount}/${tracks.length}` : resetting ? "Sincronizando…" : playing ? "En vivo" : ready ? "Pistas sincronizadas" : "Sin canción";
 
+  // La ventana de memoria se recalcula tras cada cambio: canciones, activa, ajuste de precarga, fin de preparación o de una descarga.
+  useEffect(() => {
+    schedule();
+    // schedule solo usa refs y setters estables.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [playlist, activeSongId, preloadOn, preparing, loaderTick]);
+
+  // «Siguiente en preparación»: si la actual está por terminar y la siguiente aún no está lista, se avisa una vez (el audio no se toca).
+  useEffect(() => {
+    if (!playing) return;
+    const timer = window.setInterval(() => {
+      const { time, duration } = getClock();
+      if (!(duration > 0) || duration - time > 30) return;
+      const list = playlistRef.current;
+      const index = list.findIndex((song) => song.id === activeSongIdRef.current);
+      const next = list[index + 1];
+      if (next && next.ref && next.files.length === 0 && warnedNextRef.current !== activeSongIdRef.current) {
+        warnedNextRef.current = activeSongIdRef.current;
+        setStatusMessage("Siguiente en preparación");
+      }
+    }, 2000);
+    return () => window.clearInterval(timer);
+  }, [playing]);
+
   // Si el usuario pulsó Play mientras se preparaba, arranca en cuanto todo está listo.
   useEffect(() => {
     if (queuedPlay && !preparing) void playAll();
@@ -1246,6 +1496,9 @@ export default function App() {
   const padInline = wide && padOpen;
   const padDrawer = !wide && padOpen;
 
+  const songState = (song: Song): { state: "ready" | "downloading" | "queued"; percent: number | null } =>
+    song.files.length > 0 || !song.ref ? { state: "ready", percent: null } : loadInfo?.id === song.id ? { state: "downloading", percent: loadInfo.percent } : { state: "queued", percent: null };
+
   const songDeck = (
     <div className="song-deck" aria-label="Repertorio">
       {playlist.length === 0 && (
@@ -1255,7 +1508,7 @@ export default function App() {
         <article className={`deck-card ${song.id === activeSongId ? "active" : ""}`} key={song.id}>
           <button className="deck-main" onClick={() => selectSong(song)} title={song.name} aria-label={`Seleccionar ${song.name}`}>
             <Artwork index={index} />
-            <span><strong>{song.name}</strong><small>{pistas(song.files.length)}</small></span>
+            <span><strong>{song.name}</strong><small>{(() => { const s = songState(song); return s.state === "ready" ? pistas(song.files.length) : s.state === "downloading" ? `Descargando ${s.percent ?? 0}%` : "En cola"; })()}</small></span>
           </button>
           <button className="deck-remove" onClick={() => removeSong(song.id)} aria-label={`Quitar ${song.name}`}>×</button>
         </article>
@@ -1375,7 +1628,7 @@ export default function App() {
 
       {tab === "setlist" && (
         <SetlistScreen
-          songs={playlist.map((song) => ({ id: song.id, name: song.name, tracks: song.files.length, tone: song.tone, bpm: song.bpm }))}
+          songs={playlist.map((song) => ({ id: song.id, name: song.name, tracks: song.files.length, tone: song.tone, bpm: song.bpm, ...songState(song) }))}
           activeId={activeSongId}
           playing={playing}
           onOpen={(id) => { const song = playlist.find((item) => item.id === id); if (song) selectSong(song); setTab("mixer"); }}
@@ -1391,7 +1644,7 @@ export default function App() {
               getSnapshot={() => ({ songs: snapshotSongs(), master: masterVolumeRef.current })}
               onBusyChange={setQueueBusy}
               onClear={clearSetlist}
-              onAddSong={(name, files, options) => addSong(name, files, options)}
+              onAddRef={addSongRef}
             />
           }
         />
@@ -1471,7 +1724,7 @@ export default function App() {
           <div className="library-body">
             {source === "local"
               ? <div className="library-scroll"><LocalImport onSongLoaded={addSong} /></div>
-              : <NubeBrowser onSongLoaded={addSong} />}
+              : <NubeBrowser onSongRef={addSongRef} />}
           </div>
         </section>
       )}
@@ -1494,13 +1747,13 @@ export default function App() {
           <button className="pill-btn" onClick={() => { setQueuedPlay(false); void playAll(true); }} disabled={resetting}>TOCAR YA</button>
         </div>
       )}
-      {removedName && !memoryPrompt && !markerDraft && (
+      {removedName && !markerDraft && (
         <div className="app-toast undo-toast" role="status" aria-live="polite" key="undo">
           <span>Pista «{removedName}» eliminada</span>
           <button className="undo-btn" onClick={undoRemoval}>DESHACER</button>
         </div>
       )}
-      {statusMessage && !memoryPrompt && !markerDraft && (
+      {statusMessage && !markerDraft && (
         <div className="app-toast" role="status" aria-live="polite" key={statusMessage}>
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8L12 3Z" /></svg>
           <span>{statusMessage}</span>
@@ -1555,14 +1808,17 @@ export default function App() {
         </div>
       )}
 
-      {memoryPrompt && memoryView && (
-        <MemoryDialog
-          incoming={{ name: memoryPrompt.name, tracks: memoryPrompt.files.length, bytes: memoryView.bytes }}
-          songs={memoryView.songs}
-          freeBytes={memoryView.freeBytes}
-          onRemove={(id) => { removeSong(id); setMemoryVersion((version) => version + 1); }}
-          onConfirm={() => { addSong(memoryPrompt.name, memoryPrompt.files, { inMemory: true, force: true, tone: memoryPrompt.tone, bpm: memoryPrompt.bpm, ref: memoryPrompt.ref, config: memoryPrompt.config }); setMemoryPrompt(null); }}
-          onCancel={() => { setMemoryPrompt(null); setStatusMessage("Canción no añadida."); }}
+      {fg && (
+        <LoadCard
+          stage={fg.stage}
+          percent={fg.percent}
+          detail={fg.detail}
+          fileName={fg.fileName}
+          error={fg.error}
+          supportReason={fg.supportReason}
+          onCancel={cancelForeground}
+          onRetry={retryForeground}
+          onClose={closeForeground}
         />
       )}
 

@@ -1,11 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
-import { pistas } from "./format";
 import { useWindowed } from "./windowed";
-import { CloudIcon, LoadCard, SupportActions } from "./CloudParts";
-import { CloudError, friendlyCloudMessage } from "./cloud/errors";
-import { fetchSongFiles, isDownloading, loadCatalog, type SongProgress } from "./cloud/cloudSource";
-import { signOut } from "./cloud/auth";
-import { CONTACTO_SOPORTE, supportHint } from "./cloud/config";
+import { CloudIcon } from "./CloudParts";
+import { friendlyCloudMessage } from "./cloud/errors";
+import { supportHint } from "./cloud/config";
+import { loadCatalog } from "./cloud/cloudSource";
 import { isPlayable, type CatalogArtist } from "./cloud/catalog";
 import { buildIndex, foldQuery, searchIndex, type IndexData, type IndexSong } from "./searchIndex";
 import { parseSongTags } from "./songTags";
@@ -13,7 +11,8 @@ import { libraryCache } from "./libraryCache";
 import SearchBox from "./SearchBox";
 
 type Props = {
-  onSongLoaded: (name: string, files: File[], options?: { inMemory?: boolean; tone?: string | null; bpm?: number | null; ref?: { id: string; key: string; title: string } }) => void;
+  /** Añade la canción al setlist como referencia: no descarga nada (la ventana de memoria de App.tsx decide cuándo cargarla). */
+  onSongRef: (item: { id: string; key: string; title: string; size: number; tone?: string | null; bpm?: number | null }) => void;
 };
 
 /** Tocar una canción en los resultados de búsqueda: false = la selecciona y muestra "AÑADIR" (evita descargas grandes por error). */
@@ -22,21 +21,7 @@ const SEARCH_TAP_LOADS = false;
 
 
 const sizeLabel = (size?: number) => (size ? `${Math.round(size / 1048576)} MB` : "Multitrack");
-const mb = (bytes: number) => (bytes / 1048576).toFixed(bytes >= 10485760 ? 0 : 1);
-const isAbort = (e: unknown) => e instanceof CloudError ? e.kind === "cancelled" : e instanceof DOMException && e.name === "AbortError";
 const songsLabel = (n: number) => `${n} ${n === 1 ? "canción" : "canciones"}`;
-
-/** Mensaje de la tarjeta de error. Los errores de extracción ya vienen en español ("El ZIP está dañado…"). */
-function downloadMessage(e: unknown): string {
-  if (e instanceof CloudError) {
-    if (e.kind === "paused" || e.kind === "usage_limit") return friendlyCloudMessage(e); // el mensaje ya dirige a soporte y la tarjeta trae el botón
-    if (e.isAccountState) return `${friendlyCloudMessage(e)} Escríbenos por WhatsApp al ${CONTACTO_SOPORTE.whatsappDisplay}.`;
-    return e.kind === "network" || e.kind === "server" || e.kind === "other" ? `${friendlyCloudMessage(e)} ${supportHint()}` : friendlyCloudMessage(e);
-  }
-  if (e instanceof RangeError) return "Este multitrack es demasiado grande para la memoria del dispositivo. Cierra otras apps e inténtalo de nuevo.";
-  if (e instanceof Error && !/fetch|network|abort/i.test(e.message)) return e.message;
-  return friendlyCloudMessage(e);
-}
 
 function Chips({ song }: { song: IndexSong }) {
   const parsed = parseSongTags(song.title);
@@ -51,31 +36,24 @@ function Chips({ song }: { song: IndexSong }) {
   );
 }
 
-type Load = { stage: "download" | "extract"; percent: number | null; detail: string };
 type Filter = "all" | "available";
 
-export default function NubeBrowser({ onSongLoaded }: Props) {
+export default function NubeBrowser({ onSongRef }: Props) {
   const [index, setIndex] = useState<IndexData | null>(libraryCache.index);
   const [offline, setOffline] = useState(false);
   const [artist, setArtist] = useState<CatalogArtist | null>(null);
   const [loading, setLoading] = useState(() => !libraryCache.index);
-  const [adding, setAdding] = useState(false);
   const [selected, setSelected] = useState<IndexSong | null>(null);
   const [error, setError] = useState("");
   const [status, setStatus] = useState("");
-  const [load, setLoad] = useState<Load>({ stage: "download", percent: null, detail: "" });
-  const [loadFail, setLoadFail] = useState<string | null>(null);
-  const [loadFailKind, setLoadFailKind] = useState<string | null>(null);
   /** Límite diario alcanzado (lo informa el servidor al intentar descargar). */
-  const [limit, setLimit] = useState<string | null>(null);
   const [filter, setFilter] = useState<Filter>("all");
-  const abortRef = useRef<AbortController | null>(null);
   // El texto que se escribe vive en SearchBox; aquí solo está el filtro ya asentado.
   const [search, setSearch] = useState("");
   const [resetSignal, setResetSignal] = useState(0);
   const mounted = useRef(true);
 
-  const busy = loading || adding;
+  const busy = loading;
 
   const fetchCatalog = useCallback(async () => {
     try {
@@ -100,7 +78,6 @@ export default function NubeBrowser({ onSongLoaded }: Props) {
   function reload() {
     setLoading(true);
     setError("");
-    setLimit(null);
     void fetchCatalog();
   }
 
@@ -152,50 +129,13 @@ export default function NubeBrowser({ onSongLoaded }: Props) {
     setStatus("");
   }
 
-  async function addSong(item: IndexSong) {
+  /** Añadir = poner la referencia en el setlist (instantáneo). La descarga la gestiona la ventana de memoria de App.tsx. */
+  function addSong(item: IndexSong) {
     if (!isPlayable(item)) return;
-    if (isDownloading()) { setError("Ya hay una canción descargándose. Espera a que termine."); return; }
-    const controller = new AbortController();
-    abortRef.current = controller;
-    setSelected(item);
-    setAdding(true);
-    setError("");
-    setLoadFail(null);
-    setLoadFailKind(null);
-    setLoad({ stage: "download", percent: null, detail: "" });
-    const started = performance.now();
-    let lastShown = 0;
-    const onProgress = (p: SongProgress) => {
-      const now = performance.now();
-      if (now - lastShown < 250 && p.stage === "download") return;
-      lastShown = now;
-      if (p.stage === "download") {
-        const speed = p.received / 1048576 / Math.max((now - started) / 1000, 0.1);
-        setLoad({ stage: "download", percent: p.total ? Math.min(100, Math.round((p.received / p.total) * 100)) : null, detail: `${mb(p.received)} de ${mb(p.total)} MB · ${speed.toFixed(1)} MB/s` });
-      } else {
-        setLoad({ stage: "extract", percent: p.total ? Math.round((p.done / p.total) * 100) : null, detail: `Pista ${p.done} de ${p.total}` });
-      }
-    };
-    try {
-      const files = await fetchSongFiles(item, onProgress, controller.signal);
-      if (controller.signal.aborted) throw new CloudError("cancelled");
-      onSongLoaded(item.title, files, { inMemory: true, tone: item.tone, bpm: item.bpm, ref: { id: item.id, key: item.key, title: item.title } });
-      setSelected(null);
-      setStatus(`Añadida: ${item.title} · ${pistas(files.length)}.`);
-    } catch (e) {
-      if (controller.signal.aborted || isAbort(e)) { if (mounted.current) setStatus("Descarga cancelada."); return; }
-      console.error("Nube: error al descargar o extraer");
-      if (e instanceof CloudError && e.kind === "no_session") { void signOut(); return; }
-      if (e instanceof CloudError && e.kind === "usage_limit") setLimit(friendlyCloudMessage(e));
-      if (mounted.current) { setLoadFail(downloadMessage(e)); setLoadFailKind(e instanceof CloudError ? e.kind : null); }
-      setStatus("");
-    } finally {
-      abortRef.current = null;
-      setAdding(false);
-    }
+    onSongRef({ id: item.id, key: item.key, title: item.title, size: item.size, tone: item.tone, bpm: item.bpm });
+    setSelected(null);
+    setStatus(`Añadida a tu setlist: ${item.title}.`);
   }
-
-  function cancelAdd() { abortRef.current?.abort(); }
 
   function pickSong(song: IndexSong) {
     if (!isPlayable(song)) return;
@@ -211,9 +151,8 @@ export default function NubeBrowser({ onSongLoaded }: Props) {
   const songRow = (song: IndexSong, position: number, subtitle: string) => {
     const playable = isPlayable(song);
     const isSelected = selected?.id === song.id;
-    const downloading = adding && isSelected;
     return (
-      <div className={`song-item ${isSelected ? "selected" : ""} ${playable ? "" : "soon"} ${downloading ? "downloading" : ""}`} key={song.id} style={{ "--i": Math.min(position, 12) } as CSSProperties}>
+      <div className={`song-item ${isSelected ? "selected" : ""} ${playable ? "" : "soon"}`} key={song.id} style={{ "--i": Math.min(position, 12) } as CSSProperties}>
         <button className="song-item-main" disabled={busy || !playable} onClick={() => pickSong(song)}>
           <span className="song-art"><CloudIcon name="music" /></span>
           <span className="song-copy">
@@ -223,13 +162,12 @@ export default function NubeBrowser({ onSongLoaded }: Props) {
           <Chips song={song} />
           <span className="song-end">
             {!playable ? <i className="chip-tag soon-tag">Próximamente</i>
-              : downloading ? <b>{load.percent === null ? "…" : `${load.percent}%`}</b>
-                : <CloudIcon name="plus" />}
+              : <CloudIcon name="plus" />}
           </span>
         </button>
         {isSelected && playable && (
-          <button className="song-add" disabled={busy || !!limit} onClick={() => void addSong(song)}>
-            {adding ? "PROCESANDO…" : limit ? "USO MÁXIMO POR AHORA" : "＋ AÑADIR A MI SETLIST"}
+          <button className="song-add" disabled={busy} onClick={() => addSong(song)}>
+            ＋ AÑADIR A MI SETLIST
           </button>
         )}
       </div>
@@ -274,7 +212,6 @@ export default function NubeBrowser({ onSongLoaded }: Props) {
         )}
       </div>
 
-      {limit && <div className="lib-limit" role="status"><p>{limit}</p><SupportActions reason="alcancé el uso máximo en Crescendo Live y necesito ayuda." /></div>}
 
       <div className="library-scroll">
         {(status || error) && index && (
@@ -340,19 +277,6 @@ export default function NubeBrowser({ onSongLoaded }: Props) {
             : <><div className="song-list">{songListWin.visible.map((song, position) => songRow(song, position, sizeLabel(song.size)))}</div>{songListWin.sentinel}</>
         )}
       </div>
-      {(adding || loadFail) && (
-        <LoadCard
-          stage={load.stage}
-          percent={load.percent}
-          detail={load.detail}
-          fileName={selected?.title ?? ""}
-          error={loadFail}
-          onCancel={adding ? cancelAdd : undefined}
-          onRetry={loadFail && selected && !limit ? () => void addSong(selected) : undefined}
-          onClose={() => setLoadFail(null)}
-          supportReason={loadFailKind === "usage_limit" ? "alcancé el uso máximo en Crescendo Live y necesito ayuda." : loadFailKind === "paused" ? "mi cuenta de Crescendo Live aparece en pausa por uso inusual. ¿Me pueden ayudar?" : undefined}
-        />
-      )}
     </>
   );
 }

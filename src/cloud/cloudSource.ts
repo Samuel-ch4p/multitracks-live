@@ -28,6 +28,12 @@ export const isDownloading = () => inFlight;
 
 /** Descarga la canción (ZIP) y devuelve sus pistas de audio, listas para `onSongLoaded(..., { inMemory: true })`. */
 export async function fetchSongFiles(song: CatalogSong, onProgress: (p: SongProgress) => void, signal: AbortSignal): Promise<File[]> {
+  // Solo en desarrollo: llaves «dev://…» usan una nube falsa (ver devCloud.ts); en el APK este bloque no existe.
+  if (import.meta.env.DEV && song.key.startsWith("dev://")) {
+    if (inFlight) throw new CloudError("other", 0, {}, "ya hay una descarga");
+    inFlight = true;
+    try { return await (await import("../devCloud")).devFetchSongFiles(song, onProgress, signal); } finally { inFlight = false; }
+  }
   if (song.format !== "zip") throw new CloudError("other", 0, {}, "formato no disponible");
   if (inFlight) throw new CloudError("other", 0, {}, "ya hay una descarga");
   inFlight = true;

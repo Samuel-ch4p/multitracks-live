@@ -12,7 +12,9 @@ declare global {
   interface Window {
     __perf?: Row[]; __perfTable?: () => void; __perfReset?: () => void;
     /** Solo en desarrollo: ganancia de normalización y fader reales de cada pista. */
-    __demo?: (title?: string, count?: number, fakeMB?: number) => Promise<void>;
+    __demo?: (title?: string, count?: number, fakeMB?: number, seconds?: number, rate?: number, stereo?: boolean) => Promise<void>;
+    __demoCloud?: (count?: number, mb?: number) => void;
+    __mem?: () => { budget: number; used: number; inflight: number; activeIndex: number; downloading: number; songs: { name: string; loaded: boolean; mb: number }[] };
     __mix?: () => { name: string; norm: number; fader: number; pan: number[] }[];
   }
 }
