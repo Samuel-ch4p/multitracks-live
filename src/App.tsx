@@ -20,11 +20,8 @@ import { useUserId } from "./AuthGate";
 import { setAudioActive } from "./inactivity";
 import NubeBrowser from "./NubeBrowser";
 import { perfBegin, perfEnd, perfStep } from "./perf";
-import ProfileDrawer from "./ProfileDrawer";
-import {
-  FACTORY_MASTER, PROFILE_LABEL, buildGeneral, buildSong, clearGeneral, clearSongProfile, exportGeneral, factorySetting, importGeneral,
-  loadGeneral, loadSongProfile, resolveProfile, saveGeneralProfile, saveSongProfile, songKeyOf, type LiveTrack, type ProfileSource,
-} from "./trackProfiles";
+import { songKeyOf } from "./trackProfiles";
+import { getStoredMaster } from "./account";
 import LocalImport from "./LocalImport";
 import Fader from "./Fader";
 import Pan from "./Pan";
@@ -68,7 +65,7 @@ type Song = {
   bpm?: number | null;
   /** Referencia a la canción de la nube (para guardar setlists). Las de "Este dispositivo" no la tienen. */
   ref?: SongRef;
-  /** Configuración guardada con el culto del que viene la canción (perfil aplicado, entre otras). */
+  /** Configuración guardada con el culto del que viene la canción (mezcla, marcadores, click y pad). */
   config?: SongConfig;
 };
 
@@ -248,7 +245,7 @@ function useWakeLock(active: boolean) {
   }, [active]);
 }
 
-type IconName = "profile" | "metronome" | "restart" | "mixer" | "library" | "play" | "spark" | "setlist" | "settings";
+type IconName = "metronome" | "restart" | "mixer" | "library" | "play" | "spark" | "setlist" | "settings";
 
 function Icon({ name }: { name: IconName }) {
   const paths: Record<IconName, React.ReactNode> = {
@@ -257,7 +254,6 @@ function Icon({ name }: { name: IconName }) {
     mixer: <><path d="M5 4v16M12 4v16M19 4v16" /><circle cx="5" cy="9" r="2" /><circle cx="12" cy="15" r="2" /><circle cx="19" cy="8" r="2" /></>,
     library: <><path d="M4 4v16M9 4v16" /><path d="m14 5 4-1 3 15-4 1-3-15Z" /></>,
     play: <path d="m8 5 11 7-11 7V5Z" />,
-    profile: <><path d="M4 7h10M18 7h2M4 17h2M10 17h10" /><circle cx="16" cy="7" r="2" /><circle cx="8" cy="17" r="2" /></>,
     setlist: <><path d="M9 6h11M9 12h11M9 18h11" /><path d="M4 6h.01M4 12h.01M4 18h.01" /></>,
     settings: <><path d="M4 7h16M4 17h16" /><circle cx="9" cy="7" r="2" /><circle cx="15" cy="17" r="2" /></>,
     spark: <path d="M12 3v4M12 17v4M3 12h4M17 12h4M6 6l2.5 2.5M15.5 15.5 18 18M18 6l-2.5 2.5M8.5 15.5 6 18" />,
@@ -413,9 +409,6 @@ export default function App() {
   // Preparación de la canción al cargarla (todo lo pesado ocurre aquí, no al pulsar Play).
   const [mediaVersion, setMediaVersion] = useState(0);
   const [queuedPlay, setQueuedPlay] = useState(false);
-  // Perfil de arranque de las pistas (fábrica / predeterminado / esta canción).
-  const [profileSource, setProfileSource] = useState<ProfileSource>("factory");
-  const [profileOpen, setProfileOpen] = useState(false);
 
   const contextRef = useRef<AudioContext | null>(null);
   const masterGainRef = useRef<GainNode | null>(null);
@@ -592,16 +585,15 @@ export default function App() {
     const extras = extrasRef.current.get(song.id);
     if (extras?.click) metronome.set(extras.click);
     if (extras?.pad && !pad.getState().playing) pad.set(extras.pad); // con el pad sonando no se cambia el acorde por sorpresa
-    // Perfil de arranque: canción > predeterminado > fábrica. Lo que el usuario movió en esta sesión (saved) manda sobre todo.
+    // Cada pista arranca con los valores de fábrica (volumen 80, Click y Guía a la izquierda); lo que el usuario movió en esta sesión
+    // o la mezcla guardada con el culto (saved) manda. Ya no hay perfiles de pistas predeterminados.
     const songKey = songKeyOf(song.files);
-    const display = trackDisplayNames(song.files.map((file) => file.name.replace(/\.[^/.]+$/, "")));
-    const resolved = resolveProfile(song.files.map((file, index) => ({ fileName: file.name, displayName: display[index] })), loadSongProfile(songKey), loadGeneral());
     songKeyRef.current = songKey;
     setMarkers(loadMarkers(songKey));
     setMarkerDraft(null);
-    setProfileSource(resolved.source);
-    if (resolved.masterSource !== "factory") setMasterVolume(resolved.master);
-    const nextTracks = song.files.map((file) => ({ ...createTrack(file), ...resolved.settings.get(file.name), ...saved?.get(file.name) }));
+    const storedMaster = getStoredMaster(); // ajuste "Volumen maestro predeterminado" de Ajustes (si el usuario lo cambió)
+    if (storedMaster !== null) setMasterVolume(storedMaster);
+    const nextTracks = song.files.map((file) => ({ ...createTrack(file), ...saved?.get(file.name) }));
     tracksRef.current = nextTracks;
     setTracks(nextTracks);
     prepareTracks(nextTracks);
@@ -728,75 +720,6 @@ export default function App() {
     const next = tracksRef.current.map((track) => (track.id === id ? { ...track, ...changes } : track));
     tracksRef.current = next;
     setTracks(next);
-  }
-
-  /** Pistas del mezclador tal como están ahora, con su nombre de tipo (sin el prefijo común de la canción). */
-  function liveTracks(): LiveTrack[] {
-    const list = tracksRef.current;
-    const display = trackDisplayNames(list.map((track) => track.name));
-    return list.map((track, index) => ({ fileName: track.file.name, displayName: display[index], volume: track.volume, pan: track.pan, muted: track.muted, solo: track.solo }));
-  }
-
-  /** Re-aplica los perfiles guardados a la canción activa (tras importar o restablecer). */
-  function applyProfileNow(): ProfileSource {
-    const list = tracksRef.current;
-    const display = trackDisplayNames(list.map((track) => track.name));
-    const key = songKeyRef.current;
-    const resolved = resolveProfile(list.map((track, index) => ({ fileName: track.file.name, displayName: display[index] })), key ? loadSongProfile(key) : null, loadGeneral());
-    if (activeSongIdRef.current !== null) mixesRef.current.delete(activeSongIdRef.current);
-    const next = list.map((track) => ({ ...track, ...resolved.settings.get(track.file.name) }));
-    tracksRef.current = next;
-    setTracks(next);
-    setMasterVolume(resolved.master);
-    setProfileSource(resolved.source);
-    return resolved.source;
-  }
-
-  function saveDefaultProfile(): string {
-    if (tracksRef.current.length === 0) return "Carga una canción primero.";
-    const ok = saveGeneralProfile(buildGeneral(loadGeneral(), liveTracks(), masterVolumeRef.current));
-    const key = songKeyRef.current;
-    const hasSongProfile = !!key && !!loadSongProfile(key);
-    if (!ok) return "No se pudo guardar en este dispositivo.";
-    setProfileSource(hasSongProfile ? "song" : "general");
-    return hasSongProfile
-      ? "Guardado como predeterminado. Esta canción tiene su propio perfil, que sigue teniendo prioridad."
-      : "Guardado como predeterminado para todas las canciones.";
-  }
-
-  function saveSongProfileNow(): string {
-    const key = songKeyRef.current;
-    if (!key || tracksRef.current.length === 0) return "Carga una canción primero.";
-    if (!saveSongProfile(key, buildSong(liveTracks(), masterVolumeRef.current))) return "No se pudo guardar en este dispositivo.";
-    setProfileSource("song");
-    return "Guardado solo para esta canción.";
-  }
-
-  function resetProfiles(): string {
-    clearGeneral();
-    const key = songKeyRef.current;
-    if (key) clearSongProfile(key);
-    const list = tracksRef.current;
-    const display = trackDisplayNames(list.map((track) => track.name));
-    if (activeSongIdRef.current !== null) mixesRef.current.delete(activeSongIdRef.current);
-    const next = list.map((track, index) => ({ ...track, ...factorySetting(display[index]) }));
-    tracksRef.current = next;
-    setTracks(next);
-    setMasterVolume(FACTORY_MASTER);
-    setProfileSource("factory");
-    return "Valores de fábrica restablecidos (se borraron el predeterminado y el de esta canción).";
-  }
-
-  function exportProfile(): string {
-    return exportGeneral(loadGeneral() ?? buildGeneral(null, liveTracks(), masterVolumeRef.current));
-  }
-
-  function importProfile(text: string): string {
-    const imported = importGeneral(text);
-    if (!imported) return "Ese texto no es un perfil válido de Crescendo Live.";
-    if (!saveGeneralProfile(imported)) return "No se pudo guardar en este dispositivo.";
-    if (tracksRef.current.length > 0) applyProfileNow();
-    return "Perfil importado" + (tracksRef.current.length > 0 ? " y aplicado a esta canción." : ". Se aplicará al cargar una canción.");
   }
 
   async function playAll(force = false) {
@@ -1154,7 +1077,7 @@ export default function App() {
         ...song.ref,
         tone: song.tone ?? null,
         bpm: song.bpm ?? null,
-        config: { tracks: mix, profile: live ? profileSource : song.config?.profile, markers: loadMarkers(songKeyOf(song.files)), click: extras?.click, pad: extras?.pad },
+        config: { tracks: mix, markers: loadMarkers(songKeyOf(song.files)), click: extras?.click, pad: extras?.pad },
       });
     }
     return out;
@@ -1177,7 +1100,7 @@ export default function App() {
     const onHide = () => { if (document.visibilityState === "hidden") { window.clearTimeout(timer); write(); } };
     document.addEventListener("visibilitychange", onHide);
     return () => { window.clearTimeout(timer); document.removeEventListener("visibilitychange", onHide); };
-  }, [playlist, tracks, masterVolume, markers, click, padState.note, padState.sharp, padState.minor, padState.volume, profileSource, activeSongId, sessionName, userId, queueBusy]);
+  }, [playlist, tracks, masterVolume, markers, click, padState.note, padState.sharp, padState.minor, padState.volume, activeSongId, sessionName, userId, queueBusy]);
 
   const activeIndex = playlist.findIndex((song) => song.id === activeSongId);
   const hasSolo = tracks.some((track) => track.solo);
@@ -1257,7 +1180,6 @@ export default function App() {
         </article>
       ))}
       {playlist.length > 0 && <button className="deck-add" onClick={openLibrary} aria-label="Añadir canciones">＋</button>}
-      <button className="deck-profile" onClick={() => setProfileOpen(true)} aria-label={`Perfil de pistas (${PROFILE_LABEL[profileSource]})`} title={`Perfil de pistas · ${PROFILE_LABEL[profileSource]}`}><Icon name="profile" /></button>
     </div>
   );
 
@@ -1391,7 +1313,7 @@ export default function App() {
             <div className="session-pill"><i className={playing ? "active" : ""} />SESIÓN EN VIVO<b>{click.beats}/4</b></div>
             <button className="loaded-song" onClick={() => tracks.length > 0 && setExpanded(true)} aria-label="Abrir el reproductor ampliado">
               <Artwork index={Math.max(0, activeIndex)} />
-              <span><small>CANCIÓN CARGADA · PERFIL {PROFILE_LABEL[profileSource].toUpperCase()}</small><strong>{songName || "Ninguna"}</strong></span>
+              <span><small>CANCIÓN CARGADA</small><strong>{songName || "Ninguna"}</strong></span>
             </button>
           </div>
           {songDeck}
@@ -1408,7 +1330,6 @@ export default function App() {
             <div className="wave-songline">
               <span className="wave-songname">{songName}</span>
               <SectionName markers={markers} />
-              <button className="wave-profile" onClick={() => setProfileOpen(true)} aria-label={`Perfil de pistas (${PROFILE_LABEL[profileSource]})`} title={`Perfil de pistas · ${PROFILE_LABEL[profileSource]}`}><Icon name="profile" /></button>
             </div>
             {markers.length > 0 && (
               <div className="wave-marks" aria-hidden="true">
@@ -1574,19 +1495,6 @@ export default function App() {
       )}
 
       {showClick && <Click metronome={metronome} onClose={() => setShowClick(false)} />}
-
-      {profileOpen && (
-        <ProfileDrawer
-          source={profileSource}
-          hasSong={tracks.length > 0}
-          onSaveDefault={saveDefaultProfile}
-          onSaveSong={saveSongProfileNow}
-          onReset={resetProfiles}
-          onExport={exportProfile}
-          onImport={importProfile}
-          onClose={() => setProfileOpen(false)}
-        />
-      )}
 
       {padDrawer && (
         <div className="drawer-backdrop" onClick={() => setPadOpen(false)}>

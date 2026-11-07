@@ -1,7 +1,7 @@
 import { supabase } from "./cloud/auth";
 import { cloudStorage } from "./cloud/storage";
 import { libraryCache } from "./libraryCache";
-import { FACTORY_MASTER, loadGeneral, saveGeneralProfile } from "./trackProfiles";
+import { FACTORY_MASTER, loadGeneral } from "./trackProfiles";
 
 export type Membership = { status: string; plan: string | null; expiresAt: string | null };
 
@@ -37,11 +37,22 @@ export function formatDate(iso: string | null): string | null {
   return date.toLocaleDateString("es", { day: "numeric", month: "long", year: "numeric", timeZone: dateOnly ? "UTC" : undefined });
 }
 
-/** Volumen maestro con el que arrancan las canciones nuevas (se guarda en el perfil predeterminado). */
-export const getDefaultMaster = () => loadGeneral()?.master ?? FACTORY_MASTER;
+const MASTER_KEY = "crescendo-master-default-v1";
+
+/** Volumen maestro predeterminado elegido en Ajustes; null si el usuario nunca lo cambió. */
+export function getStoredMaster(): number | null {
+  try {
+    const raw = localStorage.getItem(MASTER_KEY);
+    const value = raw === null ? NaN : Number(raw);
+    return Number.isFinite(value) ? Math.min(100, Math.max(0, Math.round(value))) : null;
+  } catch {
+    return null;
+  }
+}
+/** Valor mostrado en Ajustes. Si lo guardó la versión con perfiles, se respeta como punto de partida (solo se lee). */
+export const getDefaultMaster = () => getStoredMaster() ?? loadGeneral()?.master ?? FACTORY_MASTER;
 export function setDefaultMaster(value: number) {
-  const general = loadGeneral();
-  saveGeneralProfile({ version: 1, tracks: general?.tracks ?? {}, master: Math.min(100, Math.max(0, Math.round(value))) });
+  try { localStorage.setItem(MASTER_KEY, String(Math.min(100, Math.max(0, Math.round(value))))); } catch { /* solo vale para esta sesión */ }
 }
 
 /** Limpia lo temporal: la copia guardada del catálogo (solo texto) y el catálogo en memoria. Las canciones nunca se guardan en el dispositivo. */

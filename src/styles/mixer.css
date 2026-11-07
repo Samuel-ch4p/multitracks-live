@@ -160,10 +160,7 @@
 .deck-main strong { font-size: 13px; line-height: 1.15; }
 .deck-main small { font-size: var(--fs-xs); line-height: 1.1; }
 .deck-card.active { border-color: var(--accent-line); background: color-mix(in srgb, var(--c-accent) 8%, var(--c-card)); box-shadow: inset 0 -2px var(--c-accent); }
-.deck-add, .deck-profile { flex: 0 0 38px; min-height: 38px; border-radius: var(--r-sm); }
-.deck-profile { display: grid; place-items: center; padding: 0; border: 1px solid var(--c-line); background: var(--c-glass); color: var(--c-muted); touch-action: manipulation; transition: color .15s ease, border-color .15s ease; }
-.deck-profile svg { width: 18px; height: 18px; }
-.deck-profile:active { color: var(--c-accent-strong); border-color: var(--accent-line); }
+.deck-add { flex: 0 0 38px; min-height: 38px; border-radius: var(--r-sm); }
 
 /* ---------- Onda con presencia ---------- */
 .wave-panel .waveform { height: clamp(40px, 15vh, 160px); }
@@ -178,7 +175,7 @@
 .wave-meta { height: 22px; }
 /* Línea de canción (nombre, sección y perfil): solo en pantallas bajas; en las altas se ven las pestañas del repertorio */
 .wave-songline { display: contents; }
-.wave-songname, .wave-profile { display: none; }
+.wave-songname { display: none; }
 @media (max-height: 380px) {
   .song-deck { display: none; }
   .wave-panel .waveform { height: 44px; }
@@ -188,13 +185,6 @@
     font-family: var(--font-serif); font-size: 14px; font-weight: 500; line-height: 1.3; text-overflow: ellipsis; white-space: nowrap;
   }
   .wave-section { position: static; }
-  .wave-profile {
-    position: relative; display: grid; width: 36px; height: 26px; margin-left: auto; place-items: center; padding: 0; pointer-events: auto;
-    border: 1px solid var(--c-line); border-radius: 8px; background: color-mix(in srgb, var(--c-panel) 85%, transparent); color: var(--c-muted); touch-action: manipulation;
-  }
-  .wave-profile::after { content: ""; position: absolute; inset: -6px -4px; }
-  .wave-profile svg { width: 16px; height: 16px; }
-  .wave-profile:active { color: var(--c-accent-strong); border-color: var(--accent-line); }
 }
 
 /* ---------- Play: relleno cobre y halo mientras suena (solo transform y opacity) ---------- */
@@ -209,7 +199,7 @@
   .topbar { padding-top: 4px; padding-bottom: 4px; }
   .tab-bar { height: 44px; }
   .screen { gap: 4px; padding-top: 4px; padding-bottom: 3px; }
-  .deck-card, .deck-add, .deck-profile { min-height: 34px; }
+  .deck-card, .deck-add { min-height: 34px; }
   .deck-card { padding-left: 10px; }
   .wave-panel .waveform { height: 40px; }
   .wave-meta { height: 18px; }

@@ -2,7 +2,6 @@ import { cloudStorage } from "./cloud/storage.ts";
 import type { ClickSettings } from "./metronome";
 import type { Marker } from "./markers";
 import type { PadSettings } from "./padEngine";
-import type { ProfileSource } from "./trackProfiles";
 
 /**
  * Cultos (setlists guardados) y sesión actual: SOLO referencias a canciones de la nube (id, ruta, título), el orden y la
@@ -12,10 +11,9 @@ import type { ProfileSource } from "./trackProfiles";
 export type SongRef = { id: string; key: string; title: string };
 
 export type TrackConfig = { fileName: string; volume: number; pan: number; muted: boolean; solo: boolean };
-/** Configuración de una canción: mezcla, perfil aplicado, marcadores de la onda y los ajustes de click y pad con los que se usó. */
+/** Configuración de una canción: mezcla, marcadores de la onda y los ajustes de click y pad con los que se usó. */
 export type SongConfig = {
   tracks: TrackConfig[];
-  profile?: ProfileSource;
   markers?: Marker[];
   click?: Partial<ClickSettings>;
   pad?: Partial<PadSettings>;
@@ -51,10 +49,10 @@ function sanitizeConfig(raw: unknown): SongConfig | undefined {
       ? [{ id: isNum(m.id) ? m.id : Date.now(), name: m.name.slice(0, 14), position: clamp(m.position, 0, 1), color: m.color }]
       : []))
     : undefined;
-  const profile = r.profile === "factory" || r.profile === "general" || r.profile === "song" ? r.profile : undefined;
+  // (Los cultos guardados con la versión de perfiles traen "profile": se ignora.)
   const click = r.click && typeof r.click === "object" ? r.click : undefined;
   const pad = r.pad && typeof r.pad === "object" ? r.pad : undefined;
-  return { tracks, profile, markers, click, pad };
+  return { tracks, markers, click, pad };
 }
 
 function sanitizeSongs(raw: unknown): SavedSong[] {

@@ -23,7 +23,6 @@ const culto: SavedSetlist = {
     id: "s1", key: "Artista/Canción.zip", title: "Canción", tone: "G", bpm: 72,
     config: {
       tracks: [{ fileName: "Bateria.wav", volume: 64, pan: -0.3, muted: false, solo: true }, { fileName: "Click.wav", volume: 90, pan: -1, muted: true, solo: false }],
-      profile: "song",
       markers: [{ id: 1, name: "Coro", position: 0.42, color: "var(--fam-vocal)" }],
       click: { bpm: 72, beats: 4, subdivision: 2, accent: true, sound: "wood", output: "left", volume: 55 },
       pad: { note: "G", sharp: false, minor: false, volume: 40 },
@@ -51,6 +50,11 @@ const migrated = await loadSetlists("carla");
 check("la lista anterior pasa al primer usuario", migrated.length === 1 && migrated[0].name === "Viejo");
 check("la clave anterior se elimina", !mem.has("crescendo.setlists.v1"));
 check("el siguiente usuario no hereda la lista anterior", (await loadSetlists("diego")).length === 0);
+
+// Cultos guardados con la versión de perfiles: el campo "profile" se ignora sin romper la carga
+mem.set("crescendo.cultos.v2:fabi", JSON.stringify([{ id: "p", name: "Con perfil", songs: [{ id: "1", key: "k", title: "t", config: { tracks: [{ fileName: "a.wav", volume: 70, pan: 0, muted: false, solo: false }], profile: "general" } }] }]));
+const legacy = await loadSetlists("fabi");
+check("un culto con campo profile se carga y lo conserva la mezcla", legacy[0]?.songs[0]?.config?.tracks[0]?.volume === 70 && !("profile" in (legacy[0].songs[0].config ?? {})));
 
 // Datos dañados o fuera de rango
 mem.set("crescendo.cultos.v2:eva", JSON.stringify([
