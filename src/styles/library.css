@@ -222,3 +222,24 @@
 .mini-live { flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--c-accent); }
 :root[data-fx="full"] .mini-live { animation: mini-live-pulse 1.4s ease-in-out infinite alternate; }
 @keyframes mini-live-pulse { from { opacity: .4; } to { opacity: 1; } }
+
+/* =====================================================================
+   Pulido del Setlist: sin rótulos ni caja de totales (los totales van junto al título), un solo botón primario (Abrir) y Añadir secundario,
+   dos columnas ordenadas POR COLUMNAS (01, 02… bajan por la primera) y la fila activa se marca con borde de acento y número cobre.
+   ===================================================================== */
+.setlist-title { display: flex; min-width: 0; align-items: baseline; gap: var(--sp-3); }
+.setlist-meta { margin: 0; color: var(--c-muted); font-size: var(--fs-sm); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.setlist-head-actions { display: flex; flex: none; align-items: center; gap: var(--sp-2); }
+.setlist-head-actions .btn-primary, .btn-secondary { min-height: 44px; }
+.btn-secondary {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 0 var(--sp-4); border: 1px solid var(--c-line-strong); border-radius: var(--r-sm); background: transparent; color: var(--c-text);
+  font-size: var(--fs-xs); font-weight: 800; letter-spacing: .08em; text-transform: uppercase; touch-action: manipulation;
+}
+.btn-secondary svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.btn-secondary:active:not(:disabled) { background: var(--c-glass); }
+.setlist-screen .setlist-list { display: block; columns: 340px; column-gap: var(--sp-2); }
+.setlist-screen .setlist-list > .lib-state { column-span: all; }
+.setlist-screen .setlist-card { break-inside: avoid; margin-bottom: var(--sp-2); }
+.setlist-screen .setlist-card.active { box-shadow: none; }
+.setlist-screen .setlist-number { color: var(--c-faint); }
+.setlist-screen .setlist-card.active .setlist-number { color: var(--c-accent-strong); }

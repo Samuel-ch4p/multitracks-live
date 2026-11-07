@@ -32,20 +32,15 @@ export default function SetlistScreen({ songs, activeId, playing, onOpen, onMove
   return (
     <section className="screen setlist-screen" aria-label="Setlist">
       <div className="lib-head">
-        <div>
-          <span className="eyebrow">TU REPERTORIO</span>
+        <div className="setlist-title">
           <h1>Setlist</h1>
+          {songs.length > 0 && <p className="setlist-meta">{songs.length} {songs.length === 1 ? "canción" : "canciones"} · {pistas(totalTracks)}</p>}
         </div>
-        <button className="btn-primary compact" onClick={onAdd}><Icon name="plus" />Añadir</button>
+        <div className="setlist-head-actions">
+          <button className="btn-secondary" onClick={onAdd}><Icon name="plus" />Añadir</button>
+          {songs.length > 0 && <button className="btn-primary" disabled={activeIndex < 0} onClick={() => activeId !== null && onOpen(activeId)}>Abrir en el mezclador</button>}
+        </div>
       </div>
-
-      {songs.length > 0 && (
-        <div className="setlist-summary">
-          <div><span className="eyebrow">CANCIONES</span><strong>{songs.length}</strong></div>
-          <div><span className="eyebrow">PISTAS</span><strong>{totalTracks}</strong></div>
-          <button className="btn-primary" disabled={activeIndex < 0} onClick={() => activeId !== null && onOpen(activeId)}>Abrir en el mezclador</button>
-        </div>
-      )}
 
       <div className="setlist-body">
       <div className="setlist-list">
@@ -64,11 +59,11 @@ export default function SetlistScreen({ songs, activeId, playing, onOpen, onMove
           const active = song.id === activeId;
           return (
             <article className={`setlist-card ${active ? "active" : ""}`} key={song.id}>
-              <button className="setlist-main" onClick={() => onOpen(song.id)} aria-label={`Abrir ${song.name}`}>
+              <button className="setlist-main" onClick={() => onOpen(song.id)} aria-label={`Abrir ${song.name}`} aria-current={active ? "true" : undefined}>
                 <span className="setlist-number">{String(index + 1).padStart(2, "0")}</span>
                 <span className="song-copy">
                   <strong>{song.name}</strong>
-                  <small>{active && playing ? "Reproduciendo · " : active ? "En el mezclador · " : ""}{pistas(song.tracks)}</small>
+                  <small>{active && playing ? "Reproduciendo · " : ""}{pistas(song.tracks)}</small>
                 </span>
                 {(tone || bpm) && (
                   <span className="song-chips">
