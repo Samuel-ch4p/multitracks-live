@@ -255,3 +255,20 @@
   .icon-btn::after, .glass-btn::after { content: ""; position: absolute; inset: -4px 0; } /* zona táctil de alto completo */
   .click-btn { min-width: 64px; }
 }
+
+/* =====================================================================
+   Tipografía del mezclador: la MISMA fuente de los botones Click y PAD y de los pads (Inter, empaquetada con la app), con su mismo
+   carácter: pesos 600-700, números tabulares y rótulos en mayúsculas con espaciado. Nada hereda otra fuente por accidente.
+   ===================================================================== */
+.channels-box, .channels-box button, .channels-box output { font-family: var(--font-sans); font-variant-numeric: tabular-nums; }
+.channel-name strong { font-size: 13px; font-weight: 600; letter-spacing: 0; }
+.channel-name small { color: var(--c-muted); font-size: 12px; font-weight: 600; }
+.chip { font-size: 12px; font-weight: 700; letter-spacing: .04em; }
+.chip.norm { font-size: 11px; font-weight: 700; letter-spacing: .08em; }
+.pan-labels { font-size: 11px; font-weight: 600; letter-spacing: .04em; }
+.pan-readout { font-size: 11px; font-weight: 600; }
+.master-readout strong { font-size: 16px; font-weight: 700; }
+.master-readout small { font-size: 11px; font-weight: 600; letter-spacing: .06em; }
+.channel.master .channel-name strong { font-weight: 700; letter-spacing: .08em; }
+.fader-value, .pan-value { font-size: 13px; font-weight: 700; }
+@media (max-height: 420px) { .channel-name strong { font-size: 12px; } .channel-name small { font-size: 11px; } }
