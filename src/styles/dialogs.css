@@ -1,0 +1,56 @@
+/* =====================================================================
+   Hojas y diálogos (cargas, errores de descarga, cultos, marcadores, cajones de Click y PAD).
+   · Caben enteros en horizontal sin scroll (hasta ~330 px de alto): disposición compacta, título y progreso a la izquierda y botones a la derecha.
+   · Si algo necesita scroll de verdad, solo se desplaza el contenido (barra oculta) y los botones de acción quedan siempre visibles.
+   · Con un diálogo abierto: scrim ~82 %, fondo inerte (src/modalGuard.ts), sin arrastre ni rebote del fondo.
+   Se carga al final: sustituye las reglas sueltas anteriores de .load-layer, .sheet-layer y .drawer-backdrop.
+   ===================================================================== */
+html, body { overscroll-behavior: none; }
+html.has-modal, html.has-modal body { overscroll-behavior: none; touch-action: none; }
+
+.app .load-layer, .app .sheet-layer, .app .library-body > .load-layer {
+  position: fixed; inset: 0; z-index: var(--z-modal); display: grid; place-items: center;
+  padding: max(8px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right)) max(8px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left));
+  background: color-mix(in srgb, var(--c-bg-0) 82%, transparent); overscroll-behavior: contain; touch-action: none;
+}
+.app .drawer-backdrop { z-index: var(--z-modal); background: color-mix(in srgb, var(--c-bg-0) 82%, transparent); overscroll-behavior: contain; touch-action: none; }
+.drawer { max-height: 100dvh; overscroll-behavior: contain; touch-action: pan-y; scrollbar-width: none; }
+.drawer::-webkit-scrollbar { display: none; }
+
+/* Tarjetas: nunca más altas que la pantalla; el contenido se desplaza solo si hace falta, sin barra */
+.app .load-card, .app .sheet, .app .marker-card, .app .memory-card {
+  max-height: calc(100dvh - 16px - env(safe-area-inset-top) - env(safe-area-inset-bottom)); overflow-y: auto; overscroll-behavior: contain; touch-action: pan-y; scrollbar-width: none;
+}
+.load-card::-webkit-scrollbar, .sheet::-webkit-scrollbar { display: none; }
+/* Botones de acción siempre visibles al final de la tarjeta */
+.load-card > .load-actions, .sheet > .sheet-actions { position: sticky; bottom: -2px; z-index: 2; padding-top: 6px; background: linear-gradient(to top, var(--c-panel) 72%, transparent); }
+
+/* ---------- Horizontal bajo: disposición compacta ---------- */
+@media (orientation: landscape) and (max-height: 520px) {
+  .app .load-card { display: grid; width: min(600px, 100%); grid-template-columns: minmax(0, 1fr) auto; align-items: center; column-gap: 20px; padding: 12px 18px; }
+  .load-card .brand-mark, .load-card > .eyebrow { display: none; }
+  .load-card h2 { margin: 0 0 2px; font-size: 17px; }
+  .load-card p { margin: 0 0 8px; }
+  .load-card .load-meta { margin-top: 6px; }
+  .load-card > h2, .load-card > p, .load-card > .load-progress, .load-card > .load-meta, .load-card > .load-error-text, .load-card > .support-actions { grid-column: 1; }
+  .load-card > .load-actions { grid-column: 2; grid-row: 1 / span 6; flex-direction: column; align-self: center; margin: 0; padding: 0; background: none; position: static; }
+  .load-card > .load-actions .pill-btn { min-width: 128px; }
+  .load-card > .support-actions { display: flex; gap: 8px; margin-top: 6px; }
+  .load-card .load-error-text { margin: 2px 0 0; font-size: var(--fs-sm); }
+  .load-card.marker-card { display: flex; flex-direction: column; width: min(520px, 100%); gap: 6px; }
+  .load-card.marker-card > .load-actions { flex-direction: row; position: sticky; margin-top: 4px; padding-top: 6px; background: linear-gradient(to top, var(--c-panel) 72%, transparent); }
+
+  .app .sheet { width: min(520px, 100%); gap: var(--sp-2); padding: 12px 18px; }
+  .sheet h2 { font-size: 18px; }
+  .sheet:has(.load-progress) { display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: 20px; align-items: center; }
+  .sheet:has(.load-progress) > .eyebrow, .sheet:has(.load-progress) > h2, .sheet:has(.load-progress) > .sheet-song, .sheet:has(.load-progress) > .load-progress, .sheet:has(.load-progress) > .load-meta { grid-column: 1; }
+  .sheet:has(.load-progress) > .sheet-actions { grid-column: 2; grid-row: 1 / span 5; align-self: center; position: static; padding: 0; background: none; }
+  .sheet-failed { max-height: 72px; }
+}
+
+.sheet-failed { scrollbar-width: thin; scrollbar-color: var(--c-line-strong) transparent; overscroll-behavior: contain; touch-action: pan-y; }
+@media (orientation: landscape) and (max-height: 520px) { .load-card > .support-actions { justify-content: flex-start; } }
+
+/* Sin el aura giratoria de la tarjeta de carga: era decorativa y su caja (inset: -80 %) ampliaba el área desplazable de la tarjeta,
+   que por eso mostraba barra lateral y se deslizaba arriba y abajo aunque el contenido cupiera. */
+.load-card::before, :root[data-fx="full"] .load-card::before { display: none; }

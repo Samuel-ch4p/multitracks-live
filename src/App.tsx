@@ -12,6 +12,8 @@ import "./styles/library.css";
 import "./styles/pads.css";
 import "./styles/setlists.css";
 import "./styles/click.css";
+import "./styles/dialogs.css";
+import { startModalGuard } from "./modalGuard";
 import ChannelScroll from "./ChannelScroll";
 import SetlistScreen from "./SetlistScreen";
 import SavedSetlists from "./SavedSetlists";
@@ -995,6 +997,7 @@ export default function App() {
     return () => window.clearTimeout(timer);
   }, [statusMessage]);
 
+  useEffect(() => startModalGuard(), []);
   useWakeLock(playing || click.running || padState.playing);
   // La sesión nunca se cierra por inactividad mientras suena algo (pistas, click o pad).
   useEffect(() => { setAudioActive(playing || click.running || padState.playing); }, [playing, click.running, padState.playing]);
