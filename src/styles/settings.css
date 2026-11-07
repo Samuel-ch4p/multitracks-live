@@ -49,3 +49,14 @@
   .settings-card { padding: var(--sp-2) var(--sp-3); }
 }
 .setting-control > .segmented-setting { flex: 1; }
+
+/* =====================================================================
+   Pulido de Ajustes: sin tarjeta por sección (título y filas separadas por línea fina) y control segmentado sin caja exterior.
+   ===================================================================== */
+.settings-screen .settings-scroll { gap: 0; }
+.settings-card { padding: var(--sp-3) 0; border: 0; border-top: 1px solid var(--c-line); border-radius: 0; background: transparent; }
+.settings-scroll > .settings-card:first-child { border-top: 0; padding-top: var(--sp-2); }
+.segmented-setting { gap: 8px; padding: 0; border: 0; background: none; }
+.segmented-setting button { border-color: var(--c-line); }
+.segmented-setting button.active { border-color: var(--accent-line); }
+@media (max-height: 420px) { .settings-card { padding: var(--sp-2) 0; } .settings-scroll > .settings-card:first-child { padding-top: var(--sp-2); } }
