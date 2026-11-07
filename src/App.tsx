@@ -1255,9 +1255,9 @@ export default function App() {
         downloading: loaderRef.current ? list.findIndex((song) => song.id === loaderRef.current?.id) : -1,
       };
     };
-    window.__demo = async (title = "Todo de nuevo", count = 13, fakeMB = 0, seconds = 60, rate = 22050, stereo = false) => {
+    window.__demo = async (title = "Todo de nuevo", count = 13, fakeMB = 0, seconds = 60, rate = 22050, stereo = false, names?: string[]) => {
       const { makeDemoSong } = await import("./devDemo");
-      addSong(title, makeDemoSong(title, count, seconds, fakeMB, undefined, { rate, stereo }), { inMemory: fakeMB > 0 });
+      addSong(title, makeDemoSong(title, count, seconds, fakeMB, names, { rate, stereo }), { inMemory: fakeMB > 0 });
     };
   }, [addSong, addSongRef]);
 
