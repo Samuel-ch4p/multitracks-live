@@ -18,6 +18,7 @@ import SavedSetlists from "./SavedSetlists";
 import { defaultSetlistName, saveSession, type SavedSession, type SavedSong, type SongConfig, type SongRef } from "./setlistStore";
 import { useUserId } from "./AuthGate";
 import { setAudioActive } from "./inactivity";
+import { useSearchMode } from "./searchMode";
 import NubeBrowser from "./NubeBrowser";
 import { perfBegin, perfEnd, perfStep } from "./perf";
 import { songKeyOf } from "./trackProfiles";
@@ -1058,6 +1059,7 @@ export default function App() {
 
   // ---- Cultos: sesión actual con autoguardado (solo referencias y configuración; nunca audio) ----
   const userId = useUserId();
+  const searchMode = useSearchMode() && tab === "library"; // el campo de búsqueda de la Biblioteca tiene el foco
   const [sessionName, setSessionName] = useState(() => defaultSetlistName());
   const [queueBusy, setQueueBusy] = useState(false);
   const sessionDirtyRef = useRef(false);
@@ -1217,7 +1219,7 @@ export default function App() {
   );
 
   return (
-    <main className="app">
+    <main className="app" data-searching={searchMode ? "true" : undefined}>
       {showSplash && <Splash onDone={() => setShowSplash(false)} />}
       <header className="topbar">
         <div className="brand">
@@ -1282,6 +1284,8 @@ export default function App() {
           </button>
         </div>
       </header>
+
+      {searchMode && playing && <div className="search-now" role="status" aria-label={`Reproduciendo: ${songName}`} title={`Reproduciendo: ${songName}`}><i aria-hidden="true" /></div>}
 
       {tab === "setlist" && (
         <SetlistScreen

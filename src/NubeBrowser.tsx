@@ -79,6 +79,13 @@ export default function NubeBrowser({ onSongLoaded }: Props) {
 
   const fetchCatalog = useCallback(async () => {
     try {
+      // Solo desarrollo: ?catalog=demo usa un catálogo falso de ~2.460 canciones (ver devCatalog.ts); en el APK este bloque no existe.
+      if (import.meta.env.DEV && new URLSearchParams(window.location.search).get("catalog") === "demo") {
+        const { makeDemoCatalog } = await import("./devCatalog");
+        libraryCache.index = buildIndex(makeDemoCatalog());
+        if (mounted.current) { setIndex(libraryCache.index); setOffline(false); setError(""); }
+        return;
+      }
       const { catalog, offline: isOffline } = await loadCatalog();
       libraryCache.index = buildIndex(catalog);
       if (mounted.current) { setIndex(libraryCache.index); setOffline(isOffline); setError(""); }
@@ -118,6 +125,12 @@ export default function NubeBrowser({ onSongLoaded }: Props) {
       document.documentElement.style.removeProperty("--kb");
     };
   }, []);
+
+  // Cada búsqueda nueva empieza arriba de la lista (con el teclado abierto casi no hay alto y el primer resultado quedaba oculto).
+  useEffect(() => {
+    document.querySelector(".library-body")?.scrollTo({ top: 0 });
+    document.querySelector(".library-scroll")?.scrollTo({ top: 0 });
+  }, [search]);
 
   const searching = foldQuery(search).length > 0;
   const result = useMemo(() => (index && searching ? searchIndex(index, search) : null), [index, search, searching]);

@@ -162,3 +162,42 @@
 .lib-limit p { margin: 0; }
 .support-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: var(--sp-2); }
 .support-actions .pill-btn { min-height: var(--tap); }
+
+/* =====================================================================
+   Modo búsqueda: con el campo de búsqueda enfocado (teclado abierto) la lista de resultados gana la pantalla.
+   Se oculta la barra superior, la de pestañas, el mini reproductor y la cabecera; si suena audio queda una sola fila mínima.
+   ===================================================================== */
+.app[data-searching="true"] > .topbar,
+.app[data-searching="true"] > .tab-bar,
+.app[data-searching="true"] > .mini-player,
+.app[data-searching="true"] > .prepare-bar,
+.app[data-searching="true"] .library-screen .lib-head,
+.app[data-searching="true"] .library-screen .source-switch,
+.app[data-searching="true"] .library-screen .lib-meta { display: none; }
+/* Audio sonando durante la búsqueda: un solo punto en el sitio del botón de actualizar (que se oculta); no ocupa alto */
+.app[data-searching="true"] .lib-refresh { visibility: hidden; }
+.search-now { position: fixed; z-index: 6; top: calc(4px + var(--safe-t)); right: max(12px, var(--safe-r)); display: grid; width: 38px; height: 38px; place-items: center; overflow: hidden; border: 1px solid var(--c-line); border-radius: var(--r-sm); background: var(--c-panel); font-size: 0; pointer-events: none; }
+.search-now i { width: 8px; height: 8px; border-radius: 50%; background: var(--c-success); }
+.app[data-searching="true"] .library-screen { gap: 4px; padding-top: 4px; padding-bottom: 2px; }
+.app[data-searching="true"] .lib-search, .app[data-searching="true"] .lib-refresh { height: 40px; }
+.app[data-searching="true"] .lib-refresh { width: 40px; }
+.app[data-searching="true"] .song-item-main { min-height: 46px; padding-top: 4px; padding-bottom: 4px; }
+.app[data-searching="true"] .lib-results .artist-grid { grid-auto-flow: column; grid-template-columns: none; grid-auto-columns: minmax(150px, 34%); overflow-x: auto; padding-bottom: 2px; }
+.app[data-searching="true"] .lib-results .lib-title { margin: 2px 0; }
+.lib-search input:focus-visible { outline: none; } /* el contorno ya lo da .lib-search:focus-within */
+.app[data-searching="true"] .song-item-main { min-height: 40px; padding: 3px 10px; gap: var(--sp-2); }
+.app[data-searching="true"] .song-art { width: 28px; height: 28px; }
+.app[data-searching="true"] .song-list { gap: 4px; }
+.app[data-searching="true"] .artist-card { min-height: 44px; padding: 4px 10px; }
+/* Con el teclado abierto, los artistas encontrados pasan a una tira de una línea para que quepan 2 o 3 resultados de canciones */
+.app[data-searching="true"] .lib-results .lib-title { display: none; }
+.app[data-searching="true"] .lib-results .artist-card { min-height: 34px; padding: 2px 12px; }
+.app[data-searching="true"] .lib-results .artist-initial, .app[data-searching="true"] .lib-results .artist-copy small { display: none; }
+.app[data-searching="true"] .lib-search, .app[data-searching="true"] .lib-refresh { height: 38px; }
+.app[data-searching="true"] .lib-refresh { width: 38px; }
+.app[data-searching="true"] .lib-toolbar { padding-bottom: 2px; }
+.app[data-searching="true"] .lib-results .artist-card { min-height: 30px; padding-top: 0; padding-bottom: 0; }
+.app[data-searching="true"] .lib-results { gap: 4px; }
+.app[data-searching="true"] .song-copy strong { font-size: 14px; line-height: 1.2; }
+.app[data-searching="true"] .song-copy { gap: 0; }
+.app[data-searching="true"] .library-scroll { padding-top: 2px; padding-bottom: 4px; }
