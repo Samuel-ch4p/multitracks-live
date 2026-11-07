@@ -2,6 +2,11 @@ name: Compilar APK de Android
 
 on:
   workflow_dispatch:
+    inputs:
+      minify:
+        description: "Minificar con R8 (desmarca si la app falla en el celular)"
+        type: boolean
+        default: true
   push:
     branches: [main, master]
 
@@ -37,32 +42,65 @@ jobs:
           npm run build
           npx cap sync android
 
-      # Release firmado (minificado con R8, sin depuración): requiere los secrets ANDROID_KEYSTORE_BASE64 (la llave .jks en base64),
-      # ANDROID_KEYSTORE_PASSWORD, ANDROID_KEY_ALIAS y ANDROID_KEY_PASSWORD. Sin ellos se compila el APK de depuración como antes
-      # (la depuración del WebView queda apagada igual: ver capacitor.config.ts).
-      - name: Preparar la firma de release (si hay llave)
+      # SIEMPRE release firmado con la keystore fija del repositorio de secrets. Sin los 4 secrets el trabajo falla (nunca cae a debug,
+      # porque una llave de depuración distinta en cada ejecución impediría instalar el APK encima del anterior).
+      # Secrets (Settings > Secrets and variables > Actions): ANDROID_KEYSTORE_BASE64, ANDROID_KEYSTORE_PASSWORD,
+      # ANDROID_KEY_ALIAS, ANDROID_KEY_PASSWORD. GitHub enmascara sus valores en el log; aquí nunca se imprimen.
+      - name: Preparar la keystore de firma
         env:
           KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
-          if [ -n "$KEYSTORE_BASE64" ]; then
-            echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.jks"
-            echo "ANDROID_KEYSTORE_FILE=$RUNNER_TEMP/release.jks" >> "$GITHUB_ENV"
+          missing=""
+          [ -z "$KEYSTORE_BASE64" ] && missing="$missing ANDROID_KEYSTORE_BASE64"
+          [ -z "$KEYSTORE_PASSWORD" ] && missing="$missing ANDROID_KEYSTORE_PASSWORD"
+          [ -z "$KEY_ALIAS" ] && missing="$missing ANDROID_KEY_ALIAS"
+          [ -z "$KEY_PASSWORD" ] && missing="$missing ANDROID_KEY_PASSWORD"
+          if [ -n "$missing" ]; then
+            echo "::error title=Faltan secrets de firma::Crea estos secrets en GitHub (Settings > Secrets and variables > Actions):$missing. No se compila sin firma fija."
+            exit 1
           fi
+          echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.jks"
+          echo "ANDROID_KEYSTORE_FILE=$RUNNER_TEMP/release.jks" >> "$GITHUB_ENV"
 
-      - name: Compilar APK
+      # R8 (minify) activado por defecto. Si el build con R8 falla, se reintenta UNA vez sin minificar (sigue siendo release firmado)
+      # y el aviso en el log y en el resumen dice que se compiló sin minificar. También se puede lanzar sin minificar a propósito.
+      - name: Compilar APK de release
         working-directory: android
         env:
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          MINIFY: ${{ github.event.inputs.minify == 'false' && 'false' || 'true' }}
         run: |
           chmod +x gradlew
-          if [ -n "$ANDROID_KEYSTORE_FILE" ]; then ./gradlew assembleRelease; else ./gradlew assembleDebug; fi
+          if [ "$MINIFY" = "true" ]; then
+            if ./gradlew assembleRelease 2>&1 | tee "$RUNNER_TEMP/gradle.log"; then
+              echo "Compilado CON minificación (R8)." | tee -a "$GITHUB_STEP_SUMMARY"
+              exit 0
+            fi
+            echo "::warning title=R8 falló::Se reintenta sin minificar. Primeras líneas del error de R8/minify:"
+            grep -n -m 20 -E "R8|minify|ProGuard|Missing class|Execution failed|error:" "$RUNNER_TEMP/gradle.log" || true
+            echo "R8 FALLÓ: este APK se compiló SIN minificar. Causa en el log (paso 'Compilar APK de release')." >> "$GITHUB_STEP_SUMMARY"
+          fi
+          ./gradlew assembleRelease -PnoMinify
+          echo "Compilado SIN minificación." | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Verificar la firma e imprimir el SHA-256 del certificado
+        run: |
+          APK=android/app/build/outputs/apk/release/app-release.apk
+          if [ ! -f "$APK" ]; then echo "::error::No existe $APK (¿salió unsigned?)"; ls -R android/app/build/outputs/apk || true; exit 1; fi
+          APKSIGNER="$ANDROID_HOME/build-tools/35.0.0/apksigner"
+          "$APKSIGNER" verify --verbose --print-certs "$APK" | tee "$RUNNER_TEMP/apksigner.txt"
+          SHA=$(grep -m1 "certificate SHA-256 digest" "$RUNNER_TEMP/apksigner.txt" | sed 's/.*: //')
+          echo "SHA-256 del certificado: $SHA"
+          echo "### Firma del APK" >> "$GITHUB_STEP_SUMMARY"
+          echo "SHA-256 del certificado: $SHA (debe ser identico en todas las compilaciones)" >> "$GITHUB_STEP_SUMMARY"
 
       - uses: actions/upload-artifact@v4
         with:
           name: crescendo-live-apk
-          path: |
-            android/app/build/outputs/apk/release/*.apk
-            android/app/build/outputs/apk/debug/app-debug.apk
+          path: android/app/build/outputs/apk/release/app-release.apk
           if-no-files-found: error

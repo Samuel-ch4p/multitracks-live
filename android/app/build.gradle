@@ -34,8 +34,9 @@ android {
             if (System.getenv("ANDROID_KEYSTORE_FILE")) {
                 signingConfig signingConfigs.release
             }
-            minifyEnabled true
-            shrinkResources true
+            // -PnoMinify (lo pasa el flujo de GitHub si R8 falla o se pide sin minificar)
+            minifyEnabled !project.hasProperty("noMinify")
+            shrinkResources !project.hasProperty("noMinify")
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
         }
     }
