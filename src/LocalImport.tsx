@@ -64,11 +64,10 @@ export default function LocalImport({ onSongLoaded }: Props) {
       >
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 7 8h3.5v6h3V8H17zM5 17h14v4H5z" /></svg>
         <strong>{busy ? "Procesando…" : "Elegir archivos del dispositivo"}</strong>
-        <span>Pistas sueltas (WAV, MP3, M4A…), o un ZIP / RAR por canción. Puedes elegir varios.</span>
+        <span>Pistas sueltas (WAV, MP3, M4A…): se agrupan en una sola canción. Para varias canciones a la vez, elige un ZIP o RAR por canción.</span>
       </button>
       {status && <p className="status-message">{status}</p>}
       {error && <p className="error-message">{error}</p>}
-      <p className="hint">Tip: si eliges pistas sueltas, se agrupan en una sola canción. Para varias canciones a la vez, elige un ZIP o RAR por canción.</p>
     </section>
   );
 }

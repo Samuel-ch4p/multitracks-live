@@ -1506,15 +1506,10 @@ export default function App() {
 
       {tab !== "mixer" && tracks.length > 0 && (
         <div className="mini-player">
+          {/* Una sola línea: abre el reproductor ampliado. El Play y el transporte están siempre en la cabecera. */}
           <button className="mini-main" onClick={() => setExpanded(true)} aria-label="Abrir el reproductor ampliado">
-            <Artwork index={Math.max(0, activeIndex)} />
             <span className="mini-copy"><strong>{songName}</strong><small>{playing ? "Reproduciendo" : paused ? "En pausa" : "Detenido"} · {pistas(tracks.length)}</small></span>
-            <span className={`mini-wave ${playing ? "is-live" : ""}`} aria-hidden="true"><i /><i /><i /><i /></span>
-          </button>
-          <button className={`play-btn ${playing ? "is-playing" : ""}`} onClick={togglePlay} disabled={resetting} aria-label={playing ? "Pausar" : "Reproducir"}>
-            {playing
-              ? <svg viewBox="0 0 24 24"><path d="M7 5h4v14H7zM13 5h4v14h-4z" /></svg>
-              : <svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z" /></svg>}
+            {(playing || click.running || padState.playing) && <i className="mini-live" aria-hidden="true" />}
           </button>
         </div>
       )}

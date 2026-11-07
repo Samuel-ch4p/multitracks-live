@@ -201,3 +201,24 @@
 .app[data-searching="true"] .song-copy strong { font-size: 14px; line-height: 1.2; }
 .app[data-searching="true"] .song-copy { gap: 0; }
 .app[data-searching="true"] .library-scroll { padding-top: 2px; padding-bottom: 4px; }
+
+/* =====================================================================
+   Pulido de la Biblioteca: artistas en lista compacta (sin tarjeta por artista; se conserva el monograma), mini-reproductor de una línea,
+   botones principales en cobre plano y nombres de canción en Inter. El modo búsqueda (teclado abierto) conserva sus reglas propias.
+   ===================================================================== */
+.app:not([data-searching="true"]) .artist-grid { gap: 0 var(--sp-3); }
+.app:not([data-searching="true"]) .artist-card { min-height: 48px; padding: 4px 6px; border: 0; border-bottom: 1px solid var(--c-line); border-radius: 0; background: transparent; }
+.app:not([data-searching="true"]) .artist-card:active:not(:disabled) { transform: none; background: var(--c-glass); }
+.artist-initial { width: 34px; height: 34px; font-size: 16px; }
+.song-copy strong, .app[data-searching="true"] .song-copy strong { font-family: var(--font-sans); font-size: 13px; font-weight: 600; }
+.btn-primary, .song-add { background: var(--c-accent); }
+
+/* Mini-reproductor: una línea que abre el reproductor ampliado; el indicador solo aparece si suena audio (pulso solo con Animaciones Completas) */
+.mini-player { gap: 0; min-height: 44px; margin: 0 12px 6px; padding: 0; border-color: var(--c-line); border-radius: var(--r-sm); background: color-mix(in srgb, var(--c-card) 70%, transparent); box-shadow: none; }
+.mini-main { min-height: 44px; padding: 0 12px; gap: 10px; }
+.mini-copy { flex-direction: row; align-items: baseline; gap: 8px; }
+.mini-copy strong { flex: 0 1 auto; font-family: var(--font-sans); font-size: 13px; font-weight: 600; }
+.mini-copy small { flex: 1 1 0; font-size: 12px; }
+.mini-live { flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--c-accent); }
+:root[data-fx="full"] .mini-live { animation: mini-live-pulse 1.4s ease-in-out infinite alternate; }
+@keyframes mini-live-pulse { from { opacity: .4; } to { opacity: 1; } }
