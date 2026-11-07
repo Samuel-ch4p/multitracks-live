@@ -23,3 +23,10 @@ android/local.properties
 
 # Maqueta de Figma (referencia, no se compila)
 diseno/
+
+# Herramientas locales de impeccable y sesiones de Claude (no se versionan; .github/workflows sí)
+.claude/
+.impeccable/
+.github/agents/
+.github/hooks/
+.github/skills/
