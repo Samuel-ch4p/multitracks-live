@@ -245,7 +245,6 @@ function AuthScreen({ onSignedIn, notice, initialMode = "welcome" }: { onSignedI
         <div className="welcome">
           <div className="welcome-copy">
             <BrandMark className="auth-mark" />
-            <span className="auth-eyebrow">MULTITRACKS EN VIVO</span>
             <h1>Tu servicio, con cada pista en su lugar.</h1>
             <p>Biblioteca de multitracks, mezclador y click en un solo lugar.</p>
             <div className="auth-actions">
@@ -270,7 +269,6 @@ function AuthScreen({ onSignedIn, notice, initialMode = "welcome" }: { onSignedI
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 18-6-6 6-6" /></svg>
           </button>
           <BrandMark className="auth-mark small" />
-          <span className="auth-eyebrow">CRESCENDO LIVE</span>
           <h1>{title}</h1>
           {mode === "up" && <p>Tu cuenta quedará pendiente hasta que la activemos.</p>}
           {mode === "reset" && <p>Te enviaremos un enlace para elegir una contraseña nueva.</p>}

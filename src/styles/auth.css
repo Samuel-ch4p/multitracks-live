@@ -16,7 +16,6 @@
 .auth-screen p { margin: 0; color: var(--c-muted); font-size: var(--fs-md); line-height: 1.5; }
 .auth-mark { display: block; width: 56px; height: 56px; }
 .auth-mark.small { width: 40px; height: 40px; }
-.auth-eyebrow { color: var(--c-accent); font-size: var(--fs-xs); font-weight: 700; letter-spacing: .16em; }
 .auth-chip { display: inline-flex; padding: 4px 12px; border: 1px solid var(--accent-line); border-radius: 999px; background: var(--accent-bg); color: var(--c-accent-strong); font-size: var(--fs-xs); font-weight: 700; letter-spacing: .12em; }
 .auth-caption { color: var(--c-faint); font-size: var(--fs-xs); }
 
@@ -25,7 +24,7 @@
   min-height: 48px; padding: 0 var(--sp-5); border-radius: var(--r-sm); font-size: var(--fs-sm); font-weight: 800; letter-spacing: .1em; touch-action: manipulation;
   transition: transform var(--t-fast) var(--ease-out), opacity .15s ease;
 }
-.auth-primary { border: 0; background: var(--grad-metal); color: var(--c-bg-1); }
+.auth-primary { border: 0; background: var(--c-accent); color: var(--c-bg-1); }
 .auth-secondary { border: 1px solid var(--c-line-strong); background: var(--c-glass); color: var(--c-text); }
 .auth-primary:active:not(:disabled), .auth-secondary:active { transform: scale(.97); }
 .auth-primary:disabled { opacity: .55; }
