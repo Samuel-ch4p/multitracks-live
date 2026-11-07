@@ -3,6 +3,7 @@ import { Archive } from "libarchive.js";
 import { measureBuffer, type TrackStats } from "./analysis.ts";
 import { analyzeWav } from "./wavAnalysis.ts";
 import { perfTimed } from "./perf.ts";
+import { decodeZipName } from "./zipNames.ts";
 
 export const audioExtensions = /\.(wav|mp3|ogg|m4a|aac|flac|aiff|aif)$/i;
 
@@ -101,7 +102,6 @@ async function readZipIndex(source: ZipSource): Promise<ZipEntry[]> {
 
   const dir = await source.bytes(dirOffset, dirOffset + dirSize);
   const view = new DataView(dir.buffer, dir.byteOffset, dir.byteLength);
-  const decoder = new TextDecoder();
   const list: ZipEntry[] = [];
   let at = 0;
   for (let index = 0; index < entries && at + 46 <= dir.length; index++) {
@@ -114,7 +114,8 @@ async function readZipIndex(source: ZipSource): Promise<ZipEntry[]> {
     const extraLength = view.getUint16(at + 30, true);
     const commentLength = view.getUint16(at + 32, true);
     let offset = view.getUint32(at + 42, true);
-    const path = decoder.decode(dir.subarray(at + 46, at + 46 + nameLength));
+    // Nombre según el flag UTF-8 (bit 11); sin flag y sin ser UTF-8 válido: CP850/CP437 (Windows en español) y, de último, windows-1252.
+    const path = decodeZipName(dir.subarray(at + 46, at + 46 + nameLength), flags);
 
     // Campo ZIP64 ampliado: trae, en orden, los valores que valían 0xFFFFFFFF.
     let extra = at + 46 + nameLength;
@@ -207,23 +208,28 @@ async function zipToFilesFallback(
   bytes: Uint8Array,
   onProgress?: (done: number, total: number) => void
 ): Promise<File[]> {
-  const paths: string[] = [];
+  // fflate decodifica los nombres sin flag como Latin-1; los nombres buenos salen de nuestro índice (mismo orden del directorio central).
+  const index = await readZipIndex(sourceOf(bytes));
+  const listed: string[] = [];
   unzipSync(bytes, {
     filter: (entry) => {
-      if (audioExtensions.test(entry.name) && !isHiddenPath(entry.name)) paths.push(entry.name);
+      listed.push(entry.name);
       return false; // solo se leen los nombres
     },
   });
+  const targets = listed
+    .map((fflateName, position) => ({ fflateName, path: index[position]?.path ?? fflateName }))
+    .filter((target) => !target.path.endsWith("/") && audioExtensions.test(target.path) && !isHiddenPath(target.path));
 
   const files: File[] = [];
-  for (let index = 0; index < paths.length; index++) {
-    const path = paths[index];
+  for (let position = 0; position < targets.length; position++) {
+    const { fflateName, path } = targets[position];
     const name = path.split("/").pop();
     if (name) {
-      const extracted = unzipSync(bytes, { filter: (entry) => entry.name === path });
-      files.push(new File([extracted[path] as BlobPart], name, { type: audioType(name) }));
+      const extracted = unzipSync(bytes, { filter: (entry) => entry.name === fflateName });
+      files.push(new File([extracted[fflateName] as BlobPart], name, { type: audioType(name) }));
     }
-    onProgress?.(index + 1, paths.length);
+    onProgress?.(position + 1, targets.length);
     await breathe();
   }
   return files;
