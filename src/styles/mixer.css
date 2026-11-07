@@ -57,7 +57,7 @@
 .channel.is-muted .pan-bar.is-dragging .pan-thumb { opacity: 1; }
 .channel.is-muted .channel-name strong, .channel.is-muted .channel-name small { color: var(--c-faint); }
 .channel.is-soloed { border-color: color-mix(in srgb, var(--c-accent) 55%, transparent); }
-.channel.is-dimmed { border-color: color-mix(in srgb, var(--c-line) 55%, transparent); }
+.channel.is-dimmed { border-color: transparent; }
 .channel.is-dimmed::before, .channel.is-dimmed .fader-wrap, .channel.is-dimmed .pan-track, .channel.is-dimmed .pan-center, .channel.is-dimmed .pan-fill, .channel.is-dimmed .pan-thumb, .channel.is-dimmed .family-dot { opacity: .4; }
 .channel.is-dimmed .pan-bar.is-dragging .pan-thumb { opacity: 1; }
 .channel.is-dimmed .channel-name strong, .channel.is-dimmed .channel-name small, .channel.is-dimmed .pan-readout, .channel.is-dimmed .chip:not(.active) { color: var(--c-faint); }
@@ -294,3 +294,24 @@
   background: color-mix(in srgb, var(--c-accent) 16%, transparent); color: var(--c-accent-strong); font: 700 12px var(--font-sans); letter-spacing: .06em; touch-action: manipulation;
 }
 .undo-btn::after { content: ""; position: absolute; inset: -6px -4px; }
+
+/* =====================================================================
+   Pulido del Mezclador (pasada de diseño): menos cajas y menos marcos.
+   · Sin caja exterior de canales (antes: canal dentro de caja); cada canal se separa por tono, no por borde. Master y solo conservan su borde de acento.
+   · Transporte: solo Play enmarcado. Anterior/Detener/Siguiente/Reiniciar quedan como íconos con zona de 44 px; Detener y Reiniciar muestran un
+     aro de cobre mientras suena la canción (= hay que mantener pulsado, ver useHoldToConfirm).
+   · Nombres de canción en Inter semibold (Newsreader solo en títulos de pantalla).
+   ===================================================================== */
+.channels-box { border-color: transparent; background: transparent; }
+.channel { border-color: transparent; background: color-mix(in srgb, var(--c-panel) 72%, var(--c-card)); }
+.mx-scroll::before { background: linear-gradient(to right, var(--c-bg-1) 15%, transparent); }
+.mx-scroll::after { background: linear-gradient(to left, color-mix(in srgb, var(--c-accent) 14%, var(--c-bg-1)), transparent); }
+
+.topbar .transport .icon-btn, .topbar .restart-btn { border-color: transparent; background: transparent; box-shadow: none; color: var(--c-text); }
+.topbar .transport .icon-btn:active:not(:disabled), .topbar .restart-btn:active:not(:disabled) { background: color-mix(in srgb, var(--c-white) 10%, transparent); }
+.topbar .transport .icon-btn:disabled { color: var(--c-faint); opacity: .45; }
+.topbar .transport .hold-btn.is-armed, .topbar .top-tools .hold-btn.is-armed { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--c-accent) 55%, transparent); }
+
+.deck-main strong, .wave-songname { font-family: var(--font-sans); font-weight: 600; letter-spacing: 0; }
+.wave-songname { font-size: 13px; }
+.sr-only { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; border: 0; clip-path: inset(50%); white-space: nowrap; }

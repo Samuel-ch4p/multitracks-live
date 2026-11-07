@@ -237,7 +237,7 @@ function useHoldToConfirm(action: () => void, guarded: boolean, onShortTap: () =
   // Si la canción deja de sonar a mitad de la pulsación, la cuenta se anula sin tocar el estado desde un efecto.
   useEffect(() => { if (!guarded) { window.clearTimeout(timer.current); timer.current = 0; } }, [guarded]);
   return {
-    className: `hold-btn${holding && guarded ? " is-holding" : ""}`,
+    className: `hold-btn${guarded ? " is-armed" : ""}${holding && guarded ? " is-holding" : ""}`,
     onPointerDown: () => {
       if (!guarded) return;
       fired.current = false;
@@ -1328,7 +1328,7 @@ export default function App() {
           >
             PAD
           </button>
-          <HeaderClock />
+          <HeaderClock showTotal={tab !== "mixer"} />
         </div>
 
         <div className="transport">
@@ -1360,7 +1360,8 @@ export default function App() {
               LENTA · REDUCIR
             </button>
           )}
-          <span className={`sync-chip ${playing ? "playing" : ready ? "ready" : ""}`} role="status" title={syncLabel} aria-label={syncLabel}><i /><b className="sync-label">{syncLabel}</b></span>
+          {/* Estado de las pistas (preparando, sincronizadas, en vivo): lo muestran el Play y la barra de carga; queda solo para lectores de pantalla */}
+          <span className="sr-only" role="status">{syncLabel}</span>
           <button {...holdRestart} className={`glass-btn restart-btn ${holdRestart.className}`} disabled={resetting || tracks.length === 0} aria-label="Reiniciar desde el principio" title={playing ? "Mantén pulsado para reiniciar" : "Reiniciar desde el principio"}>
             <Icon name="restart" /><span>REINICIAR</span>
           </button>

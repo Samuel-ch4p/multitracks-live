@@ -40,12 +40,13 @@ export function shortTime(seconds: number) {
 }
 
 /** Reloj de la barra superior. */
-export function HeaderClock() {
+/** `showTotal`: con la onda a la vista (Mezclador) los tiempos ya están en la onda; en las demás pestañas la cabecera es el único reloj. */
+export function HeaderClock({ showTotal = true }: { showTotal?: boolean }) {
   const { time, duration } = useClock();
   return (
     <div className="clock">
       <strong>{formatTime(time)}</strong>
-      <span>{shortTime(time)} / {shortTime(duration)}</span>
+      {showTotal && <span>{shortTime(time)} / {shortTime(duration)}</span>}
     </div>
   );
 }
