@@ -30,7 +30,23 @@ type Phase =
   | { name: "ok" }
   | { name: "problem"; error: CloudError };
 
+/** Solo en desarrollo: ?auth=welcome|in|up|reset|notice|pending|expired|blocked|paused|usage|device|checking muestra esa pantalla de acceso para revisarla. */
+const PREVIEW = import.meta.env.DEV ? new URLSearchParams(window.location.search).get("auth") : null;
+
+function AuthPreview({ name }: { name: string }) {
+  const noop = () => undefined;
+  const kinds: Record<string, CloudError["kind"]> = { pending: "pending", expired: "expired", blocked: "blocked", paused: "paused", usage: "usage_limit", device: "device_limit" };
+  if (kinds[name]) return <ProblemScreen error={new CloudError(kinds[name], 403, { expires_at: "2026-03-15T00:00:00Z" })} email="persona@correo.com" onRetry={noop} onSignOut={noop} />;
+  if (name === "checking") return <Screen title="Verificando tu cuenta…" busy><div className="auth-spinner" aria-hidden="true" /><p>Un momento.</p></Screen>;
+  return <AuthScreen notice={name === "notice"} initialMode={name === "in" || name === "up" || name === "reset" ? name : "welcome"} onSignedIn={noop} />;
+}
+
 export default function AuthGate({ children }: { children: ReactNode }) {
+  if (PREVIEW) return <AuthPreview name={PREVIEW} />;
+  return <AuthGateInner>{children}</AuthGateInner>;
+}
+
+function AuthGateInner({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [phase, setPhase] = useState<Phase>(() => (DEV_BYPASS ? { name: "ok" } : { name: "boot" }));
   // Aviso en la pantalla de acceso tras un cierre por ausencia o inactividad.
@@ -175,8 +191,15 @@ function WelcomeArt() {
 
 type Mode = "welcome" | "in" | "up" | "reset";
 
-function AuthScreen({ onSignedIn, notice }: { onSignedIn: (session: Session) => void; notice: boolean }) {
-  const [mode, setMode] = useState<Mode>("welcome");
+/** Al enfocar un campo, se desplaza para quedar visible sobre el teclado (la pantalla se encoge cuando el teclado se abre). */
+function keepFocusedVisible(event: React.FocusEvent<HTMLFormElement>) {
+  const field = event.target;
+  if (!(field instanceof HTMLInputElement)) return;
+  window.setTimeout(() => field.scrollIntoView({ block: "center", behavior: "smooth" }), 350);
+}
+
+function AuthScreen({ onSignedIn, notice, initialMode = "welcome" }: { onSignedIn: (session: Session) => void; notice: boolean; initialMode?: Mode }) {
+  const [mode, setMode] = useState<Mode>(initialMode);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [show, setShow] = useState(false);
@@ -241,7 +264,7 @@ function AuthScreen({ onSignedIn, notice }: { onSignedIn: (session: Session) => 
   const title = mode === "in" ? "Iniciar sesión" : mode === "up" ? "Crear cuenta" : "Recuperar contraseña";
   return (
     <main className="auth-screen">
-      <form className="auth-card" onSubmit={(e) => void submit(e)} noValidate>
+      <form className="auth-card" onSubmit={(e) => void submit(e)} noValidate onFocus={keepFocusedVisible}>
         <header className="auth-head">
           <button type="button" className="auth-back" aria-label="Volver" onClick={() => go("welcome")}>
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 18-6-6 6-6" /></svg>

@@ -3,13 +3,15 @@
    Solo variables de tokens.css. Sin desenfoques: fondos con degradados estáticos.
    ===================================================================== */
 .auth-screen {
-  position: fixed; inset: 0; z-index: 50; display: grid; place-items: center; overflow-y: auto;
+  position: fixed; inset: 0; z-index: 50; display: flex; overflow-y: auto; overscroll-behavior: contain;
   padding: max(16px, env(safe-area-inset-top)) max(20px, env(safe-area-inset-right)) max(16px, env(safe-area-inset-bottom)) max(20px, env(safe-area-inset-left));
   background:
     radial-gradient(circle at 50% -15%, color-mix(in srgb, var(--c-accent) 11%, transparent), transparent 34%),
     linear-gradient(160deg, var(--c-bg-2), var(--c-bg-0) 70%);
   color: var(--c-text); font-family: var(--font-sans);
 }
+/* margin:auto centra sin recortar la parte de arriba cuando el contenido no cabe (con el teclado abierto se puede hacer scroll hasta el principio) */
+.auth-screen > * { margin: auto; }
 .auth-screen h1 { margin: 0; font-family: var(--font-serif); font-weight: 500; letter-spacing: 0; }
 .auth-screen p { margin: 0; color: var(--c-muted); font-size: var(--fs-md); line-height: 1.5; }
 .auth-mark { display: block; width: 56px; height: 56px; }
@@ -92,7 +94,7 @@
   .auth-state .auth-actions { flex-direction: row; max-width: 360px; }
   .auth-state .auth-actions > button { flex: 1; }
 }
-@media (max-height: 420px) and (min-width: 640px) {
+@media (max-height: 500px) and (min-width: 640px) {
   .auth-card { display: grid; width: min(720px, 100%); grid-template-columns: minmax(0, .8fr) minmax(0, 1fr); align-items: center; gap: var(--sp-5); padding: var(--sp-4) var(--sp-5); }
   .auth-head { align-items: flex-start; text-align: left; padding-left: 0; }
   .auth-back { position: static; margin-left: -12px; }
@@ -110,4 +112,12 @@
   .auth-state .auth-actions { max-width: 560px; flex-wrap: wrap; justify-content: center; align-items: center; }
   .auth-state .auth-actions > button { flex: 1 1 auto; white-space: nowrap; }
   .auth-state .auth-actions > .auth-link { flex: none; }
+}
+
+/* Con el teclado abierto en horizontal (área visible de ~170 px): sin márgenes de más; el formulario se desplaza y el botón se alcanza */
+@media (max-height: 260px) {
+  .auth-screen { padding-top: 4px; padding-bottom: 12px; }
+  .auth-card { padding-top: var(--sp-2); padding-bottom: var(--sp-2); }
+  .auth-field > span:first-child { display: none; }
+  .auth-head p, .auth-caption { display: none; }
 }
