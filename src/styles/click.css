@@ -8,7 +8,7 @@
 /* ---------- Barra superior: BPM y botón CLICK ---------- */
 .tempo { border-color: var(--c-line); border-radius: var(--r-sm); background: var(--c-card); box-shadow: none; position: relative; }
 .tempo::after, .click-btn::after { content: ""; position: absolute; inset: -4px 0; } /* zona táctil de al menos 44 px de alto */
-.tempo strong { color: var(--c-accent-strong); font-family: var(--font-serif); font-weight: 500; }
+.tempo strong { color: var(--c-accent-strong); font-family: var(--font-sans); font-weight: 500; font-variant-numeric: tabular-nums; letter-spacing: -.06em; } /* Inter es unos 3 px más ancha que la serifa con 3 cifras; el tracking compensa para que el encabezado no se mueva */
 .tempo small { color: var(--c-faint); }
 .tempo:active { background: var(--c-card-2); }
 
