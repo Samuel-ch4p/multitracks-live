@@ -447,3 +447,7 @@
   .wave-songline .wave-section { flex: none; padding: 0 6px; font-size: 10px; line-height: 14px; letter-spacing: .08em; }
   .wave-panel .wave-marks { height: 40px; }
 }
+/* Armado: al armarse el arrastre (dedo quieto ~200 ms) la perilla "encaja" con un pequeño crecimiento que se asienta, antes de moverse: así el reposo,
+   el dedo apoyado (aro tenue, arriba), el armado (este gesto + aro del canal) y el arrastre sostenido (aro y luz fijos) se distinguen. Solo transform. */
+.pan-bar.is-dragging .pan-thumb { animation: pan-arm .24s var(--ease-out); }
+@keyframes pan-arm { from { transform: translate(-50%, -50%) scale(1.22); } to { transform: translate(-50%, -50%) scale(1); } }
