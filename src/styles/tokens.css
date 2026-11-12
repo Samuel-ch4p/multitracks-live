@@ -112,9 +112,10 @@
   --sp-6: 32px;
   --sp-7: 40px;
 
-  /* ---- Tipografía: serifa para títulos y nombre de canción, sans para la interfaz ---- */
-  --font-sans: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; /* Inter va empaquetada (@fontsource); si no cargara, la fuente del sistema (Roboto en Android) */
-  --font-serif: Newsreader, Georgia, "Times New Roman", serif;
+  /* ---- Tipografía: UNA sola familia para toda la interfaz (la de los botones CLICK y PAD: Inter) ----
+     --font-ui es el único token de familia de la interfaz. --font-brand (serifa) existe solo para el título de la pantalla de acceso. */
+  --font-ui: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; /* Inter va empaquetada (@fontsource); si no cargara, la fuente del sistema (Roboto en Android) */
+  --font-brand: Newsreader, Georgia, "Times New Roman", serif;
 
   /* Tamaños: nunca menos de 11 px (--fs-xs) */
   --fs-xs: 11px;

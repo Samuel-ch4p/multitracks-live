@@ -190,7 +190,7 @@
   .wave-songline { position: absolute; z-index: 3; top: 4px; right: 8px; left: 8px; display: flex; align-items: center; gap: 8px; pointer-events: none; }
   .wave-songname {
     display: block; min-width: 0; max-width: 55%; overflow: hidden; padding: 1px 8px; border-radius: 6px; background: color-mix(in srgb, var(--c-panel) 85%, transparent);
-    font-family: var(--font-serif); font-size: 14px; font-weight: 500; line-height: 1.3; text-overflow: ellipsis; white-space: nowrap;
+    font-family: var(--font-ui); font-size: 14px; font-weight: 600; line-height: 1.3; text-overflow: ellipsis; white-space: nowrap;
   }
   .wave-section { position: static; }
 }
@@ -258,7 +258,7 @@
    Tipografía del mezclador: la MISMA fuente de los botones Click y PAD y de los pads (Inter, empaquetada con la app), con su mismo
    carácter: pesos 600-700, números tabulares y rótulos en mayúsculas con espaciado. Nada hereda otra fuente por accidente.
    ===================================================================== */
-.channels-box, .channels-box button, .channels-box output { font-family: var(--font-sans); font-variant-numeric: tabular-nums; }
+.channels-box, .channels-box button, .channels-box output { font-family: var(--font-ui); font-variant-numeric: tabular-nums; }
 .channel-name strong { font-size: 13px; font-weight: 600; letter-spacing: 0; }
 .channel-name small { color: var(--c-muted); font-size: 12px; font-weight: 600; }
 .chip { font-size: 12px; font-weight: 700; letter-spacing: .04em; }
@@ -283,7 +283,7 @@
 .hold-btn.is-holding::before { opacity: 1; transform: scaleX(1); transition: transform 450ms linear, opacity 80ms linear; }
 .slow-chip {
   position: relative; flex: none; height: 32px; padding: 0 10px; border: 1px solid color-mix(in srgb, var(--c-accent) 55%, transparent); border-radius: 999px;
-  background: color-mix(in srgb, var(--c-accent) 16%, transparent); color: var(--c-accent-strong); font: 700 11px var(--font-sans); letter-spacing: .06em; white-space: nowrap; touch-action: manipulation;
+  background: color-mix(in srgb, var(--c-accent) 16%, transparent); color: var(--c-accent-strong); font: 700 11px var(--font-ui); letter-spacing: .06em; white-space: nowrap; touch-action: manipulation;
 }
 .slow-chip::after { content: ""; position: absolute; inset: -6px -3px; }
 
@@ -291,7 +291,7 @@
 .undo-toast { gap: 12px; padding-right: 8px; pointer-events: auto; }
 .undo-btn {
   position: relative; flex: none; height: 34px; padding: 0 14px; border: 1px solid color-mix(in srgb, var(--c-accent) 55%, transparent); border-radius: 999px;
-  background: color-mix(in srgb, var(--c-accent) 16%, transparent); color: var(--c-accent-strong); font: 700 12px var(--font-sans); letter-spacing: .06em; touch-action: manipulation;
+  background: color-mix(in srgb, var(--c-accent) 16%, transparent); color: var(--c-accent-strong); font: 700 12px var(--font-ui); letter-spacing: .06em; touch-action: manipulation;
 }
 .undo-btn::after { content: ""; position: absolute; inset: -6px -4px; }
 
@@ -312,7 +312,7 @@
 .topbar .transport .icon-btn:disabled { color: var(--c-faint); opacity: .45; }
 .topbar .transport .hold-btn.is-armed, .topbar .top-tools .hold-btn.is-armed { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--c-accent) 55%, transparent); }
 
-.deck-main strong, .wave-songname { font-family: var(--font-sans); font-weight: 600; letter-spacing: 0; }
+.deck-main strong, .wave-songname { font-family: var(--font-ui); font-weight: 600; letter-spacing: 0; }
 .wave-songname { font-size: 13px; }
 .sr-only { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; border: 0; clip-path: inset(50%); white-space: nowrap; }
 

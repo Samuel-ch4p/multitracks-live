@@ -4,7 +4,7 @@
    ===================================================================== */
 .pad-side { border-color: color-mix(in srgb, var(--c-accent) 22%, var(--c-line)); border-radius: var(--r-md); background: var(--c-panel); box-shadow: none; }
 .pad-panel { gap: var(--sp-3); padding: var(--sp-3); }
-.pad-title h2 { font-family: var(--font-serif); font-size: 16px; font-weight: 500; }
+.pad-title h2 { font-family: var(--font-ui); font-size: 16px; font-weight: 600; }
 .pad-chip { border-color: var(--c-line); color: var(--c-faint); font-size: var(--fs-xs); font-weight: 700; letter-spacing: .08em; }
 .pad-chip.on { border-color: var(--accent-line); background: var(--accent-bg); color: var(--c-accent-strong); }
 .pad-chip.on i { background: var(--c-accent); box-shadow: none; }

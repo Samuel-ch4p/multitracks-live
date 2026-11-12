@@ -20,9 +20,9 @@
 .sheet-layer { position: fixed; z-index: 60; inset: 0; display: grid; place-items: center; padding: var(--sp-4); background: color-mix(in srgb, var(--c-bg-0) 82%, transparent); }
 .sheet { display: flex; width: min(420px, 100%); max-height: calc(100vh - 32px); flex-direction: column; gap: var(--sp-3); overflow-y: auto; padding: var(--sp-5); border: 1px solid var(--c-line-strong); border-radius: var(--r-lg); background: var(--c-card); }
 :root[data-fx="full"] .sheet { animation: item-in .25s var(--ease-out) both; }
-.sheet h2 { margin: 0; font-family: var(--font-serif); font-size: 22px; font-weight: 500; line-height: 1.2; }
+.sheet h2 { margin: 0; font-family: var(--font-ui); font-size: 22px; font-weight: 600; line-height: 1.2; }
 .sheet p { margin: 0; color: var(--c-muted); font-size: var(--fs-md); line-height: 1.5; }
-.sheet .sheet-song { color: var(--c-text); font-family: var(--font-serif); font-size: 18px; }
+.sheet .sheet-song { color: var(--c-text); font-family: var(--font-ui); font-size: 18px; }
 .sheet .sheet-note { font-size: var(--fs-sm); }
 .sheet-actions { display: flex; justify-content: flex-end; gap: var(--sp-2); }
 .sheet-actions .pill-btn { min-height: 44px; padding: 0 var(--sp-4); }
@@ -36,7 +36,7 @@
 /* Tarjeta "Continuar" de la sesión autoguardada */
 .continue-card { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-3); padding: var(--sp-3) var(--sp-4); border: 1px solid var(--accent-line); border-radius: var(--r-md); background: color-mix(in srgb, var(--c-accent) 8%, var(--c-card)); }
 .continue-card .song-copy { min-width: 0; }
-.continue-card strong { overflow: hidden; font-family: var(--font-serif); font-size: 17px; font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
+.continue-card strong { overflow: hidden; font-family: var(--font-ui); font-size: 17px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
 .continue-card small { color: var(--c-muted); font-size: var(--fs-xs); }
 .continue-card .pill-btn { flex: none; min-height: 44px; padding: 0 var(--sp-4); }
 

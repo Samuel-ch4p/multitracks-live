@@ -1,4 +1,5 @@
-import { useEffect, useState, useSyncExternalStore, type ReactNode } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
+import { APP_VERSION } from "./appVersion";
 import { setFx, useFx, type FxMode } from "./effects";
 import { setRespectSystemMotion, useMotion } from "./motion";
 import { fpsSnapshot } from "./fpsMonitor";
@@ -66,6 +67,15 @@ export default function SettingsScreen({ normMode, onNormMode, getDiagnostics }:
   const [master, setMaster] = useState(getDefaultMaster);
   const preload = useSyncExternalStore(subscribePreload, getPreload);
   const [cleaned, setCleaned] = useState(false);
+  // «Avanzado» (diagnóstico) no se ve en el APK de los clientes: solo en desarrollo, o tras tocar 7 veces seguidas el número de versión.
+  const [advanced, setAdvanced] = useState(import.meta.env.DEV);
+  const taps = useRef({ count: 0, last: 0 });
+  function tapVersion() {
+    const now = Date.now();
+    taps.current.count = now - taps.current.last < 1500 ? taps.current.count + 1 : 1;
+    taps.current.last = now;
+    if (taps.current.count >= 7) { taps.current.count = 0; setAdvanced(true); }
+  }
 
   // Membresía: solo si hay sesión. Si la consulta falla, la tarjeta de membresía no se muestra.
   useEffect(() => {
@@ -169,11 +179,15 @@ export default function SettingsScreen({ normMode, onNormMode, getDiagnostics }:
               </Row>
             </Card>
 
-            <Card title="Avanzado">
-              <Row title="Diagnóstico" hint="Rendimiento, memoria y audio del dispositivo.">
-                <button className="settings-action" onClick={() => setView("diag")}>Ver</button>
-              </Row>
-            </Card>
+            {advanced && (
+              <Card title="Avanzado">
+                <Row title="Diagnóstico" hint="Rendimiento, memoria y audio del dispositivo.">
+                  <button className="settings-action" onClick={() => setView("diag")}>Ver</button>
+                </Row>
+              </Card>
+            )}
+
+            <button className="app-version" onClick={tapVersion} aria-label={`Versión ${APP_VERSION}`}>Crescendo Live · versión {APP_VERSION}</button>
           </>
         )}
       </div>

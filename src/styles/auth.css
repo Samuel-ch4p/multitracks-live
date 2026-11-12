@@ -8,11 +8,11 @@
   background:
     radial-gradient(circle at 50% -15%, color-mix(in srgb, var(--c-accent) 11%, transparent), transparent 34%),
     linear-gradient(160deg, var(--c-bg-2), var(--c-bg-0) 70%);
-  color: var(--c-text); font-family: var(--font-sans);
+  color: var(--c-text); font-family: var(--font-ui);
 }
 /* margin:auto centra sin recortar la parte de arriba cuando el contenido no cabe (con el teclado abierto se puede hacer scroll hasta el principio) */
 .auth-screen > * { margin: auto; }
-.auth-screen h1 { margin: 0; font-family: var(--font-serif); font-weight: 500; letter-spacing: 0; }
+.auth-screen h1 { margin: 0; font-family: var(--font-brand); font-weight: 500; letter-spacing: 0; }
 .auth-screen p { margin: 0; color: var(--c-muted); font-size: var(--fs-md); line-height: 1.5; }
 .auth-mark { display: block; width: 56px; height: 56px; }
 .auth-mark.small { width: 40px; height: 40px; }
@@ -51,7 +51,7 @@
 }
 .auth-tabs button.selected { border-color: var(--accent-line); background: var(--accent-bg); color: var(--c-accent-strong); }
 .auth-head { display: flex; flex: none; align-items: center; gap: var(--sp-2); }
-.auth-head h2 { margin: 0; font-family: var(--font-serif); font-size: 22px; font-weight: 500; line-height: 1.15; }
+.auth-head h2 { margin: 0; font-family: var(--font-brand); font-size: 22px; font-weight: 500; line-height: 1.15; }
 .auth-head p { margin: 2px 0 0; color: var(--c-muted); font-size: var(--fs-xs); line-height: 1.35; }
 .auth-back { display: grid; width: 44px; height: 44px; flex: none; place-items: center; padding: 0; border: 0; border-radius: 50%; background: none; color: var(--c-muted); touch-action: manipulation; }
 .auth-back svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }

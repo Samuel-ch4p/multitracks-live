@@ -43,7 +43,8 @@
 
 /* ---------- Tipografía: serifa para títulos y nombre de canción ---------- */
 .lib-head h1, .library-panel-heading strong, .player-copy h2, .loaded-song strong, .deck-main strong, .song-row strong, .mini-copy strong,
-.load-card h2, .auth-card h1, .setting-block strong { font-family: var(--font-serif); font-weight: 500; letter-spacing: 0; }
+.load-card h2, .setting-block strong { font-family: var(--font-ui); font-weight: 600; letter-spacing: 0; }
+.auth-card h1 { font-family: var(--font-brand); font-weight: 500; letter-spacing: 0; } /* marca: pantalla de acceso */
 .lib-head h1 { font-size: 30px; line-height: 1.1; }
 .loaded-song strong, .song-row strong, .deck-main strong, .mini-copy strong { font-size: 14px; }
 .player-copy h2 { font-size: clamp(24px, 5vw, 34px); }

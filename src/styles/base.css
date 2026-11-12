@@ -1,6 +1,6 @@
 :root {
   color-scheme: dark;
-  font-family: var(--font-sans);
+  font-family: var(--font-ui);
   font-variant-numeric: lining-nums;
   font-synthesis: none;
   text-rendering: optimizeLegibility;

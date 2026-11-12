@@ -8,7 +8,7 @@
 /* ---------- Barra superior: BPM y botón CLICK ---------- */
 .tempo { border-color: var(--c-line); border-radius: var(--r-sm); background: var(--c-card); box-shadow: none; position: relative; }
 .tempo::after, .click-btn::after { content: ""; position: absolute; inset: -4px 0; } /* zona táctil de al menos 44 px de alto */
-.tempo strong { color: var(--c-accent-strong); font-family: var(--font-sans); font-weight: 500; font-variant-numeric: tabular-nums; letter-spacing: -.06em; } /* Inter es unos 3 px más ancha que la serifa con 3 cifras; el tracking compensa para que el encabezado no se mueva */
+.tempo strong { color: var(--c-accent-strong); font-family: var(--font-ui); font-weight: 500; font-variant-numeric: tabular-nums; letter-spacing: -.06em; } /* Inter es unos 3 px más ancha que la serifa con 3 cifras; el tracking compensa para que el encabezado no se mueva */
 .tempo small { color: var(--c-faint); }
 .tempo:active { background: var(--c-card-2); }
 
@@ -34,14 +34,14 @@
 
 /* ---------- Panel de ajustes del Click ---------- */
 .click-drawer { gap: var(--sp-4); background: var(--c-panel); border-left: 1px solid var(--c-line-strong); }
-.click-drawer .drawer-head h2 { font-family: var(--font-serif); font-size: 22px; font-weight: 500; }
+.click-drawer .drawer-head h2 { font-family: var(--font-ui); font-size: 22px; font-weight: 600; }
 .click-drawer .drawer-head .pill-btn { min-height: var(--tap); min-width: var(--tap); padding: 0 var(--sp-4); }
 
 .bpm-box { gap: var(--sp-3); padding: var(--sp-4) var(--sp-3); border: 1px solid var(--c-line); border-radius: var(--r-md); background: var(--c-card); box-shadow: none; }
 .step-btn { min-width: var(--tap); height: var(--tap); border: 1px solid var(--c-line-strong); border-radius: var(--r-xs); background: var(--c-glass); color: var(--c-text); }
 .step-btn:active:not(:disabled) { background: var(--c-glass-strong); }
 .step-btn:disabled { opacity: .35; }
-.bpm-field input { color: var(--c-accent-strong); font-family: var(--font-serif); font-weight: 500; }
+.bpm-field input { color: var(--c-accent-strong); font-family: var(--font-ui); font-weight: 600; }
 .bpm-field span { color: var(--c-faint); }
 
 /* Deslizadores (tempo y volumen): mismo carril y cabeza que el resto de la app */
