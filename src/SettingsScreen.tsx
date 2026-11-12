@@ -5,7 +5,8 @@ import { fpsSnapshot } from "./fpsMonitor";
 import { NORM_MODES, NORM_MODE_LABEL, type NormMode } from "./normConfig.ts";
 import { pistas } from "./format";
 import { useAccount } from "./AuthGate";
-import { CONTACTO_SOPORTE, mailtoLink, whatsappLink } from "./cloud/config";
+import { CONTACTO_SOPORTE, SOPORTE_ASUNTO, mailtoLink, whatsappLink } from "./cloud/config";
+import { CopyEmailButton } from "./CloudParts";
 import { openExternal } from "./externalLink";
 import { getPreload, setPreload, subscribePreload } from "./preload";
 import { clearTemporaryData, formatDate, getDefaultMaster, loadMembership, setDefaultMaster, statusLabel, type Membership } from "./account";
@@ -40,7 +41,7 @@ function Card({ title, children }: { title: string; children: ReactNode }) {
   );
 }
 
-function Row({ title, hint, children, stacked }: { title: string; hint?: string; children?: ReactNode; stacked?: boolean }) {
+function Row({ title, hint, children, stacked }: { title: string; hint?: ReactNode; children?: ReactNode; stacked?: boolean }) {
   return (
     <div className={`setting-row ${stacked ? "stacked" : ""}`}>
       <div className="setting-copy"><strong>{title}</strong>{hint && <small>{hint}</small>}</div>
@@ -154,8 +155,9 @@ export default function SettingsScreen({ normMode, onNormMode, getDiagnostics }:
               <Row title="Soporte por WhatsApp" hint={CONTACTO_SOPORTE.whatsappDisplay}>
                 <button className="settings-action" onClick={() => void openExternal(whatsappLink(`Hola, necesito ayuda con Crescendo Live.${account?.email ? ` Mi correo es ${account.email}.` : ""}`))}>Escribir</button>
               </Row>
-              <Row title="Soporte por correo" hint={CONTACTO_SOPORTE.email}>
-                <button className="settings-action" onClick={() => void openExternal(mailtoLink("Ayuda con Crescendo Live", account?.email ? `Mi correo en la app es ${account.email}.` : ""))}>Escribir</button>
+              <Row title="Soporte por correo" hint={<a className="support-link" href={mailtoLink()} onClick={(e) => { e.preventDefault(); void openExternal(mailtoLink()); }}>{CONTACTO_SOPORTE.email}</a>}>
+                <button className="settings-action" onClick={() => void openExternal(mailtoLink(SOPORTE_ASUNTO, account?.email ? `Mi correo en la app es ${account.email}.` : ""))}>Escribir</button>
+                <CopyEmailButton className="settings-action" />
               </Row>
             </Card>
 

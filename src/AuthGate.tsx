@@ -5,6 +5,7 @@ import { apiGet } from "./cloud/api";
 import { currentSession, friendlyAuthMessage, sendPasswordReset, signIn, signOut, signUp, supabase } from "./cloud/auth";
 import { CONTACTO_SOPORTE, cloudConfigured, supportHint, whatsappLink } from "./cloud/config";
 import { openExternal } from "./externalLink";
+import { SupportEmail } from "./CloudParts";
 import { expiredOnStart, startInactivityWatch } from "./inactivity";
 import { CloudError, friendlyCloudMessage } from "./cloud/errors";
 import "./styles/auth.css";
@@ -158,6 +159,7 @@ function ProblemScreen({ error, email, onRetry, onSignOut }: { error: CloudError
       {error.showsSupport
         ? <p className="auth-contact">WhatsApp {CONTACTO_SOPORTE.whatsappDisplay}</p>
         : <p className="auth-hint">{supportHint()}</p>}
+      {(error.kind === "pending" || error.kind === "paused" || error.kind === "blocked") && <SupportEmail lead="Correo de soporte:" />}
     </Screen>
   );
 }
@@ -262,6 +264,7 @@ function AuthScreen({ onSignedIn, notice, initialMode = "in" }: { onSignedIn: (s
           <h1>Tu servicio, con cada pista en su lugar.</h1>
           <p>Biblioteca de multitracks, mezclador y click en un solo lugar.</p>
           {mode === "up" && <p className="auth-brand-lead">Tu cuenta quedará pendiente hasta que la activemos.</p>}
+          <footer className="auth-foot"><SupportEmail lead="¿Necesitas ayuda?" /></footer>
         </section>
         <form className="auth-card" onSubmit={(e) => void submit(e)} noValidate onFocus={keepFocusedVisible} aria-label={mode === "in" ? "Iniciar sesión" : mode === "up" ? "Crear cuenta" : "Recuperar contraseña"}>
           {mode === "reset" ? (

@@ -10,20 +10,25 @@ export const SUPABASE_PUBLISHABLE_KEY = (import.meta.env.VITE_SUPABASE_PUBLISHAB
 
 export const cloudConfigured = !!API_URL && !!SUPABASE_URL && !!SUPABASE_PUBLISHABLE_KEY;
 
+/** Correo de soporte: ÚNICO lugar donde se escribe. */
+export const SOPORTE_EMAIL = "crescendo.rm@gmail.com";
+/** Asunto de los correos a soporte. */
+export const SOPORTE_ASUNTO = "Soporte Crescendo Live";
+
 /** Datos de soporte: ÚNICO lugar donde se escriben. Todo lo demás (botones, enlaces, textos) sale de aquí. */
 export const CONTACTO_SOPORTE = {
   /** Formato internacional sin signos, para https://wa.me/ */
   whatsappNumber: "573127664740",
   /** Cómo se muestra en pantalla */
   whatsappDisplay: "+57 312 766 4740",
-  email: "chaparrosamuel86@gmail.com",
+  email: SOPORTE_EMAIL,
 } as const;
 
 /** Enlace de WhatsApp con el mensaje ya escrito. */
 export const whatsappLink = (message: string) => `https://wa.me/${CONTACTO_SOPORTE.whatsappNumber}?text=${encodeURIComponent(message)}`;
 
 /** Enlace para escribir un correo a soporte. */
-export const mailtoLink = (subject: string, body = "") =>
+export const mailtoLink = (subject: string = SOPORTE_ASUNTO, body = "") =>
   `mailto:${CONTACTO_SOPORTE.email}?subject=${encodeURIComponent(subject)}${body ? `&body=${encodeURIComponent(body)}` : ""}`;
 
 /** Línea discreta para errores que no se resuelven reintentando. */

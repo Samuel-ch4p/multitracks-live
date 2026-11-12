@@ -1,6 +1,6 @@
-import type { CSSProperties, ReactNode } from "react";
+import { useState, type CSSProperties, type ReactNode } from "react";
 import BrandMark from "./BrandMark";
-import { mailtoLink, whatsappLink } from "./cloud/config";
+import { SOPORTE_EMAIL, mailtoLink, whatsappLink } from "./cloud/config";
 import { openExternal } from "./externalLink";
 
 /** Botones de soporte (WhatsApp y correo, de CONTACTO_SOPORTE). `reason` va escrito en el mensaje. */
@@ -10,6 +10,43 @@ export function SupportActions({ reason, className = "" }: { reason: string; cla
       <button className="pill-btn primary" onClick={() => void openExternal(whatsappLink(`Hola, ${reason}`))}>SOPORTE POR WHATSAPP</button>
       <button className="pill-btn" onClick={() => void openExternal(mailtoLink("Soporte Crescendo Live", `Hola, ${reason}`))}>CORREO</button>
     </div>
+  );
+}
+
+/** Copia el correo de soporte con un toque (portapapeles; si no hay permiso, selección temporal). Avisa "Copiado" un momento. */
+export function CopyEmailButton({ className = "support-copy" }: { className?: string }) {
+  const [copied, setCopied] = useState(false);
+  async function copy() {
+    try {
+      await navigator.clipboard.writeText(SOPORTE_EMAIL);
+    } catch {
+      const field = document.createElement("textarea");
+      field.value = SOPORTE_EMAIL;
+      field.setAttribute("readonly", "");
+      field.style.cssText = "position:fixed;opacity:0;pointer-events:none";
+      document.body.appendChild(field);
+      field.select();
+      try { document.execCommand("copy"); } catch { /* sin portapapeles: el enlace sigue abriendo el correo */ }
+      field.remove();
+    }
+    setCopied(true);
+    window.setTimeout(() => setCopied(false), 2000);
+  }
+  return (
+    <button type="button" className={className} onClick={() => void copy()} aria-label={`Copiar correo de soporte ${SOPORTE_EMAIL}`}>
+      <span aria-live="polite">{copied ? "Copiado" : "Copiar"}</span>
+    </button>
+  );
+}
+
+/** Correo de soporte como enlace mailto: (asunto "Soporte Crescendo Live") más botón para copiarlo. */
+export function SupportEmail({ lead }: { lead?: string }) {
+  return (
+    <span className="support-email">
+      {lead && <span>{lead}</span>}
+      <a href={mailtoLink()} onClick={(e) => { e.preventDefault(); void openExternal(mailtoLink()); }}>{SOPORTE_EMAIL}</a>
+      <CopyEmailButton />
+    </span>
   );
 }
 

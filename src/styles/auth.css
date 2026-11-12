@@ -146,3 +146,23 @@
   .auth-body > .auth-primary { min-height: 46px; margin-top: 0; }
   .auth-screen p.auth-field-error { font-size: var(--fs-xs); }
 }
+
+/* Correo de soporte: enlace mailto + botón Copiar (zonas táctiles de 44 px). Se usa en acceso, avisos de cuenta y Ajustes. */
+.support-email { display: inline-flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 0 var(--sp-2); color: var(--c-muted); font-size: var(--fs-sm); }
+.support-email a, .support-link { display: inline-flex; min-height: 44px; align-items: center; color: var(--c-accent-strong); text-decoration: underline; text-underline-offset: 3px; word-break: break-all; }
+.support-copy { min-height: 44px; min-width: 64px; padding: 0 var(--sp-3); border: 1px solid var(--c-line-strong); border-radius: var(--r-sm); background: none; color: var(--c-text); font-size: var(--fs-xs); font-weight: 700; touch-action: manipulation; }
+.support-copy:active { background: var(--c-glass); }
+.auth-brand .auth-foot { margin-top: var(--sp-2); }
+.auth-brand .support-email { justify-content: flex-start; }
+@media (max-height: 460px) and (orientation: landscape) { .auth-brand .auth-foot { margin-top: 0; } }
+@media (max-height: 300px) { .auth-foot { display: none; } }
+@media (max-width: 559px), (orientation: portrait) and (max-width: 719px) { .auth-brand .support-email { justify-content: center; } }
+
+/* Avisos con correo de soporte (pendiente, pausa, bloqueo): más compactos en pantallas bajas para seguir cabiendo sin desplazarse */
+@media (max-height: 420px) {
+  .auth-state { gap: 4px; }
+  .auth-state .auth-actions { margin-top: 0; }
+  .auth-email { padding: 4px 14px; gap: 1px; }
+  .auth-state p { line-height: 1.35; }
+  .auth-state .auth-link { min-height: 44px; }
+}
