@@ -26,5 +26,15 @@ export function saveAcceptance(now = new Date()): LegalAcceptance {
   return acceptance;
 }
 
+/**
+ * Metadatos de aceptación que se envían a Supabase Auth al registrarse (options.data → raw_user_meta_data). Solo estos tres campos:
+ *  · legal_version: versión del texto aceptado (LEGAL_VERSION)
+ *  · legal_accepted_at: fecha y hora ISO en UTC
+ *  · legal_age_declaration: true = marcó "mayor de 18 años, o con autorización de su padre, madre o representante legal"
+ */
+export function legalSignUpMetadata(now = new Date()): { legal_version: string; legal_accepted_at: string; legal_age_declaration: true } {
+  return { legal_version: LEGAL_VERSION, legal_accepted_at: now.toISOString(), legal_age_declaration: true };
+}
+
 /** true si nunca se aceptó o si el texto cambió desde la versión aceptada. */
 export const needsAcceptance = () => loadAcceptance()?.version !== LEGAL_VERSION;

@@ -8,7 +8,7 @@ import { openExternal } from "./externalLink";
 import { SupportEmail } from "./CloudParts";
 import { LegalScreen } from "./LegalView";
 import type { LegalKind } from "./legal";
-import { saveAcceptance } from "./legalAcceptance";
+import { legalSignUpMetadata, saveAcceptance } from "./legalAcceptance";
 import { expiredOnStart, startInactivityWatch } from "./inactivity";
 import { CloudError, friendlyCloudMessage } from "./cloud/errors";
 import "./styles/auth.css";
@@ -245,8 +245,9 @@ function AuthScreen({ onSignedIn, notice, initialMode = "in" }: { onSignedIn: (s
         await sendPasswordReset(email);
         setInfo("Si el correo está registrado, te enviamos un mensaje para cambiar la contraseña.");
       } else if (mode === "up") {
-        const hasSession = await signUp(email, password);
-        saveAcceptance(); // versión del texto aceptada y fecha, en este dispositivo
+        const now = new Date();
+        const hasSession = await signUp(email, password, legalSignUpMetadata(now)); // la aceptación viaja a Supabase en options.data
+        saveAcceptance(now); // solo si signUp no lanzó error: versión y fecha en este dispositivo
         if (!hasSession) { setInfo("Cuenta creada. Confirma tu correo desde el mensaje que te enviamos y luego inicia sesión."); setMode("in"); setConfirm(""); }
       } else {
         await signIn(email, password);

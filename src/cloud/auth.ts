@@ -49,9 +49,12 @@ export async function signIn(email: string, password: string) {
   if (error) throw error;
 }
 
-/** Devuelve true si hay sesión de inmediato; false si Supabase pide confirmar el correo primero. */
-export async function signUp(email: string, password: string): Promise<boolean> {
-  const { data, error } = await supabase().auth.signUp({ email: email.trim(), password });
+/**
+ * Devuelve true si hay sesión de inmediato; false si Supabase pide confirmar el correo primero.
+ * `metadata` viaja como options.data (queda en raw_user_meta_data del usuario): aquí solo la aceptación legal, nada del dispositivo.
+ */
+export async function signUp(email: string, password: string, metadata?: Record<string, string | boolean>): Promise<boolean> {
+  const { data, error } = await supabase().auth.signUp({ email: email.trim(), password, options: metadata ? { data: metadata } : undefined });
   if (error) throw error;
   return !!data.session;
 }
