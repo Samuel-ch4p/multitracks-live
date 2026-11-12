@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, type CSSProperties } from "react";
 import { DEAD_ZONE } from "./gesture";
 
 type Props = {
@@ -13,6 +13,9 @@ function panText(pan: number) {
 }
 
 const clamp = (n: number) => Math.min(1, Math.max(-1, n));
+
+/** Radio (mitad del ancho) de la perilla en px; debe coincidir con --pan-r de mixer.css. El centro de la perilla recorre [R, ancho − R]: nunca sobresale del carril. */
+const THUMB_R = 13;
 
 /** Pausa (ms) con el dedo quieto sobre la barra para "armar" el arrastre táctil. */
 const ARM_MS = 200;
@@ -49,12 +52,12 @@ export default function Pan({ value, onChange, label }: Props) {
     const bar = barRef.current;
     if (!bar) return;
     const rect = bar.getBoundingClientRect();
-    let next = ((clientX - rect.left) / rect.width) * 2 - 1;
+    let next = ((clientX - rect.left - THUMB_R) / Math.max(1, rect.width - 2 * THUMB_R)) * 2 - 1;
     if (Math.abs(next) < 0.08) next = 0; // imán al centro
     onChange(Math.round(clamp(next) * 50) / 50);
   }
 
-  const position = ((value + 1) / 2) * 100;
+  const fraction = (value + 1) / 2; // 0 = extremo izquierdo, 1 = extremo derecho; mixer.css lo convierte en posición contenida
 
   return (
     <div className="pan">
@@ -74,6 +77,7 @@ export default function Pan({ value, onChange, label }: Props) {
         aria-valuemin={-100}
         aria-valuemax={100}
         aria-valuenow={Math.round(value * 100)}
+        style={{ "--pp": fraction, "--pl": Math.min(0.5, fraction), "--pw": Math.abs(fraction - 0.5) } as CSSProperties}
         onPointerDown={(event) => {
           const bar = event.currentTarget;
           if (event.pointerType === "touch") {
@@ -103,7 +107,7 @@ export default function Pan({ value, onChange, label }: Props) {
             }
             if (g.state === "armed") {
               const rect = event.currentTarget.getBoundingClientRect();
-              let next = g.startValue + (dx / rect.width) * 2; // relativo: sin salto al armarse
+              let next = g.startValue + (dx / Math.max(1, rect.width - 2 * THUMB_R)) * 2; // relativo: sin salto al armarse
               if (Math.abs(next) < 0.08) next = 0; // imán al centro
               onChange(Math.round(clamp(next) * 50) / 50);
             }
@@ -124,11 +128,8 @@ export default function Pan({ value, onChange, label }: Props) {
       >
         <div className="pan-track" />
         <div className="pan-center" />
-        <div
-          className="pan-fill"
-          style={{ left: `${Math.min(50, position)}%`, width: `${Math.abs(position - 50)}%` }}
-        />
-        <div className="pan-thumb" style={{ left: `${position}%` }}><output className="pan-value" aria-hidden="true">{panText(value)}</output></div>
+        <div className="pan-fill" />
+        <div className="pan-thumb"><output className="pan-value" aria-hidden="true">{panText(value)}</output></div>
       </div>
     </div>
   );

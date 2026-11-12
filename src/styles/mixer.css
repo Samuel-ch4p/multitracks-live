@@ -451,3 +451,15 @@
    el dedo apoyado (aro tenue, arriba), el armado (este gesto + aro del canal) y el arrastre sostenido (aro y luz fijos) se distinguen. Solo transform. */
 .pan-bar.is-dragging .pan-thumb { animation: pan-arm .24s var(--ease-out); }
 @keyframes pan-arm { from { transform: translate(-50%, -50%) scale(1.22); } to { transform: translate(-50%, -50%) scale(1); } }
+
+/* =====================================================================
+   Paneo contenido: el centro de la perilla recorre [R, ancho − R] (R = --pan-r, la mitad de su ancho), así en 100L / 100R la perilla queda
+   al ras del carril y nunca sobresale del canal. Pan.tsx entrega --pp (0..1), --pl (mínimo entre --pp y .5) y --pw (|--pp − .5|); el relleno parte del centro.
+   El globo con el valor (solo al armar/arrastrar) se corre hacia adentro en los extremos para no salirse de la tarjeta.
+   ===================================================================== */
+.pan-bar { --pan-r: 13px; --pan-run: calc(100% - 2 * var(--pan-r)); }
+.pan-thumb { left: calc(var(--pan-r) + var(--pan-run) * var(--pp, .5)); }
+.pan-fill { left: calc(var(--pan-r) + var(--pan-run) * var(--pl, .5)); width: calc(var(--pan-run) * var(--pw, 0)); }
+.pan-value { margin-left: calc(max(0px, (.22 - var(--pp, .5)) * 64px) + min(0px, (.78 - var(--pp, .5)) * 64px)); }
+/* Mientras se arma/arrastra, el globo ya muestra el valor: el rótulo fijo (100L / C / 100R) se oculta para que no se vean montados */
+.pan:has(.pan-bar.is-dragging) .pan-readout { opacity: 0; }
