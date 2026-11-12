@@ -6,6 +6,9 @@ import { currentSession, friendlyAuthMessage, sendPasswordReset, signIn, signOut
 import { CONTACTO_SOPORTE, cloudConfigured, supportHint, whatsappLink } from "./cloud/config";
 import { openExternal } from "./externalLink";
 import { SupportEmail } from "./CloudParts";
+import { LegalScreen } from "./LegalView";
+import type { LegalKind } from "./legal";
+import { saveAcceptance } from "./legalAcceptance";
 import { expiredOnStart, startInactivityWatch } from "./inactivity";
 import { CloudError, friendlyCloudMessage } from "./cloud/errors";
 import "./styles/auth.css";
@@ -211,6 +214,8 @@ function AuthScreen({ onSignedIn, notice, initialMode = "in" }: { onSignedIn: (s
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
+  const [accepted, setAccepted] = useState(false);
+  const [legal, setLegal] = useState<LegalKind | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [info, setInfo] = useState("");
@@ -225,7 +230,7 @@ function AuthScreen({ onSignedIn, notice, initialMode = "in" }: { onSignedIn: (s
   const mismatch = mode === "up" && confirm.length > 0 && confirm !== password;
   const tooShort = mode === "up" && password.length > 0 && password.length < MIN_PASSWORD;
   /** Crear cuenta: sin campos vacíos, contraseña válida y confirmación igual; también mientras haya un error mostrado (se limpia al editar). */
-  const signUpBlocked = mode === "up" && (!email.trim() || !password || !confirm || tooShort || mismatch || Boolean(error));
+  const signUpBlocked = mode === "up" && (!email.trim() || !password || !confirm || tooShort || mismatch || !accepted || Boolean(error));
 
   async function submit(event: FormEvent) {
     event.preventDefault();
@@ -233,7 +238,7 @@ function AuthScreen({ onSignedIn, notice, initialMode = "in" }: { onSignedIn: (s
     setInfo("");
     if (!email.trim()) { setError("Escribe tu correo."); return; }
     if (mode !== "reset" && password.length < MIN_PASSWORD) { setError("La contraseña debe tener al menos 8 caracteres."); return; }
-    if (mode === "up" && confirm !== password) return; // el mensaje "Las contraseñas no coinciden" ya se ve bajo el campo
+    if (mode === "up" && (confirm !== password || !accepted)) return; // el mensaje "Las contraseñas no coinciden" ya se ve bajo el campo
     setBusy(true);
     try {
       if (mode === "reset") {
@@ -241,6 +246,7 @@ function AuthScreen({ onSignedIn, notice, initialMode = "in" }: { onSignedIn: (s
         setInfo("Si el correo está registrado, te enviamos un mensaje para cambiar la contraseña.");
       } else if (mode === "up") {
         const hasSession = await signUp(email, password);
+        saveAcceptance(); // versión del texto aceptada y fecha, en este dispositivo
         if (!hasSession) { setInfo("Cuenta creada. Confirma tu correo desde el mensaje que te enviamos y luego inicia sesión."); setMode("in"); setConfirm(""); }
       } else {
         await signIn(email, password);
@@ -299,6 +305,16 @@ function AuthScreen({ onSignedIn, notice, initialMode = "in" }: { onSignedIn: (s
                 message={mismatch ? "Las contraseñas no coinciden" : undefined} messageId="auth-confirm" showLabel="Mostrar confirmación de contraseña" hideLabel="Ocultar confirmación de contraseña"
               />
             )}
+            {mode === "up" && (
+              <label className="auth-check">
+                <input type="checkbox" checked={accepted} onChange={(e) => { setAccepted(e.target.checked); clearError(); }} aria-label="Acepto los Términos y la Política de privacidad. Soy mayor de 18 años, o tengo autorización de mi padre, madre o representante legal" />
+                <span>
+                  Soy mayor de 18 años, o tengo autorización de mi padre, madre o representante legal, y acepto los{" "}
+                  <button type="button" className="auth-inline" onClick={() => setLegal("terms")}>Términos</button> y la{" "}
+                  <button type="button" className="auth-inline" onClick={() => setLegal("privacy")}>Política de privacidad</button>
+                </span>
+              </label>
+            )}
             {notice && !error && !info && <p className="auth-info" role="status">Cerramos tu sesión por inactividad</p>}
             {error && <p className="auth-error" role="alert">{error}</p>}
             {info && <p className="auth-info" role="status">{info}</p>}
@@ -307,6 +323,7 @@ function AuthScreen({ onSignedIn, notice, initialMode = "in" }: { onSignedIn: (s
           </div>
         </form>
       </div>
+      {legal && <LegalScreen kind={legal} onClose={() => setLegal(null)} />}
     </main>
   );
 }

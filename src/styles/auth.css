@@ -166,3 +166,11 @@
   .auth-state p { line-height: 1.35; }
   .auth-state .auth-link { min-height: 44px; }
 }
+
+/* Casillero de aceptación (Crear cuenta): toda la fila es zona táctil de ≥ 44 px; los enlaces abren las pantallas legales */
+.auth-check { display: flex; min-height: 44px; align-items: flex-start; gap: var(--sp-3); padding: 6px 0; color: var(--c-muted); font-size: var(--fs-sm); line-height: 1.4; cursor: pointer; }
+.auth-check input { width: 24px; height: 24px; flex: none; margin: 10px 0 0; accent-color: var(--c-accent); cursor: pointer; }
+.auth-check input:focus-visible { outline: 2px solid var(--c-accent); outline-offset: 2px; }
+.auth-inline { position: relative; display: inline; padding: 0; border: 0; background: none; color: var(--c-accent-strong); font: inherit; font-weight: 700; text-decoration: underline; text-underline-offset: 3px; touch-action: manipulation; }
+.auth-inline::after { content: ""; position: absolute; inset: -4px -4px; }
+@media (max-height: 460px) and (orientation: landscape) { .auth-check { font-size: var(--fs-xs); gap: var(--sp-2); padding: 2px 0; } .auth-check input { margin-top: 10px; } }

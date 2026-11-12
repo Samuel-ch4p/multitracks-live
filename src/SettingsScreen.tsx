@@ -7,6 +7,8 @@ import { pistas } from "./format";
 import { useAccount } from "./AuthGate";
 import { CONTACTO_SOPORTE, SOPORTE_ASUNTO, mailtoLink, whatsappLink } from "./cloud/config";
 import { CopyEmailButton } from "./CloudParts";
+import { LegalText } from "./LegalView";
+import { LEGAL_TITLE, type LegalKind } from "./legal";
 import { openExternal } from "./externalLink";
 import { getPreload, setPreload, subscribePreload } from "./preload";
 import { clearTemporaryData, formatDate, getDefaultMaster, loadMembership, setDefaultMaster, statusLabel, type Membership } from "./account";
@@ -58,7 +60,7 @@ function Fact({ name, value }: { name: string; value: string }) {
 export default function SettingsScreen({ normMode, onNormMode, getDiagnostics }: Props) {
   const [fx] = useFx();
   const { systemReduce, respect } = useMotion();
-  const [view, setView] = useState<"settings" | "diag">("settings");
+  const [view, setView] = useState<"settings" | "diag" | LegalKind>("settings");
   const account = useAccount();
   const [membership, setMembership] = useState<Membership | null>(null);
   const [master, setMaster] = useState(getDefaultMaster);
@@ -73,18 +75,18 @@ export default function SettingsScreen({ normMode, onNormMode, getDiagnostics }:
     return () => { alive = false; };
   }, [account]);
 
-  const title = view === "settings" ? "Ajustes" : "Diagnóstico";
+  const title = view === "settings" ? "Ajustes" : view === "diag" ? "Diagnóstico" : LEGAL_TITLE[view];
   const expires = formatDate(membership?.expiresAt ?? null);
 
   return (
     <section className="screen settings-screen" aria-label={title}>
       <div className="lib-head">
         <div><span className="eyebrow">CRESCENDO LIVE</span><h1>{title}</h1></div>
-        {view === "diag" && <button className="pill-btn" onClick={() => setView("settings")}>VOLVER</button>}
+        {view !== "settings" && <button className="pill-btn" onClick={() => setView("settings")}>VOLVER</button>}
       </div>
 
       <div className="settings-scroll">
-        {view === "diag" ? <Diagnostics getDiagnostics={getDiagnostics} /> : (
+        {view === "diag" ? <Diagnostics getDiagnostics={getDiagnostics} /> : view !== "settings" ? <div className="settings-legal"><LegalText kind={view} /></div> : (
           <>
             {account && (
               <Card title="Cuenta y membresía">
@@ -151,7 +153,13 @@ export default function SettingsScreen({ normMode, onNormMode, getDiagnostics }:
               </Row>
             </Card>
 
-            <Card title="Ayuda">
+            <Card title="Legal y soporte">
+              <Row title="Política de privacidad" hint="Cómo tratamos tus datos.">
+                <button className="settings-action" onClick={() => setView("privacy")}>Ver</button>
+              </Row>
+              <Row title="Términos de uso" hint="Reglas de tu cuenta, límites y uso de las pistas.">
+                <button className="settings-action" onClick={() => setView("terms")}>Ver</button>
+              </Row>
               <Row title="Soporte por WhatsApp" hint={CONTACTO_SOPORTE.whatsappDisplay}>
                 <button className="settings-action" onClick={() => void openExternal(whatsappLink(`Hola, necesito ayuda con Crescendo Live.${account?.email ? ` Mi correo es ${account.email}.` : ""}`))}>Escribir</button>
               </Row>
