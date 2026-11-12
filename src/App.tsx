@@ -186,6 +186,15 @@ function pickLead(active: Track[]): HTMLAudioElement {
 
 /** Quita de los nombres de pista el prefijo que comparten todas ("Jubilo - Bajo" → "Bajo"). */
 function trackDisplayNames(names: string[]): string[] {
+  return shortenClick(stripSharedPrefix(names));
+}
+
+/** "Click Track" se muestra como "Click": en el canal cabe completo junto al valor. El nombre original sigue en el título y en las etiquetas de accesibilidad. */
+function shortenClick(names: string[]): string[] {
+  return names.map((name) => (/^click[\s_-]*track$/i.test(name.trim()) ? "Click" : name));
+}
+
+function stripSharedPrefix(names: string[]): string[] {
   if (names.length < 2) return names;
   let prefix = names[0];
   for (const name of names.slice(1)) {

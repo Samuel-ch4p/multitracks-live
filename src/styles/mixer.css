@@ -430,3 +430,20 @@
 }
 .pan-bar.is-dragging .pan-thumb::before { opacity: 1; }
 .pan-bar.is-dragging .pan-thumb::after { box-shadow: 0 0 9px var(--c-canal, var(--c-accent)); }
+
+/* =====================================================================
+   Mezclador en pantallas bajas (≤380 px de alto): rótulos completos y título con espacio propio.
+   · Título de la canción: antes se dibujaba sobre las barras de la onda (chip semitransparente). Ahora tiene su propia línea de 16 px entre la onda y la
+     fila de tiempos: texto de la tinta principal sobre el panel (≥ 10:1), una sola línea con puntos suspensivos; la sección (si hay) va a su derecha.
+     La onda y los marcadores no cambian; la capa de marcadores se ajusta al alto de la onda para no entrar en esa línea.
+   · Nombres de canal: el nombre nunca se recorta en seco; si no cabe, termina en "…". MASTER pierde algo de tracking para leerse completo junto a "100".
+   ===================================================================== */
+.channel-name strong { display: block; }
+.channel.master .channel-name { gap: 3px; }
+.channel.master .channel-name strong { letter-spacing: .03em; }
+@media (max-height: 380px) {
+  .wave-songline { position: static; display: flex; min-height: 0; align-items: center; gap: 8px; padding: 0 10px; pointer-events: none; }
+  .wave-songname { min-width: 0; max-width: none; flex: 0 1 auto; padding: 0; background: none; color: var(--c-text); font-size: 13px; line-height: 16px; }
+  .wave-songline .wave-section { flex: none; padding: 0 6px; font-size: 10px; line-height: 14px; letter-spacing: .08em; }
+  .wave-panel .wave-marks { height: 40px; }
+}
