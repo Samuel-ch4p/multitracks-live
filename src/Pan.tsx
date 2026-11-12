@@ -1,5 +1,7 @@
-import { useEffect, useRef, type CSSProperties } from "react";
-import { DEAD_ZONE } from "./gesture";
+import { useRef, type CSSProperties } from "react";
+
+/** Desplazamiento mínimo (px) para considerar que el dedo arrastró y no tocó. */
+const DEAD_ZONE = 8;
 
 type Props = {
   value: number; // -1 (izquierda) .. 1 (derecha)
@@ -17,15 +19,12 @@ const clamp = (n: number) => Math.min(1, Math.max(-1, n));
 /** Radio (mitad del ancho) de la perilla en px; debe coincidir con --pan-r de mixer.css. El centro de la perilla recorre [R, ancho − R]: nunca sobresale del carril. */
 const THUMB_R = 13;
 
-/** Pausa (ms) con el dedo quieto sobre la barra para "armar" el arrastre táctil. */
-const ARM_MS = 200;
-
-type TouchGesture = { id: number; x: number; y: number; startValue: number; timer: number; state: "waiting" | "armed" | "scroll" };
+type TouchGesture = { id: number; x: number; startValue: number; moved: boolean; fromReadout: boolean };
 
 /**
- * Paneo compacto: arrastra la barra; toca el valor para volver al centro.
- * Con el dedo, el paneo se mueve en horizontal, igual que la lista de canales; para no confundirlos, el arrastre táctil se arma
- * manteniendo el dedo quieto ~200 ms sobre la barra. Un deslizamiento inmediato desplaza la lista y nunca cambia el valor.
+ * Paneo compacto: arrastra la perilla; toca el valor para volver al centro.
+ * Con el dedo, el gesto empieza al tocar la perilla (zona táctil .pan-hit de 44 × 44 px, con touch-action: none) y desde ahí el arrastre mueve el
+ * paneo sin mantener presionado ni desplazar la lista. Un toque fuera de la zona no es de la perilla: el navegador desplaza el mezclador (pan-x).
  */
 export default function Pan({ value, onChange, label }: Props) {
   const barRef = useRef<HTMLDivElement>(null);
@@ -33,19 +32,12 @@ export default function Pan({ value, onChange, label }: Props) {
   const valueRef = useRef(value);
   valueRef.current = value;
 
-  // Una vez armado, el navegador no debe empezar a desplazar la lista (touchmove no pasivo; el primero aún es cancelable).
-  useEffect(() => {
-    const bar = barRef.current;
-    if (!bar) return;
-    const block = (event: TouchEvent) => { if (gesture.current?.state === "armed" && event.cancelable) event.preventDefault(); };
-    bar.addEventListener("touchmove", block, { passive: false });
-    return () => bar.removeEventListener("touchmove", block);
-  }, []);
-
-  function endTouch(bar: HTMLElement) {
-    if (gesture.current) window.clearTimeout(gesture.current.timer);
+  function endTouch(bar: HTMLElement, cancelled: boolean) {
+    const g = gesture.current;
     gesture.current = null;
     bar.classList.remove("is-dragging");
+    // La zona táctil cubre la parte baja del valor ("C"): un toque ahí, sin arrastrar, equivale a tocar el valor (centrar).
+    if (g && !cancelled && !g.moved && g.fromReadout) onChange(0);
   }
 
   function fromPointer(clientX: number) {
@@ -81,15 +73,10 @@ export default function Pan({ value, onChange, label }: Props) {
         onPointerDown={(event) => {
           const bar = event.currentTarget;
           if (event.pointerType === "touch") {
-            const pointerId = event.pointerId;
-            const g: TouchGesture = { id: pointerId, x: event.clientX, y: event.clientY, startValue: valueRef.current, timer: 0, state: "waiting" };
-            g.timer = window.setTimeout(() => {
-              if (gesture.current !== g || g.state !== "waiting") return;
-              g.state = "armed";
-              bar.setPointerCapture(pointerId);
-              bar.classList.add("is-dragging");
-            }, ARM_MS);
-            gesture.current = g;
+            if (!(event.target as Element).closest(".pan-hit")) return; // fuera de la perilla: deja desplazar el mezclador
+            gesture.current = { id: event.pointerId, x: event.clientX, startValue: valueRef.current, moved: false, fromReadout: event.clientY < bar.getBoundingClientRect().top };
+            bar.setPointerCapture(event.pointerId);
+            bar.classList.add("is-dragging");
             return;
           }
           bar.setPointerCapture(event.pointerId);
@@ -100,23 +87,17 @@ export default function Pan({ value, onChange, label }: Props) {
           const g = gesture.current;
           if (g && g.id === event.pointerId) {
             const dx = event.clientX - g.x;
-            // Se movió antes de armarse: es un deslizamiento (desplaza la lista), no un ajuste de paneo.
-            if (g.state === "waiting" && Math.max(Math.abs(dx), Math.abs(event.clientY - g.y)) >= DEAD_ZONE) {
-              window.clearTimeout(g.timer);
-              g.state = "scroll";
-            }
-            if (g.state === "armed") {
-              const rect = event.currentTarget.getBoundingClientRect();
-              let next = g.startValue + (dx / Math.max(1, rect.width - 2 * THUMB_R)) * 2; // relativo: sin salto al armarse
-              if (Math.abs(next) < 0.08) next = 0; // imán al centro
-              onChange(Math.round(clamp(next) * 50) / 50);
-            }
+            if (Math.abs(dx) >= DEAD_ZONE) g.moved = true;
+            const rect = event.currentTarget.getBoundingClientRect();
+            let next = g.startValue + (dx / Math.max(1, rect.width - 2 * THUMB_R)) * 2; // relativo: sin salto al tocar
+            if (Math.abs(next) < 0.08) next = 0; // imán al centro
+            onChange(Math.round(clamp(next) * 50) / 50);
             return;
           }
           if (event.currentTarget.hasPointerCapture(event.pointerId)) fromPointer(event.clientX);
         }}
-        onPointerUp={(event) => (gesture.current?.id === event.pointerId ? endTouch(event.currentTarget) : event.currentTarget.classList.remove("is-dragging"))}
-        onPointerCancel={(event) => (gesture.current?.id === event.pointerId ? endTouch(event.currentTarget) : event.currentTarget.classList.remove("is-dragging"))}
+        onPointerUp={(event) => (gesture.current?.id === event.pointerId ? endTouch(event.currentTarget, false) : event.currentTarget.classList.remove("is-dragging"))}
+        onPointerCancel={(event) => (gesture.current?.id === event.pointerId ? endTouch(event.currentTarget, true) : event.currentTarget.classList.remove("is-dragging"))}
         onDoubleClick={() => onChange(0)}
         onKeyDown={(event) => {
           if (event.key === "ArrowLeft" || event.key === "ArrowDown") onChange(clamp(Math.round((value - 0.1) * 50) / 50));
@@ -129,7 +110,7 @@ export default function Pan({ value, onChange, label }: Props) {
         <div className="pan-track" />
         <div className="pan-center" />
         <div className="pan-fill" />
-        <div className="pan-thumb"><output className="pan-value" aria-hidden="true">{panText(value)}</output></div>
+        <div className="pan-thumb"><output className="pan-value" aria-hidden="true">{panText(value)}</output><span className="pan-hit" /></div>
       </div>
     </div>
   );
