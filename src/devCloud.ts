@@ -7,9 +7,9 @@ import { makeDemoSong } from "./devDemo";
 import { CloudError } from "./cloud/errors";
 import type { CatalogSong, SongProgress } from "./cloud/cloudSource";
 
-export type DevNet = { failNext: number; msPerMB: number; log: string[]; real: boolean };
+export type DevNet = { failNext: number; failKind: "network" | "server" | "usage_limit" | "not_found"; msPerMB: number; log: string[]; real: boolean };
 /** real = true: las pistas tienen el tamaño real del catálogo falso (para medir RAM de verdad); false: pistas pequeñas con tamaño de catálogo falso. */
-const net: DevNet = { failNext: 0, msPerMB: 12, log: [], real: false };
+const net: DevNet = { failNext: 0, failKind: "network", msPerMB: 12, log: [], real: false };
 if (typeof window !== "undefined") (window as unknown as { __devNet: DevNet }).__devNet = net;
 
 const sleep = (ms: number, signal: AbortSignal) => new Promise<void>((resolve, reject) => {
@@ -18,12 +18,12 @@ const sleep = (ms: number, signal: AbortSignal) => new Promise<void>((resolve, r
 });
 
 export async function devFetchSongFiles(song: CatalogSong, onProgress: (p: SongProgress) => void, signal: AbortSignal): Promise<File[]> {
-  net.log.push(`inicio ${song.title}`);
+  net.log.push(`inicio ${song.title} @${Math.round(performance.now())}`);
   const mb = song.size / 1048576;
   const steps = 8;
   for (let i = 1; i <= steps; i++) {
     await sleep((mb * net.msPerMB) / steps, signal);
-    if (net.failNext > 0 && i === 4) { net.failNext--; net.log.push(`fallo ${song.title}`); throw new CloudError("network", 0, {}, "sin datos"); }
+    if (net.failNext > 0 && i === 4) { net.failNext--; net.log.push(`fallo ${song.title} @${Math.round(performance.now())}`); throw new CloudError(net.failKind, 0, {}, "sin datos"); }
     onProgress({ stage: "download", received: Math.round((song.size * i) / steps), total: song.size });
   }
   const tracks = 8;

@@ -47,7 +47,10 @@ export const MEMORIA = {
   maxMB: 1500,
   /** Canciones que se intentan mantener cargadas antes y después de la activa. */
   anteriores: 1,
-  siguientes: 2,
+  /** Solo se adelanta UNA canción (la siguiente): cada descarga nueva cuenta para el límite diario del servidor. */
+  siguientes: 1,
+  /** Una siguiente que pesa más que esto no se adelanta (se carga al llegar su turno): el pico de descarga + extracción (~1,3×) podría agotar la RAM mientras suena la actual. */
+  precargaMaxMB: 800,
   /** Margen de pico al descargar y extraer una canción (medido ≈ 1,25×). */
   factorPico: 1.3,
 } as const;

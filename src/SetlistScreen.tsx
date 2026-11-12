@@ -5,7 +5,7 @@ import { parseSongTags } from "./songTags";
 export type SetlistItem = {
   id: number; name: string; tracks: number; tone?: string | null; bpm?: number | null;
   /** Estado en memoria: Lista (cargada), Descargando n % o En cola (referencia aún sin cargar). */
-  state?: "ready" | "downloading" | "queued"; percent?: number | null;
+  state?: "ready" | "downloading" | "queued" | "retrying" | "failed"; percent?: number | null; message?: string;
 };
 
 type Props = {
@@ -15,6 +15,7 @@ type Props = {
   onOpen: (id: number) => void;
   onMove: (id: number, direction: -1 | 1) => void;
   onRemove: (id: number) => void;
+  onRetry: (id: number) => void;
   onAdd: () => void;
   /** Contenido adicional bajo el setlist actual (Mis setlists). */
   extra?: ReactNode;
@@ -30,7 +31,7 @@ const icons: Record<"up" | "down" | "x" | "plus" | "music", ReactNode> = {
 const Icon = ({ name }: { name: keyof typeof icons }) => <svg viewBox="0 0 24 24" aria-hidden="true">{icons[name]}</svg>;
 
 /** Setlist: el repertorio de la sesión (en memoria). Solo muestra lo que la app sabe: nombre, pistas y tono/BPM leídos del nombre. */
-export default function SetlistScreen({ songs, activeId, playing, onOpen, onMove, onRemove, onAdd, extra }: Props) {
+export default function SetlistScreen({ songs, activeId, playing, onOpen, onMove, onRemove, onRetry, onAdd, extra }: Props) {
   const totalTracks = songs.reduce((sum, song) => sum + song.tracks, 0);
   const activeIndex = songs.findIndex((song) => song.id === activeId);
   return (
@@ -62,12 +63,12 @@ export default function SetlistScreen({ songs, activeId, playing, onOpen, onMove
           const bpm = song.bpm ? Math.round(song.bpm) : parsed.bpm;
           const active = song.id === activeId;
           return (
-            <article className={`setlist-card ${active ? "active" : ""}`} key={song.id}>
+            <article className={`setlist-card ${active ? "active" : ""} ${song.state === "failed" ? "is-failed" : ""}`} key={song.id}>
               <button className="setlist-main" onClick={() => onOpen(song.id)} aria-label={`Abrir ${song.name}`} aria-current={active ? "true" : undefined}>
                 <span className="setlist-number">{String(index + 1).padStart(2, "0")}</span>
                 <span className="song-copy">
                   <strong>{song.name}</strong>
-                  <small>{active && playing ? "Reproduciendo · " : ""}{song.state === "downloading" ? `Descargando ${song.percent ?? 0}%` : song.state === "queued" ? "En cola" : `${pistas(song.tracks)} · Lista`}</small>
+                  <small>{active && playing ? "Reproduciendo · " : ""}{song.state === "downloading" ? `Descargando ${song.percent ?? 0}%` : song.state === "queued" ? "En cola" : song.state === "retrying" ? "Reintentando…" : song.state === "failed" ? "No se pudo cargar" : `${pistas(song.tracks)} · Lista`}</small>
                 </span>
                 {(tone || bpm) && (
                   <span className="song-chips">
@@ -76,6 +77,12 @@ export default function SetlistScreen({ songs, activeId, playing, onOpen, onMove
                   </span>
                 )}
               </button>
+              {song.state === "failed" && (
+                <div className="setlist-fail" role="group" aria-label={`${song.name}: no se pudo cargar`} title={song.message}>
+                  <button className="setlist-retry" onClick={() => onRetry(song.id)}>Reintentar</button>
+                  <button className="setlist-drop" onClick={() => onRemove(song.id)}>Quitar</button>
+                </div>
+              )}
               <div className="setlist-actions">
                 <button onClick={() => onMove(song.id, -1)} disabled={index === 0} aria-label={`Subir ${song.name}`}><Icon name="up" /></button>
                 <button onClick={() => onMove(song.id, 1)} disabled={index === songs.length - 1} aria-label={`Bajar ${song.name}`}><Icon name="down" /></button>

@@ -4,7 +4,7 @@
 import { memoryBudgetBytes, planWindow, type MemoryConfig, type PlanSong } from "../src/memoryPlan.ts";
 
 const MB = 1024 * 1024;
-const CONFIG: MemoryConfig = { fraccion: 0.2, minMB: 600, maxMB: 1500, anteriores: 1, siguientes: 2, factorPico: 1.3 };
+const CONFIG: MemoryConfig = { fraccion: 0.2, minMB: 600, maxMB: 1500, anteriores: 1, siguientes: 1, factorPico: 1.3, precargaMaxMB: 800 };
 
 let failed = 0;
 const check = (name: string, ok: boolean, detail = "") => {
@@ -68,7 +68,7 @@ check("…la precarga funciona: la siguiente ya está lista al llegar su turno",
 check("…al avanzar se liberan las que quedan fuera de la ventana", mid.sim.songs.filter((s) => s.loaded).length <= 3, `${mid.sim.songs.filter((s) => s.loaded).length} cargadas al final`);
 
 const typical = walk("10 canciones de 142 MB (mediana de la biblioteca), presupuesto de un celular de 4 GB (819 MB)", 10, 142, 819);
-check("142 MB × 10 con 819 MB: ventana de 4 (anterior, activa y 2 siguientes) = 568 MB", typical.maxUsed === 4 * 142 * MB, `máximo ${Math.round(typical.maxUsed / MB)} MB`);
+check("142 MB × 10 con 819 MB: ventana de 3 (anterior, activa y 1 siguiente) = 426 MB", typical.maxUsed === 3 * 142 * MB, `máximo ${Math.round(typical.maxUsed / MB)} MB`);
 check("…nunca se supera el presupuesto", typical.maxPeak <= 819 * MB, `pico ${Math.round(typical.maxPeak / MB)} MB`);
 
 // ---- reglas sueltas ----
@@ -76,7 +76,14 @@ check("…nunca se supera el presupuesto", typical.maxPeak <= 819 * MB, `pico ${
   const sim = makeSim(10, 100);
   settle(sim, 5, 600 * MB);
   const loadedIds = sim.songs.filter((s) => s.loaded).map((s) => s.id);
-  check("en la mitad del setlist se mantienen anterior, activa y 2 siguientes (ids 5, 6, 7 y 8)", loadedIds.join(",") === "5,6,7,8", loadedIds.join(","));
+  check("saltando a la mitad del setlist solo se carga la activa y UNA siguiente; la anterior no se descarga (ids 6 y 7)", loadedIds.join(",") === "6,7", loadedIds.join(","));
+  // una siguiente muy pesada (> 800 MB) no se adelanta
+  const heavy = makeSim(4, 100);
+  heavy.songs[1].bytes = 900 * MB;
+  settle(heavy, 0, 1500 * MB);
+  check("una siguiente de 900 MB no se adelanta (supera el umbral de 800 MB)", !heavy.songs[1].loaded && heavy.songs[0].loaded);
+  settle(heavy, 1, 1500 * MB);
+  check("…pero se carga al ser la activa", heavy.songs[1].loaded);
   // retroceder a una ya liberada: vuelve a cargarla
   settle(sim, 0, 600 * MB);
   check("al retroceder a una canción liberada, se vuelve a cargar", sim.songs[0].loaded);

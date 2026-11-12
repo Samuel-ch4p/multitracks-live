@@ -272,3 +272,11 @@
   .app:not([data-searching="true"]) .song-item-main { min-height: 44px; padding-top: 2px; padding-bottom: 2px; }
   .app:not([data-searching="true"]) .library-body > .load-layer { inset: 0 0 48px 0; }
 }
+
+/* Canción que no se pudo cargar: la tarjeta se marca en cobre y ofrece Reintentar y Quitar (objetivos de 44 px) sin frenar la cola. */
+.setlist-card.is-failed { border-color: var(--accent-line); background: color-mix(in srgb, var(--c-accent) 9%, var(--c-panel)); }
+.setlist-card.is-failed .setlist-main small { color: var(--c-accent-strong); font-weight: 600; }
+.setlist-fail { display: flex; flex: none; gap: 6px; }
+.setlist-fail button { min-width: 44px; min-height: 44px; padding: 0 12px; border: 1px solid var(--accent-line); border-radius: var(--r-sm); background: none; color: var(--c-muted); font-size: var(--fs-sm); font-weight: 600; touch-action: manipulation; }
+.setlist-fail .setlist-retry { background: var(--accent-bg); color: var(--c-accent-strong); }
+.setlist-fail button:active { filter: brightness(1.25); }

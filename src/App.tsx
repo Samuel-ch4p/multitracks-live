@@ -678,6 +678,8 @@ export default function App() {
   /** Canciones que el usuario canceló o cerró con error: no se reintentan solas hasta que las toque o pulse REINTENTAR. */
   const cancelledRef = useRef<Set<number>>(new Set());
   const retryRef = useRef<Map<number, { tries: number; until: number }>>(new Map());
+  /** Canciones que fallaron del todo (sin reintentos que valgan): se marcan «No se pudo cargar» en la cola con Reintentar y Quitar; la cola sigue sin ellas. */
+  const failedRef = useRef<Map<number, string>>(new Map());
   /** Motivo (límite de uso, cuenta) por el que se detienen las precargas; se limpia al pedir una canción a mano. */
   const blockedRef = useRef<string | null>(null);
   const waitingNoticeRef = useRef<number | null>(null);
@@ -745,6 +747,7 @@ export default function App() {
     disposeActiveTracks();
     cancelledRef.current.delete(song.id);
     retryRef.current.delete(song.id);
+    failedRef.current.delete(song.id);
     activeSongIdRef.current = song.id;
     setActiveSongId(song.id);
     setSongName(song.name);
@@ -792,7 +795,8 @@ export default function App() {
     setPlaylist(next);
   }
 
-  const RETRY_MS = [4000, 10000, 20000, 40000, 60000];
+  /** Esperas de los reintentos automáticos (máximo 3), solo para fallos de red o del servidor. */
+  const RETRY_MS = [2000, 5000, 10000];
 
   async function runDownload(song: Song, foreground: boolean) {
     const controller = new AbortController();
@@ -821,6 +825,7 @@ export default function App() {
       loaderRef.current = null;
       inflightBytesRef.current = 0;
       retryRef.current.delete(song.id);
+      failedRef.current.delete(song.id);
       setLoadInfo(null);
       if (foreground) setFg(null);
       commitLoaded(song.id, files);
@@ -835,21 +840,27 @@ export default function App() {
       }
       if (error instanceof CloudError && error.kind === "no_session") { void signOut(); return; }
       const message = friendlyCloudMessage(error);
+      // Solo los fallos de red o del servidor se reintentan solos (2, 5 y 10 s). Límite de uso, cuenta, no encontrada, etc.: se muestran una vez.
+      const retriable = error instanceof CloudError && (error.kind === "network" || error.kind === "server");
+      const retries = retryRef.current.get(song.id)?.tries ?? 0;
+      if (retriable && retries < RETRY_MS.length) {
+        const delay = RETRY_MS[retries];
+        retryRef.current.set(song.id, { tries: retries + 1, until: Date.now() + delay });
+        if (foreground) setFg((current) => ({ ...(current ?? { id: song.id, stage: "download" as const, percent: null, detail: "", fileName: song.name }), stage: "download", percent: null, error: null, detail: `Sin conexión · reintentando en ${Math.round(delay / 1000)} s (${retries + 1} de ${RETRY_MS.length})` }));
+        window.setTimeout(() => setLoaderTick((tick) => tick + 1), delay + 50);
+        return;
+      }
+      // Fallo definitivo: la canción queda marcada en la cola; lo que ya suena no se toca y la cola sigue con la siguiente.
+      retryRef.current.delete(song.id);
+      failedRef.current.set(song.id, message);
+      if (error instanceof CloudError && error.blocksAll) blockedRef.current = message;
       if (foreground) {
         cancelledRef.current.add(song.id);
         setFg((current) => ({ ...(current ?? { id: song.id, stage: "download" as const, percent: null, detail: "", fileName: song.name }), error: message, supportReason: error instanceof CloudError && error.showsSupport ? "me salió un error al descargar una canción" : undefined }));
-        return;
+      } else {
+        setStatusMessage(`No se pudo cargar ${song.name}. ${message}`);
       }
-      if (error instanceof CloudError && error.blocksAll) {
-        blockedRef.current = message;
-        setStatusMessage(`No se pudo precargar la siguiente. ${message}`);
-        return;
-      }
-      // Fallo de red o del servidor en segundo plano: se reintenta solo, con pausas crecientes, sin tocar el audio de la actual.
-      const tries = (retryRef.current.get(song.id)?.tries ?? 0) + 1;
-      const delay = RETRY_MS[Math.min(tries - 1, RETRY_MS.length - 1)];
-      retryRef.current.set(song.id, { tries, until: Date.now() + delay });
-      window.setTimeout(() => setLoaderTick((tick) => tick + 1), delay + 50);
+      setLoaderTick((tick) => tick + 1);
     }
   }
 
@@ -858,7 +869,9 @@ export default function App() {
     const list = playlistRef.current;
     const activeId = activeSongIdRef.current;
     const activeIndex = list.findIndex((song) => song.id === activeId);
-    const plan = planWindow(list.map(toPlanSong), activeIndex, memoryBudget(), MEMORIA, getPreload());
+    // Las que fallaron del todo quedan fuera de la ventana: la precarga sigue con la siguiente que sí se puede cargar.
+    const visible = list.filter((song) => song.id === activeId || !failedRef.current.has(song.id));
+    const plan = planWindow(visible.map(toPlanSong), visible.findIndex((song) => song.id === activeId), memoryBudget(), MEMORIA, getPreload());
     // 1) Soltar lo que sale de la ventana ANTES de empezar nada nuevo: la memoria nunca pasa del presupuesto.
     for (const id of plan.release) releaseSong(id);
     // 2) Una descarga en curso que ya no hace falta (o que estorba a la de la activa) se corta.
@@ -875,7 +888,7 @@ export default function App() {
     if (loaderRef.current || busyRef.current) return;
     for (const id of plan.load) {
       const song = list.find((item) => item.id === id);
-      if (!song || cancelledRef.current.has(id)) continue;
+      if (!song || cancelledRef.current.has(id) || failedRef.current.has(id)) continue;
       const retry = retryRef.current.get(id);
       if (retry && retry.until > Date.now()) continue;
       const foreground = id === activeId;
@@ -886,6 +899,16 @@ export default function App() {
     }
   }
 
+  /** Reintentar a mano una canción marcada «No se pudo cargar». */
+  function retrySong(id: number) {
+    failedRef.current.delete(id);
+    cancelledRef.current.delete(id);
+    retryRef.current.delete(id);
+    blockedRef.current = null;
+    setFg((current) => (current?.id === id ? null : current));
+    setLoaderTick((tick) => tick + 1);
+  }
+
   function cancelForeground() {
     if (fg) cancelledRef.current.add(fg.id);
     loaderRef.current?.controller.abort();
@@ -893,7 +916,7 @@ export default function App() {
     setStatusMessage("Descarga cancelada. Toca la canción para reintentar.");
   }
   function retryForeground() {
-    if (fg) { cancelledRef.current.delete(fg.id); retryRef.current.delete(fg.id); }
+    if (fg) { cancelledRef.current.delete(fg.id); retryRef.current.delete(fg.id); failedRef.current.delete(fg.id); }
     blockedRef.current = null;
     setFg(null);
     setLoaderTick((tick) => tick + 1);
@@ -906,7 +929,7 @@ export default function App() {
   function selectSong(song: Song) {
     if (busyRef.current) return;
     if (song.id === activeSongIdRef.current) {
-      if (song.files.length === 0 && song.ref) { cancelledRef.current.delete(song.id); retryRef.current.delete(song.id); blockedRef.current = null; setLoaderTick((tick) => tick + 1); }
+      if (song.files.length === 0 && song.ref) { cancelledRef.current.delete(song.id); retryRef.current.delete(song.id); failedRef.current.delete(song.id); blockedRef.current = null; setLoaderTick((tick) => tick + 1); }
       return;
     }
     activateSong(song);
@@ -916,7 +939,9 @@ export default function App() {
     const list = playlistRef.current;
     if (busyRef.current || list.length === 0) return;
     const index = list.findIndex((song) => song.id === activeSongIdRef.current);
-    const target = list[index + direction];
+    // Salta las canciones que no se pudieron cargar: la cola sigue con la siguiente.
+    let target = list[index + direction];
+    while (target && failedRef.current.has(target.id)) target = list[list.indexOf(target) + direction];
     if (target) activateSong(target);
   }
 
@@ -926,6 +951,7 @@ export default function App() {
     loaderRef.current?.controller.abort();
     cancelledRef.current.clear();
     retryRef.current.clear();
+    failedRef.current.clear();
     blockedRef.current = null;
     setFg(null);
     playlistRef.current = [];
@@ -957,6 +983,7 @@ export default function App() {
     if (loaderRef.current?.id === songId) loaderRef.current.controller.abort();
     cancelledRef.current.delete(songId);
     retryRef.current.delete(songId);
+    failedRef.current.delete(songId);
     setFg((current) => (current?.id === songId ? null : current));
     const next = playlistRef.current.filter((song) => song.id !== songId);
     playlistRef.current = next;
@@ -1438,6 +1465,9 @@ export default function App() {
   const ready = tracks.length > 0 && !resetting && !preparing;
   const syncLabel = preparing ? `Preparando pistas… ${readyCount}/${tracks.length}` : resetting ? "Sincronizando…" : playing ? "En vivo" : ready ? "Pistas sincronizadas" : "Sin canción";
 
+  // La tarjeta de carga es de la canción activa: si se pasa a otra, se cierra (la anterior sigue por su cuenta en segundo plano si le toca).
+  useEffect(() => { setFg((current) => (current && current.id !== activeSongId ? null : current)); }, [activeSongId]);
+
   // La ventana de memoria se recalcula tras cada cambio: canciones, activa, ajuste de precarga, fin de preparación o de una descarga.
   useEffect(() => {
     schedule();
@@ -1505,8 +1535,12 @@ export default function App() {
   const padInline = wide && padOpen;
   const padDrawer = !wide && padOpen;
 
-  const songState = (song: Song): { state: "ready" | "downloading" | "queued"; percent: number | null } =>
-    song.files.length > 0 || !song.ref ? { state: "ready", percent: null } : loadInfo?.id === song.id ? { state: "downloading", percent: loadInfo.percent } : { state: "queued", percent: null };
+  const songState = (song: Song): { state: "ready" | "downloading" | "queued" | "retrying" | "failed"; percent: number | null; message?: string } =>
+    song.files.length > 0 || !song.ref ? { state: "ready", percent: null }
+      : loadInfo?.id === song.id ? { state: "downloading", percent: loadInfo.percent }
+      : failedRef.current.has(song.id) ? { state: "failed", percent: null, message: failedRef.current.get(song.id) }
+      : retryRef.current.has(song.id) ? { state: "retrying", percent: null }
+      : { state: "queued", percent: null };
 
   const songDeck = (
     <div className="song-deck" aria-label="Repertorio">
@@ -1517,7 +1551,7 @@ export default function App() {
         <article className={`deck-card ${song.id === activeSongId ? "active" : ""}`} key={song.id}>
           <button className="deck-main" onClick={() => selectSong(song)} title={song.name} aria-label={`Seleccionar ${song.name}`}>
             <Artwork index={index} />
-            <span><strong>{song.name}</strong><small>{(() => { const s = songState(song); return s.state === "ready" ? pistas(song.files.length) : s.state === "downloading" ? `Descargando ${s.percent ?? 0}%` : "En cola"; })()}</small></span>
+            <span><strong>{song.name}</strong><small>{(() => { const s = songState(song); return s.state === "ready" ? pistas(song.files.length) : s.state === "downloading" ? `Descargando ${s.percent ?? 0}%` : s.state === "failed" ? "No se pudo cargar · toca para reintentar" : s.state === "retrying" ? "Reintentando…" : "En cola"; })()}</small></span>
           </button>
           <button className="deck-remove" onClick={() => removeSong(song.id)} aria-label={`Quitar ${song.name}`}>×</button>
         </article>
@@ -1643,6 +1677,7 @@ export default function App() {
           onOpen={(id) => { const song = playlist.find((item) => item.id === id); if (song) selectSong(song); setTab("mixer"); }}
           onMove={moveSong}
           onRemove={removeSong}
+          onRetry={retrySong}
           onAdd={openLibrary}
           extra={
             <SavedSetlists

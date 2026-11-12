@@ -15,6 +15,8 @@ export type MemoryConfig = {
   siguientes: number;
   /** Margen para el pico de una descarga/extracción (medido: ≈ 1,25× el archivo al cargar la canción activa). */
   factorPico: number;
+  /** Una canción no cargada que pese más (MB) no se adelanta; solo se carga cuando es la activa. Sin valor: sin tope. */
+  precargaMaxMB?: number;
 };
 
 const MB = 1024 * 1024;
@@ -52,9 +54,10 @@ export type Plan = {
 /**
  * Prioridad: activa > siguiente > anterior > segunda siguiente > …  La activa siempre se carga (aunque sola exceda el presupuesto).
  * Las demás se admiten solo si caben; una no cargada se admite con margen de pico (factorPico), una ya cargada con su tamaño real.
+ * Una anterior solo se conserva si ya está cargada; una siguiente por encima de `precargaMaxMB` no se adelanta.
  * Con `preload` apagado solo se conservan la activa y la anterior (la siguiente se carga al elegirla).
  */
-export function planWindow(songs: PlanSong[], activeIndex: number, budget: number, config: Pick<MemoryConfig, "anteriores" | "siguientes" | "factorPico">, preload: boolean): Plan {
+export function planWindow(songs: PlanSong[], activeIndex: number, budget: number, config: Pick<MemoryConfig, "anteriores" | "siguientes" | "factorPico" | "precargaMaxMB">, preload: boolean): Plan {
   const plan: Plan = { keep: [], load: [], release: [], waiting: null, used: 0 };
   if (activeIndex < 0 || activeIndex >= songs.length) {
     plan.release = songs.filter((song) => song.cloud && song.loaded).map((song) => song.id);
@@ -70,6 +73,12 @@ export function planWindow(songs: PlanSong[], activeIndex: number, budget: numbe
     const song = songs[index];
     if (!song.cloud) continue;
     const isActive = index === activeIndex;
+    // Nunca se descarga algo por adelantado que no sea la siguiente: una anterior ya liberada no se vuelve a bajar (cada descarga cuenta para el límite diario),
+    // y una canción muy pesada espera a ser la activa.
+    if (!isActive && !song.loaded) {
+      if (index < activeIndex) continue;
+      if (config.precargaMaxMB && song.bytes > config.precargaMaxMB * MB) continue;
+    }
     const need = song.loaded ? song.bytes : song.bytes * config.factorPico;
     if (isActive || plan.used + need <= budget) {
       plan.keep.push(song.id);
