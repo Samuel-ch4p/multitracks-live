@@ -243,3 +243,32 @@
 .setlist-screen .setlist-card.active { box-shadow: none; }
 .setlist-screen .setlist-number { color: var(--c-faint); }
 .setlist-screen .setlist-card.active .setlist-number { color: var(--c-accent-strong); }
+
+/* =====================================================================
+   Biblioteca en pantallas bajas (horizontal, hasta 460 px de alto): selector, buscador y recargar comparten una sola fila;
+   el estado y los filtros quedan en una segunda fila fija y la lista ocupa todo el resto (al menos 3 filas completas).
+   El mini-reproductor no se muestra aquí (el Play y el transporte siguen en la barra superior). Con el teclado abierto rigen las reglas del modo búsqueda.
+   Se activa por altura, no por modelo. Ningún control baja de 44 px de área táctil salvo los filtros, que ya medían 32.
+   ===================================================================== */
+@media (max-height: 460px) and (orientation: landscape) {
+  .library-screen ~ .mini-player { display: none; }
+  .app:not([data-searching="true"]) .library-screen {
+    display: grid; grid-template-columns: minmax(292px, 40%) minmax(0, 1fr); grid-template-rows: auto auto minmax(0, 1fr);
+    column-gap: var(--sp-2); row-gap: 2px; padding-top: 4px; padding-bottom: 0;
+  }
+  .app:not([data-searching="true"]) .library-screen .lib-head { display: none; }
+  .app:not([data-searching="true"]) .library-screen .source-switch { grid-column: 1; grid-row: 1; height: 44px; padding: 3px; gap: 4px; }
+  .app:not([data-searching="true"]) .library-screen .source-switch button { gap: 6px; padding: 0 16px 0 8px; font-size: var(--fs-xs); white-space: nowrap; }
+  .app:not([data-searching="true"]) .library-screen .source-switch button.selected::after { right: 6px; }
+  /* El cuerpo deja de ser una caja para que la barra y la lista sean celdas de la misma cuadrícula */
+  .app:not([data-searching="true"]) .library-body { display: contents; }
+  .app:not([data-searching="true"]) .lib-toolbar { grid-column: 2; grid-row: 1; position: static; padding: 0; background: none; }
+  .app:not([data-searching="true"]) .lib-meta { grid-column: 1 / -1; grid-row: 2; flex-wrap: nowrap; padding: 0 2px; min-height: 32px; }
+  .app:not([data-searching="true"]) .library-body > .library-scroll { grid-column: 1 / -1; grid-row: 3; flex: none; min-height: 0; overflow-y: auto; padding: 0 0 calc(var(--sp-2) + var(--kb, 0px)); }
+  .app:not([data-searching="true"]) .library-body > .library-scroll > .lib-title { margin: 0 2px 2px; }
+  .app:not([data-searching="true"]) .artist-card { min-height: 46px; }
+  .app:not([data-searching="true"]) .lib-back { gap: var(--sp-2); margin-bottom: 0; }
+  .app:not([data-searching="true"]) .song-list { gap: 2px; }
+  .app:not([data-searching="true"]) .song-item-main { min-height: 44px; padding-top: 2px; padding-bottom: 2px; }
+  .app:not([data-searching="true"]) .library-body > .load-layer { inset: 0 0 48px 0; }
+}
