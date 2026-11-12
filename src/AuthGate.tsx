@@ -38,7 +38,7 @@ function AuthPreview({ name }: { name: string }) {
   const kinds: Record<string, CloudError["kind"]> = { pending: "pending", expired: "expired", blocked: "blocked", paused: "paused", usage: "usage_limit", device: "device_limit" };
   if (kinds[name]) return <ProblemScreen error={new CloudError(kinds[name], 403, { expires_at: "2026-03-15T00:00:00Z" })} email="persona@correo.com" onRetry={noop} onSignOut={noop} />;
   if (name === "checking") return <Screen title="Verificando tu cuenta…" busy><div className="auth-spinner" aria-hidden="true" /><p>Un momento.</p></Screen>;
-  return <AuthScreen notice={name === "notice"} initialMode={name === "in" || name === "up" || name === "reset" ? name : "welcome"} onSignedIn={noop} />;
+  return <AuthScreen notice={name === "notice"} initialMode={name === "in" || name === "up" || name === "reset" ? name : "in"} onSignedIn={noop} />;
 }
 
 export default function AuthGate({ children }: { children: ReactNode }) {
@@ -173,36 +173,42 @@ function supportMessage(kind: CloudError["kind"], email: string): string {
   return `Hola, mi cuenta de Crescendo Live${account} llegó al límite de dispositivos y quiero cambiar de dispositivo.`;
 }
 
-/** Ilustración de la bienvenida: onda y tres faders. Solo decoración (sin animación). */
-function WelcomeArt() {
-  const bars = [30, 52, 38, 70, 46, 82, 58, 40, 74, 50, 90, 62, 44, 78, 54, 36, 66, 48, 28, 56];
-  const faders = [62, 38, 78];
-  return (
-    <div className="welcome-art" aria-hidden="true">
-      <div className="art-wave">{bars.map((h, i) => <i key={i} className={i < 9 ? "played" : ""} style={{ height: `${h}%` }} />)}</div>
-      <div className="art-faders">
-        {faders.map((v, i) => (
-          <span key={i}><i style={{ height: `${v}%` }} /><b style={{ bottom: `${v}%` }} /></span>
-        ))}
-      </div>
-    </div>
-  );
-}
+type Mode = "in" | "up" | "reset";
 
-type Mode = "welcome" | "in" | "up" | "reset";
-
-/** Al enfocar un campo, se desplaza para quedar visible sobre el teclado (la pantalla se encoge cuando el teclado se abre). */
+/** Al enfocar un campo, se desplaza para quedar visible sobre el teclado (la pantalla se encoge cuando el teclado se abre); el formulario es el que se desplaza. */
 function keepFocusedVisible(event: React.FocusEvent<HTMLFormElement>) {
   const field = event.target;
   if (!(field instanceof HTMLInputElement)) return;
   window.setTimeout(() => field.scrollIntoView({ block: "center", behavior: "smooth" }), 350);
 }
 
-function AuthScreen({ onSignedIn, notice, initialMode = "welcome" }: { onSignedIn: (session: Session) => void; notice: boolean; initialMode?: Mode }) {
+const MIN_PASSWORD = 8;
+
+/** Campo de contraseña con botón de ver/ocultar (zona táctil de 44 px) y mensaje opcional bajo el campo. */
+function PasswordField({ label, hint, value, onChange, autoComplete, invalid, message, messageId, showLabel, hideLabel }: {
+  label: string; hint?: string; value: string; onChange: (value: string) => void; autoComplete: string; invalid?: boolean; message?: string; messageId: string; showLabel: string; hideLabel: string;
+}) {
+  const [shown, setShown] = useState(false);
+  return (
+    <div className="auth-field">
+      <label className="auth-label" htmlFor={`${messageId}-input`}>
+        <span>{label}</span>
+        {hint && <em className={invalid ? "is-bad" : ""}>{hint}</em>}
+      </label>
+      <span className="auth-pass">
+        <input id={`${messageId}-input`} type={shown ? "text" : "password"} autoComplete={autoComplete} value={value} onChange={(e) => onChange(e.target.value)} aria-invalid={invalid || undefined} aria-describedby={message ? messageId : undefined} />
+        <button type="button" className="auth-show" onClick={() => setShown((v) => !v)} aria-pressed={shown} aria-label={shown ? hideLabel : showLabel}>{shown ? "Ocultar" : "Ver"}</button>
+      </span>
+      {message && <p className="auth-field-error" id={messageId} role="alert">{message}</p>}
+    </div>
+  );
+}
+
+function AuthScreen({ onSignedIn, notice, initialMode = "in" }: { onSignedIn: (session: Session) => void; notice: boolean; initialMode?: Mode }) {
   const [mode, setMode] = useState<Mode>(initialMode);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [show, setShow] = useState(false);
+  const [confirm, setConfirm] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [info, setInfo] = useState("");
@@ -211,14 +217,21 @@ function AuthScreen({ onSignedIn, notice, initialMode = "welcome" }: { onSignedI
     setMode(next);
     setError("");
     setInfo("");
+    setConfirm("");
   }
+
+  const mismatch = mode === "up" && confirm.length > 0 && confirm !== password;
+  const tooShort = mode === "up" && password.length > 0 && password.length < MIN_PASSWORD;
+  /** Crear cuenta: sin campos vacíos, contraseña válida y confirmación igual; también mientras haya un error mostrado (se limpia al editar). */
+  const signUpBlocked = mode === "up" && (!email.trim() || !password || !confirm || tooShort || mismatch || Boolean(error));
 
   async function submit(event: FormEvent) {
     event.preventDefault();
     setError("");
     setInfo("");
     if (!email.trim()) { setError("Escribe tu correo."); return; }
-    if (mode !== "reset" && password.length < 8) { setError("La contraseña debe tener al menos 8 caracteres."); return; }
+    if (mode !== "reset" && password.length < MIN_PASSWORD) { setError("La contraseña debe tener al menos 8 caracteres."); return; }
+    if (mode === "up" && confirm !== password) return; // el mensaje "Las contraseñas no coinciden" ya se ve bajo el campo
     setBusy(true);
     try {
       if (mode === "reset") {
@@ -226,7 +239,7 @@ function AuthScreen({ onSignedIn, notice, initialMode = "welcome" }: { onSignedI
         setInfo("Si el correo está registrado, te enviamos un mensaje para cambiar la contraseña.");
       } else if (mode === "up") {
         const hasSession = await signUp(email, password);
-        if (!hasSession) { setInfo("Cuenta creada. Confirma tu correo desde el mensaje que te enviamos y luego inicia sesión."); setMode("in"); }
+        if (!hasSession) { setInfo("Cuenta creada. Confirma tu correo desde el mensaje que te enviamos y luego inicia sesión."); setMode("in"); setConfirm(""); }
       } else {
         await signIn(email, password);
       }
@@ -239,68 +252,58 @@ function AuthScreen({ onSignedIn, notice, initialMode = "welcome" }: { onSignedI
     }
   }
 
-  if (mode === "welcome") {
-    return (
-      <main className="auth-screen">
-        <div className="welcome">
-          <div className="welcome-copy">
-            <BrandMark className="auth-mark" />
-            <h1>Tu servicio, con cada pista en su lugar.</h1>
-            <p>Biblioteca de multitracks, mezclador y click en un solo lugar.</p>
-            <div className="auth-actions">
-              <button className="auth-primary" onClick={() => go("in")}>INICIAR SESIÓN</button>
-              <button className="auth-secondary" onClick={() => go("up")}>CREAR CUENTA</button>
-            </div>
-            {notice && <p className="auth-info" role="status">Cerramos tu sesión por inactividad</p>}
-            <small className="auth-caption">Acceso seguro · Crescendo Live</small>
-          </div>
-          <WelcomeArt />
-        </div>
-      </main>
-    );
-  }
-
-  const title = mode === "in" ? "Iniciar sesión" : mode === "up" ? "Crear cuenta" : "Recuperar contraseña";
+  const clearError = () => { if (error) setError(""); };
+  const primary = busy ? "UN MOMENTO…" : mode === "in" ? "ENTRAR" : mode === "up" ? "CREAR CUENTA" : "ENVIAR CORREO";
   return (
     <main className="auth-screen">
-      <form className="auth-card" onSubmit={(e) => void submit(e)} noValidate onFocus={keepFocusedVisible}>
-        <header className="auth-head">
-          <button type="button" className="auth-back" aria-label="Volver" onClick={() => go("welcome")}>
-            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 18-6-6 6-6" /></svg>
-          </button>
-          <BrandMark className="auth-mark small" />
-          <h1>{title}</h1>
-          {mode === "up" && <p>Tu cuenta quedará pendiente hasta que la activemos.</p>}
-          {mode === "reset" && <p>Te enviaremos un enlace para elegir una contraseña nueva.</p>}
-        </header>
-        <div className="auth-body">
-          <label className="auth-field">
-            <span>Correo</span>
-            <input type="email" inputMode="email" autoComplete="email" autoCapitalize="none" spellCheck={false} value={email} onChange={(e) => setEmail(e.target.value)} />
-          </label>
-          {mode !== "reset" && (
-            <label className="auth-field">
-              <span>Contraseña</span>
-              <span className="auth-pass">
-                <input type={show ? "text" : "password"} autoComplete={mode === "up" ? "new-password" : "current-password"} value={password} onChange={(e) => setPassword(e.target.value)} />
-                <button type="button" className="auth-show" onClick={() => setShow((v) => !v)} aria-pressed={show}>{show ? "Ocultar" : "Ver"}</button>
-              </span>
-            </label>
+      <div className="auth-shell">
+        <section className="auth-brand">
+          <BrandMark className="auth-mark" />
+          <h1>Tu servicio, con cada pista en su lugar.</h1>
+          <p>Biblioteca de multitracks, mezclador y click en un solo lugar.</p>
+          {mode === "up" && <p className="auth-brand-lead">Tu cuenta quedará pendiente hasta que la activemos.</p>}
+        </section>
+        <form className="auth-card" onSubmit={(e) => void submit(e)} noValidate onFocus={keepFocusedVisible} aria-label={mode === "in" ? "Iniciar sesión" : mode === "up" ? "Crear cuenta" : "Recuperar contraseña"}>
+          {mode === "reset" ? (
+            <header className="auth-head">
+              <button type="button" className="auth-back" aria-label="Volver a iniciar sesión" onClick={() => go("in")}>
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 18-6-6 6-6" /></svg>
+              </button>
+              <div><h2>Recuperar contraseña</h2><p>Te enviaremos un enlace para elegir una contraseña nueva.</p></div>
+            </header>
+          ) : (
+            <div className="auth-tabs" role="tablist" aria-label="Acceso">
+              <button type="button" role="tab" aria-selected={mode === "in"} className={mode === "in" ? "selected" : ""} onClick={() => go("in")}>Iniciar sesión</button>
+              <button type="button" role="tab" aria-selected={mode === "up"} className={mode === "up" ? "selected" : ""} onClick={() => go("up")}>Crear cuenta</button>
+            </div>
           )}
-          {notice && !error && !info && <p className="auth-info" role="status">Cerramos tu sesión por inactividad</p>}
-          {error && <p className="auth-error" role="alert">{error}</p>}
-          {info && <p className="auth-info" role="status">{info}</p>}
-          <button className="auth-primary" type="submit" disabled={busy}>
-            {busy ? "UN MOMENTO…" : mode === "in" ? "ENTRAR" : mode === "up" ? "CREAR CUENTA" : "ENVIAR CORREO"}
-          </button>
-          <div className="auth-links">
+          <div className="auth-body">
+            {mode === "up" && <p className="auth-lead">Tu cuenta quedará pendiente hasta que la activemos.</p>}
+            <div className="auth-field">
+              <label className="auth-label" htmlFor="auth-email"><span>Correo</span></label>
+              <input id="auth-email" type="email" inputMode="email" autoComplete="email" autoCapitalize="none" spellCheck={false} value={email} onChange={(e) => { setEmail(e.target.value); clearError(); }} />
+            </div>
+            {mode !== "reset" && (
+              <PasswordField
+                label="Contraseña" hint={mode === "up" ? "Mínimo 8 caracteres" : undefined} invalid={tooShort}
+                value={password} onChange={(v) => { setPassword(v); clearError(); }} autoComplete={mode === "up" ? "new-password" : "current-password"}
+                messageId="auth-pass" showLabel="Mostrar contraseña" hideLabel="Ocultar contraseña"
+              />
+            )}
+            {mode === "up" && (
+              <PasswordField
+                label="Confirmar contraseña" value={confirm} onChange={(v) => { setConfirm(v); clearError(); }} autoComplete="new-password" invalid={mismatch}
+                message={mismatch ? "Las contraseñas no coinciden" : undefined} messageId="auth-confirm" showLabel="Mostrar confirmación de contraseña" hideLabel="Ocultar confirmación de contraseña"
+              />
+            )}
+            {notice && !error && !info && <p className="auth-info" role="status">Cerramos tu sesión por inactividad</p>}
+            {error && <p className="auth-error" role="alert">{error}</p>}
+            {info && <p className="auth-info" role="status">{info}</p>}
+            <button className="auth-primary" type="submit" disabled={busy || signUpBlocked}>{primary}</button>
             {mode === "in" && <button type="button" className="auth-link" onClick={() => go("reset")}>Olvidé mi contraseña</button>}
-            <button type="button" className="auth-link" onClick={() => go(mode === "in" ? "up" : "in")}>
-              {mode === "in" ? "No tengo cuenta · Crear una" : "Ya tengo cuenta · Iniciar sesión"}
-            </button>
           </div>
-        </div>
-      </form>
+        </form>
+      </div>
     </main>
   );
 }
