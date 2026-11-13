@@ -282,3 +282,15 @@
 
 /* «.app button { color: inherit }» (más específico) dejaba el texto del botón principal en gris sobre cobre (≈ 2:1); se fija la tinta oscura (≈ 9:1). */
 .app .btn-primary { color: var(--c-bg-1); }
+
+/* Celular vertical (hasta 520 px de ancho): Añadir y Abrir bajan a su propia fila (encimaban el título y el total), y en la tarjeta
+   fallida Reintentar y Quitar pasan debajo del nombre para que este no quede cortado. */
+@media (max-width: 520px) {
+  .setlist-screen .lib-head { flex-wrap: wrap; row-gap: var(--sp-2); }
+  .setlist-screen .setlist-head-actions { width: 100%; }
+  .setlist-screen .setlist-head-actions > button { flex: 1; padding-inline: 10px; white-space: nowrap; }
+  .setlist-card.is-failed { flex-wrap: wrap; }
+  .setlist-card.is-failed .setlist-main { flex-basis: 0; }
+  .setlist-card.is-failed .setlist-fail { order: 3; width: 100%; padding: 0 8px 8px 14px; }
+  .setlist-card.is-failed .setlist-fail button { flex: 1; }
+}

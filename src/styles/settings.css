@@ -47,6 +47,10 @@
 
 @media (max-height: 420px) {
   .settings-screen .lib-head { display: none; }
+  /* En Política, Términos y Diagnóstico la cabecera sí se ve (compacta): es la única salida con VOLVER. */
+  .settings-screen:not([aria-label="Ajustes"]) .lib-head { display: flex; }
+  .settings-screen:not([aria-label="Ajustes"]) .lib-head .eyebrow { display: none; }
+  .settings-screen:not([aria-label="Ajustes"]) .lib-head h1 { font-size: 20px; }
   .settings-card { padding: var(--sp-2) var(--sp-3); }
 }
 .setting-control > .segmented-setting { flex: 1; }
@@ -64,3 +68,5 @@
 
 /* Número de versión: toque discreto (7 toques seguidos abren «Avanzado» con el diagnóstico). */
 .app-version { display: block; width: 100%; min-height: 44px; margin-top: var(--sp-2); padding: 0; border: 0; background: none; color: var(--c-muted); font-size: var(--fs-xs); text-align: center; touch-action: manipulation; -webkit-user-select: none; user-select: none; }
+/* VOLVER de las subpantallas (Política, Términos, Diagnóstico): 44 px de alto como el resto de objetivos táctiles. */
+.settings-screen .lib-head > .pill-btn { min-height: var(--tap); }

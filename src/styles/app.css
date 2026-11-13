@@ -59,7 +59,7 @@
 .click-btn.is-running svg { filter: drop-shadow(0 0 4px color-mix(in srgb, var(--c-silver) 60%, transparent)); }
 .clock { display: flex; min-width: 68px; flex-direction: column; align-items: flex-end; font-variant-numeric: tabular-nums; }
 .clock strong { font-size: 22px; letter-spacing: -.04em; line-height: 1.05; }
-.clock span { color: var(--faint); font-size: var(--fs-xs); }
+.clock span { color: var(--faint); font-size: var(--fs-xs); white-space: nowrap; }
 .transport { grid-area: transport; display: flex; align-items: center; gap: 8px; }
 .icon-btn, .play-btn {
   display: grid; width: 42px; height: 42px; flex: none; place-items: center; padding: 0;
