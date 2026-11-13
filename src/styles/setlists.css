@@ -19,7 +19,7 @@
 /* Diálogos y hoja de progreso (sin desenfoque: fondo oscuro plano) */
 .sheet-layer { position: fixed; z-index: 60; inset: 0; display: grid; place-items: center; padding: var(--sp-4); background: color-mix(in srgb, var(--c-bg-0) 82%, transparent); }
 .sheet { display: flex; width: min(420px, 100%); max-height: calc(100vh - 32px); flex-direction: column; gap: var(--sp-3); overflow-y: auto; padding: var(--sp-5); border: 1px solid var(--c-line-strong); border-radius: var(--r-lg); background: var(--c-card); }
-:root[data-fx="full"] .sheet { animation: item-in .25s var(--ease-out) both; }
+:root[data-fx="full"] .sheet { animation: item-in .16s var(--ease-out) both; }
 .sheet h2 { margin: 0; font-family: var(--font-ui); font-size: 22px; font-weight: 600; line-height: 1.2; }
 .sheet p { margin: 0; color: var(--c-muted); font-size: var(--fs-md); line-height: 1.5; }
 .sheet .sheet-song { color: var(--c-text); font-family: var(--font-ui); font-size: 18px; }
