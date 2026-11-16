@@ -300,11 +300,10 @@ function useWakeLock(active: boolean) {
   }, [active]);
 }
 
-type IconName = "metronome" | "restart" | "mixer" | "library" | "play" | "spark" | "setlist" | "settings";
+type IconName = "restart" | "mixer" | "library" | "play" | "spark" | "setlist" | "settings";
 
 function Icon({ name }: { name: IconName }) {
   const paths: Record<IconName, React.ReactNode> = {
-    metronome: <><path d="M8 20h8l-1.8-16h-4.4L8 20Z" /><path d="m12 7 4 7M10 16h4" /></>,
     restart: <><path d="M4 12a8 8 0 1 0 2.6-5.9" /><path d="M4 4v4.5h4.5" /></>,
     mixer: <><path d="M5 4v16M12 4v16M19 4v16" /><circle cx="5" cy="9" r="2" /><circle cx="12" cy="15" r="2" /><circle cx="19" cy="8" r="2" /></>,
     library: <><path d="M4 4v16M9 4v16" /><path d="m14 5 4-1 3 15-4 1-3-15Z" /></>,
@@ -1617,7 +1616,7 @@ export default function App() {
             aria-pressed={click.running}
             aria-label="Activar o detener el click"
           >
-            <Icon name="metronome" /><span className="btn-label">CLICK</span><ClickPulse metronome={metronome} />
+            <span className="btn-label">CLICK</span><ClickPulse metronome={metronome} />
           </button>
           <button
             className={`glass-btn pad-btn ${padState.playing ? "is-running" : ""} ${padOpen ? "is-open" : ""}`}

@@ -69,3 +69,11 @@
 .click-drawer .seg { flex-wrap: wrap; gap: 4px; padding: 4px; border: 1px solid var(--c-line); border-radius: var(--r-sm); background: var(--c-bg-2); }
 .click-drawer .seg button { min-width: var(--tap); min-height: var(--tap); border: 1px solid transparent; border-radius: 9px; background: none; color: var(--c-muted) !important; font-size: var(--fs-sm); }
 .click-drawer .seg button[aria-pressed="true"] { border-color: var(--accent-line); background: var(--accent-bg); color: var(--c-accent-strong) !important; }
+
+/* Pantallas de 345 px o menos: los cuatro botones −5 −1 +1 +5 dejan sitio al número BPM (antes se cortaba el último dígito) */
+@media (max-width: 345px) {
+  .bpm-box { padding-left: 8px; padding-right: 8px; }
+  .bpm-row { gap: 3px; }
+  .bpm-row .step-btn { min-width: 38px; width: 38px; height: 44px; }
+  .bpm-field input { font-size: 36px; }
+}

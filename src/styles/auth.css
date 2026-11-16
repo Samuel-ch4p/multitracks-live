@@ -174,3 +174,10 @@
 .auth-inline { position: relative; display: inline; padding: 0; border: 0; background: none; color: var(--c-accent-strong); font: inherit; font-weight: 700; text-decoration: underline; text-underline-offset: 3px; touch-action: manipulation; }
 .auth-inline::after { content: ""; position: absolute; inset: -4px -4px; }
 @media (max-height: 460px) and (orientation: landscape) { .auth-check { font-size: var(--fs-xs); gap: var(--sp-2); padding: 2px 0; } .auth-check input { margin-top: 10px; } }
+
+/* Vertical con el teclado abierto (la ventana se encoge a 250–400 px de alto): sin marca ni textos de apoyo para que el formulario tenga sitio y se pueda desplazar hasta cada campo */
+@media (max-height: 460px) and (max-width: 559px), (max-height: 460px) and (orientation: portrait) and (max-width: 719px) {
+  .auth-brand { display: none; }
+  .auth-screen p.auth-brand-lead { display: none; }
+  .auth-screen p.auth-lead { display: block; }
+}
