@@ -1,5 +1,5 @@
 import { useRef } from "react";
-import { lockAxis } from "./gesture";
+import { FINE_HOLD_MS, FaderDrag, faderAxis } from "./faderGesture";
 
 type Props = {
   value: number; // 0..100
@@ -9,22 +9,28 @@ type Props = {
 };
 
 const clamp = (n: number) => Math.min(100, Math.max(0, n));
+/** setPointerCapture lanza un error si el puntero ya no está activo (dedo levantado entre eventos): nunca debe romper el gesto. */
+const capture = (el: Element, id: number) => { try { el.setPointerCapture(id); } catch { /* puntero ya inactivo */ } };
 
 type TouchGesture = {
   id: number;
   x: number;
   y: number;
-  /** pending: aún dentro de la zona muerta · drag: eje vertical fijado, mueve el fader · scroll: eje horizontal, no se toca nada. */
+  /** El dedo empezó en la perilla (zona .fader-hit, touch-action: none): cualquier dirección mueve el fader. */
+  onCap: boolean;
+  downAt: number;
+  /** pending: aún dentro de la zona muerta · drag: mueve el fader · scroll: gesto horizontal en el carril, no se toca nada. */
   mode: "pending" | "drag" | "scroll";
-  originY: number;
-  originValue: number;
+  drag: FaderDrag | null;
 };
 
 /**
  * Fader vertical con puntero (táctil y mouse) y teclado. Cabeza en barra vertical sobre un carril delgado; el número aparece al arrastrar.
- * Con el dedo: touch-action pan-x (la lista de canales sigue desplazándose) y bloqueo de eje: tras una zona muerta de 8 px, si el
- * movimiento es horizontal no se cambia ningún valor; si es vertical, el fader se mueve en relativo (sin saltos) hasta soltar.
- * Un toque corto con el dedo no cambia el volumen (doble toque: 80).
+ * Con el dedo (reglas en faderGesture.ts):
+ *  · desde la perilla (zona de 44 × 44 px) el fader se mueve en cualquier dirección, sin confundirse con desplazar la lista;
+ *  · desde el resto del carril, solo un gesto claramente horizontal desplaza la lista; lo demás mueve el fader;
+ *  · el movimiento es relativo (sin saltos) y apartar el dedo en horizontal o mantenerlo quieto antes de mover activa el MODO FINO (×0,25);
+ *  · un toque corto no cambia el volumen (doble toque: 80).
  */
 export default function Fader({ value, onChange, label, dimmed }: Props) {
   const railRef = useRef<HTMLDivElement>(null);
@@ -35,6 +41,7 @@ export default function Fader({ value, onChange, label, dimmed }: Props) {
 
   // Mientras se arrastra, la cabeza sigue al dedo sin retraso; al soltar o al cambiar por toque/teclado se desliza con inercia (CSS).
   const setDragging = (on: boolean) => rootRef.current?.classList.toggle("is-dragging", on);
+  const setFine = (on: boolean) => rootRef.current?.classList.toggle("is-fine", on);
 
   function railHeight() {
     return railRef.current?.getBoundingClientRect().height || 1;
@@ -45,6 +52,12 @@ export default function Fader({ value, onChange, label, dimmed }: Props) {
     if (!rail) return;
     const rect = rail.getBoundingClientRect();
     onChange(Math.round(clamp((1 - (clientY - rect.top) / rect.height) * 100)));
+  }
+
+  function endTouch() {
+    gesture.current = null;
+    setDragging(false);
+    setFine(false);
   }
 
   return (
@@ -60,10 +73,12 @@ export default function Fader({ value, onChange, label, dimmed }: Props) {
       aria-valuenow={value}
       onPointerDown={(event) => {
         if (event.pointerType === "touch") {
-          gesture.current = { id: event.pointerId, x: event.clientX, y: event.clientY, mode: "pending", originY: event.clientY, originValue: valueRef.current };
+          const onCap = !!(event.target as Element).closest(".fader-hit");
+          gesture.current = { id: event.pointerId, x: event.clientX, y: event.clientY, onCap, downAt: event.timeStamp, mode: "pending", drag: null };
+          if (onCap) capture(event.currentTarget, event.pointerId);
           return;
         }
-        event.currentTarget.setPointerCapture(event.pointerId);
+        capture(event.currentTarget, event.pointerId);
         setDragging(true);
         fromPointer(event.clientY);
       }}
@@ -72,27 +87,30 @@ export default function Fader({ value, onChange, label, dimmed }: Props) {
         if (g && g.id === event.pointerId) {
           if (g.mode === "scroll") return;
           if (g.mode === "pending") {
-            const axis = lockAxis(event.clientX - g.x, event.clientY - g.y);
+            const axis = faderAxis(event.clientX - g.x, event.clientY - g.y, g.onCap);
             if (axis === "pending") return;
             if (axis === "horizontal") { g.mode = "scroll"; return; }
             g.mode = "drag";
-            g.originY = event.clientY; // el arrastre parte de aquí: la cabeza no da un salto al decidirse el eje
-            g.originValue = valueRef.current;
-            event.currentTarget.setPointerCapture(event.pointerId);
+            // El arrastre parte de aquí (la cabeza no salta). Si el dedo estuvo quieto antes de moverse, empieza en modo fino.
+            g.drag = new FaderDrag(event.clientX, event.clientY, valueRef.current, railHeight(), event.timeStamp - g.downAt >= FINE_HOLD_MS);
+            if (!g.onCap) capture(event.currentTarget, event.pointerId);
             setDragging(true);
+            setFine(g.drag.fine);
             return;
           }
-          onChange(Math.round(clamp(g.originValue + ((g.originY - event.clientY) / railHeight()) * 100)));
+          const next = g.drag?.move(event.clientX, event.clientY);
+          setFine(!!g.drag?.fine);
+          if (next != null) onChange(next);
           return;
         }
         if (event.currentTarget.hasPointerCapture(event.pointerId)) fromPointer(event.clientY);
       }}
       onPointerUp={(event) => {
-        setDragging(false);
-        if (gesture.current?.id === event.pointerId) gesture.current = null;
+        if (gesture.current?.id === event.pointerId) endTouch();
+        else setDragging(false);
       }}
-      onPointerCancel={() => { gesture.current = null; setDragging(false); }}
-      onLostPointerCapture={() => setDragging(false)}
+      onPointerCancel={endTouch}
+      onLostPointerCapture={() => { setDragging(false); setFine(false); }}
       onDoubleClick={() => onChange(80)}
       onKeyDown={(event) => {
         const step = event.shiftKey ? 10 : 2;
@@ -110,6 +128,7 @@ export default function Fader({ value, onChange, label, dimmed }: Props) {
         <div className="fader-cap" style={{ bottom: `${value}%` }}>
           <i />
           <output className="fader-value" aria-hidden="true">{value}</output>
+          <span className="fader-hit" />
         </div>
       </div>
     </div>
