@@ -1,7 +1,7 @@
 /**
  * Textos legales incluidos en la app (sin internet). Fuente única: legal/politica-y-terminos.md, que se empaqueta en el build.
- * Antes de mostrarlos se quitan del texto las notas internas [CONFIRMAR …] y la nota de borrador; así, si el archivo se edita, esas notas
- * nunca llegan a la pantalla. Formato admitido: títulos ###, listas con guiones, párrafos y **negritas**.
+ * Las notas internas del borrador se quitan al compilar (plugin de vite.config.ts, ver legalNotes.ts): no viajan en el APK ni
+ * llegan a la pantalla. Formato admitido: títulos ###, listas con guiones, párrafos y **negritas**.
  */
 import source from "../legal/politica-y-terminos.md?raw";
 
@@ -12,15 +12,6 @@ export type LegalKind = "privacy" | "terms";
 export type LegalBlock = { type: "h"; text: string } | { type: "p"; text: string } | { type: "ul"; items: string[] };
 
 export const LEGAL_TITLE: Record<LegalKind, string> = { privacy: "Política de privacidad", terms: "Términos de uso" };
-
-/** Quita las notas internas del borrador (las que empiezan con [CONFIRMAR …], escritas como \[CONFIRMAR …\] en Markdown). */
-export function stripDraftNotes(text: string): string {
-  return text
-    .replace(/[ \t]*\\?\[CONFIRMAR[^\]]*\]/g, "")
-    .split("\n")
-    .filter((line) => !/^\*Borrador/.test(line.trim()))
-    .join("\n");
-}
 
 function parse(markdown: string): LegalBlock[] {
   const blocks: LegalBlock[] = [];
@@ -49,7 +40,8 @@ function parse(markdown: string): LegalBlock[] {
   return blocks;
 }
 
-const clean = stripDraftNotes(source).replace(/\s+([.,;:])/g, "$1");
+// Las notas internas ya llegan quitadas por el plugin de vite.config.ts (también en desarrollo).
+const clean = source.replace(/\s+([.,;:])/g, "$1");
 const at = clean.search(/^## Parte 2/m);
 
 const DOCS: Record<LegalKind, LegalBlock[]> = {
