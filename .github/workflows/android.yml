@@ -98,6 +98,16 @@ jobs:
           echo "SHA-256 del certificado: $SHA"
           echo "### Firma del APK" >> "$GITHUB_STEP_SUMMARY"
           echo "SHA-256 del certificado: $SHA (debe ser identico en todas las compilaciones)" >> "$GITHUB_STEP_SUMMARY"
+          # El certificado debe ser SIEMPRE el mismo: con otro, el APK no se instala encima del publicado. Se compara sin
+          # distinguir mayúsculas ni dos puntos; si no coincide (o no se pudo leer), la compilación FALLA y no se sube el APK.
+          EXPECTED="c887bc05194f3d56db3148cda9f5b7efaac075294d42ed3ebb791e551573f4ec"
+          GOT=$(printf '%s' "$SHA" | tr -d ': ' | tr 'A-F' 'a-f')
+          if [ "$GOT" != "$EXPECTED" ]; then
+            echo "::error title=Certificado distinto::El SHA-256 del certificado ($GOT) no es el esperado ($EXPECTED). No se publica este APK."
+            echo "**ERROR: certificado distinto del esperado.**" >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+          echo "Certificado verificado: coincide con el esperado." | tee -a "$GITHUB_STEP_SUMMARY"
 
       - uses: actions/upload-artifact@v4
         with:
