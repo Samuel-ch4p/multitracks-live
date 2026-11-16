@@ -1,0 +1,57 @@
+/* =====================================================================
+   P9 (1.1.0): ZONAS TÁCTILES DE AL MENOS 44 × 44 px y letra grande del sistema.
+   La zona táctil se amplía con un pseudo-elemento transparente, SIN cambiar el tamaño visible: cada lado crece solo lo que falta
+   para llegar a 44 px — min(0px, (100% − 44px) / 2) — así dos botones vecinos con hueco suficiente no se pisan.
+   (En inset, los % de arriba/abajo se miden sobre el alto del botón y los de izquierda/derecha sobre su ancho.)
+   Se carga la última (main.tsx → App.tsx) para mandar sobre las ampliaciones anteriores de −4 px, que se quedaban en 40–42 px.
+   ===================================================================== */
+:root { --hit: 44px; --hit-y: min(0px, calc((100% - var(--hit)) / 2)); --hit-x: min(0px, calc((100% - var(--hit)) / 2)); }
+
+.icon-btn, .glass-btn, .tempo, .click-btn, .chip, .deck-add, .pan-readout, .slow-chip, .undo-btn, .lib-filters button, .marker-hint button,
+.seg button { position: relative; }
+
+.icon-btn::after, .glass-btn::after, .tempo::after, .click-btn::after, .deck-add::after, .slow-chip::after, .undo-btn::after,
+.lib-filters button::after, .marker-hint button::after, .seg button::after, .deck-remove::after, .auth-inline::after {
+  content: ""; position: absolute; inset: var(--hit-y) var(--hit-x);
+}
+/* M y S: hueco de 6 px entre ellas; por los lados se amplía como mucho 3 px para no pisarse (el alto sí llega a 44). */
+.chip::after { content: ""; position: absolute; inset: min(-4px, var(--hit-y)) max(-3px, min(0px, var(--hit-x))); }
+/* Play: su ::after es el halo animado; la zona táctil va en ::before (no es botón de mantener pulsado). */
+.play-btn::before { content: ""; position: absolute; inset: var(--hit-y) var(--hit-x); }
+/* × de quitar canción (24 px visibles) y × del aviso de marcadores: 44 px de zona táctil. */
+.deck-remove { z-index: 1; }
+/* «C» del paneo (centrar): 44 × 44 px creciendo solo hacia arriba (sobre el margen muerto del carril del fader) y a los lados;
+   nunca hacia abajo, donde está la perilla del paneo (su zona .pan-hit de 44 × 44 no se toca). */
+.pan-readout::after { content: ""; position: absolute; inset: min(0px, calc(100% - var(--hit))) var(--hit-x) 0; }
+
+/* Letra grande del sistema (Android escala el texto del WebView 115–200 %): los textos de los controles no deben salirse ni cortarse.
+   Las filas fijas del canal (M/S, paneo, nombre) dejan el texto por encima del alto si hace falta, en vez de recortarlo. */
+.pan-labels, .channel-name, .chip { line-height: 1; overflow: visible; }
+.channel-name strong { min-width: 0; }
+.deck-main strong, .deck-main small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.btn-label, .tempo strong, .clock strong { white-space: nowrap; }
+
+/* M/S y NORM: la fila de arriba del canal pinta por encima del fader, así su zona táctil baja unos px sobre el margen muerto del carril
+   (14 px arriba) y llega a 44 px de alto. En Click y Guía (canal de 78 px) el ancho tope es medio canal: 38 px sin pisarse. */
+.channel-head { position: relative; z-index: 2; }
+/* Excepciones medidas (no llegan a 44 px sin quitar espacio al mezclador en un teléfono de 360 px de alto):
+   · la onda (40 px de alto, pero todo el ancho) y la × de su aviso de marcadores (recortada por el panel de 40 px; el aviso se oculta solo);
+   · M/S de Click y Guía: 44 px de alto pero 36–38 px de ancho (el canal mide 78 px; más ancho pisaría el botón vecino).
+   La perilla del paneo tiene su propia zona de 44 × 44 (.pan-hit); el resto de la barra deja desplazar el mezclador con el dedo. */
+
+/* Con letra grande, «NORM SUAVE» no cabe en el canal MASTER: pasa a dos líneas dentro del mismo botón en vez de salirse. */
+.chip.norm { flex-wrap: wrap; align-content: center; row-gap: 1px; min-width: 0; text-align: center; }
+
+/* Subir / Bajar / Quitar del Setlist: van pegados (sin hueco), así que se ensanchan de verdad a 44 px (12 px más en la fila). */
+.setlist-actions button { width: var(--hit); }
+/* «Este dispositivo» / «Nube Crescendo» (36 px de alto): su ::after es el punto de seleccionado; la zona táctil va en ::before. */
+.source-switch button::before { content: ""; position: absolute; inset: var(--hit-y) 0; }
+
+/* Tarjetas del repertorio (elegir canción): 44 px de alto reales; la parte que se toca ocupa toda la tarjeta. */
+.song-deck .deck-card { min-height: var(--hit); }
+.song-deck .deck-add { min-height: var(--hit); }
+.song-deck .deck-main { align-self: stretch; min-height: var(--hit); }
+/* × de quitar canción: la tarjeta recorta lo que sobresale (contain), así que la zona táctil es la franja derecha de la tarjeta
+   (44 px de ancho y todo el alto); la × se sigue viendo arriba a la derecha, del mismo tamaño. */
+.song-deck .deck-remove { top: 0; right: 0; width: var(--hit); height: 100%; display: grid; place-items: start end; padding: 5px 7px 0 0; border-radius: 0 var(--r-sm, 10px) var(--r-sm, 10px) 0; }
+.song-deck .deck-remove::after { inset: 0; }
