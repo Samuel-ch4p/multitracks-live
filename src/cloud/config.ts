@@ -59,7 +59,12 @@ export const MEMORIA = {
  * Cierre de sesión por ausencia e inactividad. Se mide con marcas de tiempo guardadas, no con temporizadores
  * (en Android el WebView se suspende en segundo plano y los temporizadores se congelan). Ver inactivity.ts.
  */
+/**
+ * DECISIÓN DE PRODUCTO (1.1.0): antes 10 y 60 min. Los topes de dispositivos y de descargas los aplica el SERVIDOR, así que estos
+ * minutos solo protegen un teléfono olvidado; con 10/60 la app expulsaba a músicos en pleno culto (predicación larga, celular en el atril).
+ * Se pueden ajustar aquí (único lugar). Nunca se expulsa a quien tiene audio sonando ni una descarga en curso (inactivityRules.ts).
+ */
 /** Minutos fuera de la app (sin audio sonando al salir) tras los cuales se pide iniciar sesión de nuevo. */
-export const GRACIA_FUERA_MIN = 10;
+export const GRACIA_FUERA_MIN = 30;
 /** Minutos sin interacción y sin audio (en primer plano), o fuera de la app con audio al salir, tras los cuales se cierra la sesión. */
-export const INACTIVIDAD_MIN = 60;
+export const INACTIVIDAD_MIN = 180;
