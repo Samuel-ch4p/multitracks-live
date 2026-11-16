@@ -9,12 +9,19 @@ import { SupportEmail } from "./CloudParts";
 import { LegalScreen } from "./LegalView";
 import type { LegalKind } from "./legal";
 import { legalSignUpMetadata, saveAcceptance } from "./legalAcceptance";
-import { signedOutAction } from "./cloud/tokenRefresh";
+import { classifyAuthError, signedOutAction } from "./cloud/tokenRefresh";
+import { clearValidation, offlineAllowed, readValidation, saveValidation } from "./offlineAccess";
 import { expiredOnStart, isAudioActive, startInactivityWatch } from "./inactivity";
 import { CloudError, friendlyCloudMessage } from "./cloud/errors";
 import "./styles/auth.css";
 
-type Account = { email: string; userId: string; signOut: () => void };
+type Account = {
+  email: string;
+  userId: string;
+  signOut: () => void;
+  /** Abierta sin red (I4): solo «Este dispositivo»; la Nube vuelve con la red. */
+  offline?: boolean;
+};
 const AccountContext = createContext<Account | null>(null);
 
 /** Cuenta con sesión iniciada (null en desarrollo sin nube configurada). Sirve para el botón "Cerrar sesión". */
@@ -33,6 +40,8 @@ type Phase =
   | { name: "out" }
   | { name: "checking" }
   | { name: "ok" }
+  /** Sin red, con la cuenta validada hace menos de 72 h en este teléfono (offlineAccess.ts). La app está montada igual que en "ok". */
+  | { name: "offline"; userId: string; email: string }
   | { name: "problem"; error: CloudError };
 
 /** Solo en desarrollo: ?auth=welcome|in|up|reset|notice|pending|expired|blocked|paused|usage|device|checking muestra esa pantalla de acceso para revisarla. */
@@ -49,6 +58,13 @@ function AuthPreview({ name }: { name: string }) {
 export default function AuthGate({ children }: { children: ReactNode }) {
   if (PREVIEW) return <AuthPreview name={PREVIEW} />;
   return <AuthGateInner>{children}</AuthGateInner>;
+}
+
+/** Aviso breve al abrir sin red (desaparece solo; no recibe toques, así no tapa ningún control). */
+function OfflineNotice() {
+  const [shown, setShown] = useState(true);
+  useEffect(() => { const timer = window.setTimeout(() => setShown(false), 8000); return () => window.clearTimeout(timer); }, []);
+  return shown ? <p className="session-ended-notice" role="status">Sin conexión: puedes usar «Este dispositivo». La Nube vuelve sola cuando haya red.</p> : null;
 }
 
 function AuthGateInner({ children }: { children: ReactNode }) {
@@ -68,15 +84,22 @@ function AuthGateInner({ children }: { children: ReactNode }) {
   }, []);
 
   // Comprueba la cuenta con la API (el catálogo es la primera petición real; también valida dispositivo y membresía).
-  const check = useCallback(async () => {
+  const check = useCallback(async (user?: { id: string; email?: string } | null) => {
     setPhase({ name: "checking" });
     try {
       const resp = await apiGet("/catalog");
       await resp.body?.cancel();
+      if (user) await saveValidation(user.id, user.email ?? "");
       setPhase({ name: "ok" });
     } catch (e) {
       const error = e instanceof CloudError ? e : new CloudError("network");
-      if (error.kind === "no_session") { await signOut(); setSession(null); setPhase({ name: "out" }); return; }
+      if (error.kind === "no_session") { await clearValidation(); await signOut(); setSession(null); setPhase({ name: "out" }); return; }
+      // Sin red (o servidor caído): con una validación reciente de esta misma cuenta, se abre en modo sin conexión.
+      if ((error.kind === "network" || error.kind === "server") && user && offlineAllowed(await readValidation(), user.id, Date.now())) {
+        setPhase({ name: "offline", userId: user.id, email: user.email ?? "" });
+        return;
+      }
+      if (error.isAccountState) await clearValidation();
       setPhase({ name: "problem", error });
     }
   }, []);
@@ -84,12 +107,24 @@ function AuthGateInner({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (DEV_BYPASS || !cloudConfigured) return;
     let alive = true;
-    void currentSession().then((s) => {
+    void supabase().auth.getSession().then(async ({ data: { session: s }, error }) => {
       if (!alive) return;
       setSession(s);
-      if (!s) { setPhase({ name: "out" }); return; }
+      if (!s) {
+        // Token vencido y la renovación falló por la RED (la sesión guardada sigue): modo sin conexión si hay validación reciente.
+        if (error && classifyAuthError(error) === "transient") {
+          const v = await readValidation();
+          const expired = await expiredOnStart();
+          if (!alive) return;
+          if (v && !expired && offlineAllowed(v, null, Date.now())) { setPhase({ name: "offline", userId: v.userId, email: v.email }); return; }
+          setPhase({ name: "problem", error: new CloudError("network") });
+          return;
+        }
+        setPhase({ name: "out" });
+        return;
+      }
       // Arranque en frío: si se salió hace más de lo permitido, se pide iniciar sesión de nuevo.
-      void expiredOnStart().then((expired) => { if (!alive) return; if (expired) void expire(); else void check(); });
+      void expiredOnStart().then((expired) => { if (!alive) return; if (expired) void expire(); else void check({ id: s.user.id, email: s.user.email }); });
     }).catch(() => alive && setPhase({ name: "out" }));
     const { data } = supabase().auth.onAuthStateChange((event, s) => {
       if (!alive) return;
@@ -104,7 +139,41 @@ function AuthGateInner({ children }: { children: ReactNode }) {
   }, [check, expire]);
 
   // Con sesión abierta y verificada: vigila ausencia e inactividad (marcas de tiempo, nunca con audio sonando ni descargas).
-  const signedIn = phase.name === "ok" && !DEV_BYPASS;
+  const signedIn = (phase.name === "ok" || phase.name === "offline") && !DEV_BYPASS;
+  const offline = phase.name === "offline";
+  const offlineUserId = phase.name === "offline" ? phase.userId : null;
+  const offlineEmail = phase.name === "offline" ? phase.email : "";
+
+  // Modo sin conexión: al volver la red (evento "online" o cada minuto) se valida en silencio, SIN desmontar la app.
+  // Si la cuenta ya no está activa, su pantalla aparece cuando no suena nada (nunca se corta una canción).
+  useEffect(() => {
+    if (!offlineUserId) return;
+    let busy = false;
+    let pendingProblem: CloudError | null = null;
+    const attempt = async () => {
+      if (pendingProblem) { if (!isAudioActive()) setPhase({ name: "problem", error: pendingProblem }); return; }
+      if (busy || navigator.onLine === false) return;
+      busy = true;
+      try {
+        const resp = await apiGet("/catalog");
+        await resp.body?.cancel();
+        await saveValidation(offlineUserId, offlineEmail);
+        const { data } = await supabase().auth.getSession();
+        setSession(data.session);
+        setPhase({ name: "ok" });
+      } catch (e) {
+        const error = e instanceof CloudError ? e : new CloudError("network");
+        if (error.kind === "no_session") { await clearValidation(); await signOut(); }
+        else if (error.isAccountState) { await clearValidation(); pendingProblem = error; if (!isAudioActive()) setPhase({ name: "problem", error }); }
+      } finally {
+        busy = false;
+      }
+    };
+    const onOnline = () => void attempt();
+    window.addEventListener("online", onOnline);
+    const timer = window.setInterval(() => void attempt(), 60_000);
+    return () => { window.removeEventListener("online", onOnline); window.clearInterval(timer); };
+  }, [offlineUserId, offlineEmail]);
   useEffect(() => {
     if (!signedIn) return;
     return startInactivityWatch(() => void expire());
@@ -121,26 +190,30 @@ function AuthGateInner({ children }: { children: ReactNode }) {
     return () => window.clearInterval(timer);
   }, [pendingOut]);
 
-  const account = useMemo<Account | null>(
-    () => (session ? { email: session.user.email ?? "", userId: session.user.id, signOut: () => { void signOut().then(() => { setSession(null); setPhase({ name: "out" }); }); } } : null),
-    [session]
-  );
+  const account = useMemo<Account | null>(() => {
+    const doSignOut = () => { void clearValidation().then(signOut).then(() => { setSession(null); setPhase({ name: "out" }); }); };
+    if (session) return { email: session.user.email ?? "", userId: session.user.id, signOut: doSignOut, offline };
+    if (offlineUserId) return { email: offlineEmail, userId: offlineUserId, signOut: doSignOut, offline: true };
+    return null;
+  }, [session, offline, offlineUserId, offlineEmail]);
 
   if (!DEV_BYPASS && !cloudConfigured) {
     return <Screen chip="SIN CONFIGURAR" title="Nube no configurada"><p>La Nube Crescendo aún no está configurada en esta versión de la app.</p></Screen>;
   }
   if (phase.name === "boot") return null; // el logo de arranque de index.html sigue visible
   if (phase.name === "out") {
-    return <AuthScreen notice={inactivityNotice} onSignedIn={(s) => { setInactivityNotice(false); setSession(s); void check(); }} />;
+    return <AuthScreen notice={inactivityNotice} onSignedIn={(s) => { setInactivityNotice(false); setSession(s); void check({ id: s.user.id, email: s.user.email }); }} />;
   }
   if (phase.name === "checking") return <Screen title="Verificando tu cuenta…" busy><div className="auth-spinner" aria-hidden="true" /><p>Un momento.</p></Screen>;
   if (phase.name === "problem") {
-    return <ProblemScreen error={phase.error} email={session?.user.email ?? ""} onRetry={() => void check()} onSignOut={() => account?.signOut()} />;
+    const retryUser = session ? { id: session.user.id, email: session.user.email } : null;
+    return <ProblemScreen error={phase.error} email={session?.user.email ?? ""} onRetry={() => void check(retryUser)} onSignOut={() => (account ? account.signOut() : void signOut().then(() => setPhase({ name: "out" })))} />;
   }
   return (
     <AccountContext.Provider value={account}>
       {children}
       {pendingOut && <p className="session-ended-notice" role="status">Tu sesión terminó. Puedes terminar esta canción; al detenerla se pedirá iniciar sesión.</p>}
+      {offline && !pendingOut && <OfflineNotice />}
     </AccountContext.Provider>
   );
 }
