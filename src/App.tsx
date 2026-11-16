@@ -52,6 +52,7 @@ import { limiterCurve, planNormalization } from "./normalizer.ts";
 import { DEFAULT_NORM_MODE, NORM_MODES, NORM_MODE_LABEL, NORM_RAMP_SECONDS, type NormMode } from "./normConfig.ts";
 import { applyPan, buildTrackGraph, disposeTrackGraph, type TrackGraph } from "./trackGraph.ts";
 import { LIVE_GUARD, SHORT_TAP_SWITCH, switchNeedsHold } from "./liveGuard.ts";
+import { EXTERNAL_PAUSE_MESSAGE, EXTERNAL_PAUSE_SETTLE_MS, contextInterrupted, isExternalPause } from "./externalPause.ts";
 
 type Track = {
   id: number;
@@ -496,6 +497,7 @@ export default function App() {
   const settledRef = useRef<WeakSet<File>>(new WeakSet());
   const mediaReadyRef = useRef<Set<number>>(new Set());
   const loadTokenRef = useRef(0);
+  const watchedRef = useRef(new WeakSet<HTMLAudioElement>());
   const songKeyRef = useRef<string | null>(null);
   const peaksCacheRef = useRef<Map<number, Float32Array>>(new Map());
   const normModeRef = useRef(normMode);
@@ -535,6 +537,8 @@ export default function App() {
       master.connect(level);
       bindAnalyser("master", level);
       bindAnalyser("master-card", level);
+      // El sistema suspendió o interrumpió el audio (llamada, otra app): la interfaz pasa a «en pausa» y Play reanuda.
+      context.onstatechange = () => { if (contextInterrupted(context.state, playingRef.current)) handleExternalPause(); };
       contextRef.current = context;
       masterGainRef.current = master;
     }
@@ -596,8 +600,32 @@ export default function App() {
     bindAnalyser(String(track.id), graph.meter);
   }
 
+  /**
+   * Pausa que no pidió el usuario (llamada, alarma, nota de voz, audífonos desconectados): se pausan TODAS las pistas (para que no
+   * queden unas sonando y otras no), la interfaz pasa a «en pausa» y el primer toque en Play reanuda. Ver externalPause.ts.
+   */
+  function handleExternalPause() {
+    if (!playingRef.current || busyRef.current) return;
+    tracksRef.current.forEach((track) => track.audio.pause());
+    setPlayState(false, true);
+    setStatusMessage(EXTERNAL_PAUSE_MESSAGE);
+  }
+
+  /** Vigila cada pista una sola vez: si el sistema la pausa, se trata como pausa externa (tras un momento, para no confundirla con las propias). */
+  function watchExternalPause(track: Track) {
+    if (watchedRef.current.has(track.audio)) return;
+    watchedRef.current.add(track.audio);
+    track.audio.addEventListener("pause", () => {
+      window.setTimeout(() => {
+        const snapshot = { playing: playingRef.current, busy: busyRef.current, stillPaused: track.audio.paused, ended: track.audio.ended, inMixer: tracksRef.current.includes(track) };
+        if (isExternalPause(snapshot)) handleExternalPause();
+      }, EXTERNAL_PAUSE_SETTLE_MS);
+    });
+  }
+
   /** Fase de carga: cadena de audio de cada pista y espera a que todas tengan datos para sonar sin cortes. */
   function prepareTracks(list: Track[]) {
+    list.forEach(watchExternalPause);
     const token = ++loadTokenRef.current;
     perfBegin("carga");
     mediaReadyRef.current = new Set();
@@ -1100,6 +1128,13 @@ export default function App() {
     if (!currentTracks.length) return;
     try {
       await getContext().resume();
+      // Tras una pausa externa las pistas pueden haberse detenido con unos milisegundos de diferencia: se alinean antes de seguir.
+      const lead = pickLead(currentTracks);
+      for (const track of currentTracks) {
+        if (track.audio !== lead && !track.audio.ended && Math.abs(track.audio.currentTime - lead.currentTime) > 0.05) {
+          try { track.audio.currentTime = lead.currentTime; } catch { /* aún cargando */ }
+        }
+      }
       await Promise.all(currentTracks.map((track) => track.audio.play()));
       setPlayState(true, false);
       setStatusMessage(`Continuando: ${songName}`);
@@ -1200,6 +1235,19 @@ export default function App() {
     else if (paused) void resumeAll();
     else void playAll();
   }
+
+  // Botones del sistema (audífonos, pantalla de bloqueo, notificación de medios): pausan y reanudan TODAS las pistas, no una sola,
+  // y la interfaz queda coherente con lo que suena.
+  const transportRef = useRef({ pauseAll, resumeAll, playAll, paused });
+  transportRef.current = { pauseAll, resumeAll, playAll, paused };
+  useEffect(() => {
+    const session = "mediaSession" in navigator ? navigator.mediaSession : null;
+    if (!session) return;
+    const set = (action: MediaSessionAction, handler: MediaSessionActionHandler | null) => { try { session.setActionHandler(action, handler); } catch { /* acción no admitida */ } };
+    set("pause", () => { if (playingRef.current) transportRef.current.pauseAll(); });
+    set("play", () => { if (playingRef.current) return; if (transportRef.current.paused) void transportRef.current.resumeAll(); else void transportRef.current.playAll(); });
+    return () => { set("pause", null); set("play", null); };
+  }, []);
 
   // Tiempo, duración, fin de canción y corrección de desfase entre pistas.
   const lastSecondRef = useRef(-1);
