@@ -52,6 +52,7 @@ import { limiterCurve, planNormalization } from "./normalizer.ts";
 import { DEFAULT_NORM_MODE, NORM_MODES, NORM_MODE_LABEL, NORM_RAMP_SECONDS, type NormMode } from "./normConfig.ts";
 import { applyPan, buildTrackGraph, disposeTrackGraph, type TrackGraph } from "./trackGraph.ts";
 import { LIVE_GUARD, SHORT_TAP_SWITCH, switchNeedsHold } from "./liveGuard.ts";
+import { indexAfterRemoval } from "./playlistNav.ts";
 import { EXTERNAL_PAUSE_MESSAGE, EXTERNAL_PAUSE_SETTLE_MS, contextInterrupted, isExternalPause } from "./externalPause.ts";
 
 type Track = {
@@ -1040,6 +1041,7 @@ export default function App() {
     retryRef.current.delete(songId);
     failedRef.current.delete(songId);
     setFg((current) => (current?.id === songId ? null : current));
+    const removedIndex = playlistRef.current.findIndex((song) => song.id === songId);
     const next = playlistRef.current.filter((song) => song.id !== songId);
     playlistRef.current = next;
     setPlaylist(next);
@@ -1047,7 +1049,9 @@ export default function App() {
     extrasRef.current.delete(songId);
     peaksCacheRef.current.delete(songId);
     if (songId !== activeSongIdRef.current) return;
-    if (next.length > 0) activateSong(next[0]);
+    // Quitar la activa pasa a la SIGUIENTE (o a la anterior si era la última), no a la primera del setlist.
+    const target = indexAfterRemoval(next, removedIndex, (song) => failedRef.current.has(song.id));
+    if (target >= 0) activateSong(next[target]);
     else {
       disposeActiveTracks();
       activeSongIdRef.current = null;
