@@ -40,3 +40,26 @@ export function hintDismissed(): boolean {
 export function dismissHint() {
   try { localStorage.setItem(HINT_KEY, "1"); } catch { /* sin almacenamiento */ }
 }
+
+/**
+ * Marcadores que van al autoguardado/culto para una canción. Si la canción no está en memoria (files vacío) NO se leen con la
+ * clave de "cero archivos" (eso devolvía [] y borraba los marcadores): se usa su clave conocida, o lo guardado si nunca se cargó.
+ * undefined = no se sabe (nunca cargada y sin marcadores guardados): al restaurar no se toca nada.
+ */
+export function snapshotMarkers(
+  song: { files: { name: string; size: number }[]; songKey?: string; config?: { markers?: Marker[] } },
+  load: (songKey: string) => Marker[],
+  keyOfFiles: (files: { name: string; size: number }[]) => string,
+): Marker[] | undefined {
+  if (song.files.length > 0) return load(keyOfFiles(song.files));
+  if (song.songKey) return load(song.songKey);
+  return song.config?.markers;
+}
+
+/**
+ * Al restaurar (culto o sesión): los marcadores guardados solo sustituyen a los locales si traen alguno.
+ * Una lista vacía o ausente nunca borra los marcadores que ya hay en el teléfono. null = no tocar.
+ */
+export function markersToApply(saved: Marker[] | undefined): Marker[] | null {
+  return saved && saved.length > 0 ? saved : null;
+}

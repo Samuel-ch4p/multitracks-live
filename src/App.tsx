@@ -3,7 +3,7 @@ import { pistas } from "./format";
 import SettingsScreen, { type DiagnosticsInfo } from "./SettingsScreen";
 import { startFpsWatch, stopFpsWatch } from "./fpsMonitor";
 import MarkerEditor from "./MarkerEditor";
-import { MARKER_COLORS, dismissHint, hintDismissed, loadMarkers, saveMarkers, type Marker } from "./markers";
+import { MARKER_COLORS, dismissHint, hintDismissed, loadMarkers, markersToApply, saveMarkers, snapshotMarkers, type Marker } from "./markers";
 import { LoadCard } from "./CloudParts";
 import { planWindow, memoryBudgetBytes, type PlanSong } from "./memoryPlan";
 import { MEMORIA } from "./cloud/config";
@@ -697,7 +697,8 @@ export default function App() {
     if (config) {
       // Configuración guardada del culto: la mezcla manda sobre los perfiles al activar la canción; los marcadores sustituyen a los locales.
       if (config.tracks.length > 0) mixesRef.current.set(song.id, new Map(config.tracks.map((t) => [t.fileName, { volume: t.volume, pan: t.pan, muted: t.muted, solo: t.solo }])));
-      if (config.markers) saveMarkers(songKeyOf(files), config.markers);
+      const restore = markersToApply(config.markers);
+      if (restore) saveMarkers(songKeyOf(files), restore);
       if (config.click || config.pad) extrasRef.current.set(song.id, { click: config.click, pad: config.pad });
     }
     const next = [...playlistRef.current, song];
@@ -771,8 +772,12 @@ export default function App() {
     const songKey = songKeyOf(files);
     // En desarrollo, las canciones de la nube falsa («dev://») cuentan por el tamaño del catálogo falso, no por sus pistas de prueba.
     const fake = import.meta.env.DEV && list[index].ref?.key.startsWith("dev://") && !(window as unknown as { __devNet?: { real: boolean } }).__devNet?.real;
-    const song: Song = { ...list[index], files, memoryBytes: fake ? list[index].sizeBytes : files.reduce((sum, file) => sum + file.size, 0), songKey };
-    if (song.config?.markers) saveMarkers(songKey, song.config.markers);
+    const base = list[index];
+    // Los marcadores guardados se aplican UNA vez (la primera carga); después mandan los del teléfono, aunque la canción se suelte y se recargue.
+    const restore = markersToApply(base.config?.markers);
+    if (restore) saveMarkers(songKey, restore);
+    const config = base.config ? { ...base.config, markers: undefined } : undefined;
+    const song: Song = { ...base, files, memoryBytes: fake ? base.sizeBytes : files.reduce((sum, file) => sum + file.size, 0), songKey, config };
     const next = [...list];
     next[index] = song;
     playlistRef.current = next;
@@ -1428,7 +1433,7 @@ export default function App() {
         ...song.ref,
         tone: song.tone ?? null,
         bpm: song.bpm ?? null,
-        config: { tracks: mix, markers: loadMarkers(songKeyOf(song.files)), click: extras?.click, pad: extras?.pad },
+        config: { tracks: mix, markers: snapshotMarkers(song, loadMarkers, songKeyOf), click: extras?.click, pad: extras?.pad },
       });
     }
     return out;
