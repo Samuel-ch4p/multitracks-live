@@ -54,6 +54,7 @@ import { DEFAULT_NORM_MODE, NORM_MODES, NORM_MODE_LABEL, NORM_RAMP_SECONDS, type
 import { applyPan, buildTrackGraph, disposeTrackGraph, type TrackGraph } from "./trackGraph.ts";
 import { LIVE_GUARD, SHORT_TAP_SWITCH, switchNeedsHold } from "./liveGuard.ts";
 import { indexAfterRemoval } from "./playlistNav.ts";
+import { LOCAL_ID_PREFIX, localRefOf, matchLocalPlaceholder, type LocalRef } from "./localSongs.ts";
 import { EXTERNAL_PAUSE_MESSAGE, EXTERNAL_PAUSE_SETTLE_MS, contextInterrupted, isExternalPause } from "./externalPause.ts";
 
 type Track = {
@@ -82,6 +83,8 @@ type Song = {
   bpm?: number | null;
   /** Referencia a la canción de la nube (para guardar setlists). Las de "Este dispositivo" no la tienen. */
   ref?: SongRef;
+  /** Canción de «Este dispositivo» que viene de un culto guardado y aún no tiene sus archivos («Elige el archivo»). */
+  local?: LocalRef;
   /** Configuración guardada con el culto del que viene la canción (mezcla, marcadores, click y pad). */
   config?: SongConfig;
 };
@@ -110,6 +113,9 @@ function loadNormMode(): NormMode {
   } catch { /* sin almacenamiento: modo por defecto */ }
   return DEFAULT_NORM_MODE;
 }
+
+/** Canción de «Este dispositivo» restaurada de un culto que aún espera su archivo. */
+const isWaitingFile = (song: { files: File[]; local?: LocalRef; ref?: SongRef }) => !song.ref && !!song.local && song.files.length === 0;
 
 let idCounter = 0;
 const nextId = () => ++idCounter;
@@ -735,6 +741,26 @@ export default function App() {
       return false;
     }
     const memoryBytes = options?.inMemory ? files.reduce((sum, file) => sum + file.size, 0) : 0;
+    // ¿Es una canción de «Este dispositivo» que esperaba su archivo (venía de un culto guardado)? Se restaura en su lugar con su mezcla.
+    if (!options?.ref) {
+      const placeholders = playlistRef.current.filter((item) => item.local && item.files.length === 0);
+      const matchId = placeholders.length ? matchLocalPlaceholder(placeholders, name, files) : null;
+      if (matchId !== null) {
+        const list = playlistRef.current;
+        const index = list.findIndex((item) => item.id === matchId);
+        const base = list[index];
+        const restore = markersToApply(base.config?.markers);
+        if (restore) saveMarkers(songKeyOf(files), restore);
+        const restored: Song = { ...base, files, memoryBytes, songKey: songKeyOf(files), local: undefined, config: base.config ? { ...base.config, markers: undefined } : undefined };
+        const next = [...list];
+        next[index] = restored;
+        playlistRef.current = next;
+        setPlaylist(next);
+        setStatusMessage(`${base.name} restaurada con su mezcla (${pistas(files.length)}).`);
+        if (activeSongIdRef.current === null || (activeSongIdRef.current === matchId && tracksRef.current.length === 0)) loadSong(restored);
+        return true;
+      }
+    }
     const song: Song = { id: nextId(), name, files, memoryBytes, sizeBytes: 0, songKey: songKeyOf(files), tone: options?.tone, bpm: options?.bpm, ref: options?.ref, config: options?.config };
     const config = options?.config;
     if (config) {
@@ -755,6 +781,25 @@ export default function App() {
     return true;
     // loadSong solo toca refs y estado de React; no depende de renders previos.
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  /** Canción de «Este dispositivo» de un culto guardado: queda en el setlist como «Elige el archivo» con su mezcla, hasta elegir el archivo. */
+  const addLocalPlaceholder = useCallback((saved: SavedSong): boolean => {
+    if (!saved.local) return false;
+    const song: Song = {
+      id: nextId(), name: saved.title, files: [], memoryBytes: 0, sizeBytes: 0, songKey: saved.local.songKey,
+      tone: saved.tone, bpm: saved.bpm, local: saved.local, config: saved.config,
+    };
+    const config = saved.config;
+    if (config) {
+      if (config.tracks.length > 0) mixesRef.current.set(song.id, new Map(config.tracks.map((t) => [t.fileName, { volume: t.volume, pan: t.pan, muted: t.muted, solo: t.solo }])));
+      if (config.click || config.pad) extrasRef.current.set(song.id, { click: config.click, pad: config.pad });
+    }
+    const next = [...playlistRef.current, song];
+    playlistRef.current = next;
+    setPlaylist(next);
+    setStatusMessage(`${saved.title}: vuelve a elegir su archivo en Biblioteca › Este dispositivo.`);
+    return true;
   }, []);
 
   /** Añade una canción de la nube como REFERENCIA (no descarga nada): la ventana de memoria decide cuándo cargarla. */
@@ -985,6 +1030,12 @@ export default function App() {
 
   function selectSong(song: Song) {
     if (busyRef.current) return;
+    if (isWaitingFile(song)) {
+      setStatusMessage(`Elige «${song.name}» en Este dispositivo: se restaurará con su mezcla.`);
+      setSource("local");
+      setTab("library");
+      return;
+    }
     if (song.id === activeSongIdRef.current) {
       if (song.files.length === 0 && song.ref) { cancelledRef.current.delete(song.id); retryRef.current.delete(song.id); failedRef.current.delete(song.id); blockedRef.current = null; setLoaderTick((tick) => tick + 1); }
       return;
@@ -998,7 +1049,7 @@ export default function App() {
     const index = list.findIndex((song) => song.id === activeSongIdRef.current);
     // Salta las canciones que no se pudieron cargar: la cola sigue con la siguiente.
     let target = list[index + direction];
-    while (target && failedRef.current.has(target.id)) target = list[list.indexOf(target) + direction];
+    while (target && (failedRef.current.has(target.id) || isWaitingFile(target))) target = list[list.indexOf(target) + direction];
     if (target) activateSong(target);
   }
 
@@ -1051,7 +1102,7 @@ export default function App() {
     peaksCacheRef.current.delete(songId);
     if (songId !== activeSongIdRef.current) return;
     // Quitar la activa pasa a la SIGUIENTE (o a la anterior si era la última), no a la primera del setlist.
-    const target = indexAfterRemoval(next, removedIndex, (song) => failedRef.current.has(song.id));
+    const target = indexAfterRemoval(next, removedIndex, (song) => failedRef.current.has(song.id) || isWaitingFile(song));
     if (target >= 0) activateSong(next[target]);
     else {
       disposeActiveTracks();
@@ -1494,14 +1545,17 @@ export default function App() {
     const activeId = activeSongIdRef.current;
     const out: SavedSong[] = [];
     for (const song of playlistRef.current) {
-      if (!song.ref) continue;
+      // «Este dispositivo»: se guarda la referencia a sus archivos (nombres y tamaños, nunca el audio) para restaurarla al elegirlos.
+      const local = song.ref ? undefined : song.files.length > 0 ? localRefOf(song.files) : song.local;
+      if (!song.ref && !local) continue;
       const live = song.id === activeId && tracksRef.current.length > 0;
       const mix = live
         ? tracksRef.current.map((t) => ({ fileName: t.file.name, volume: t.volume, pan: t.pan, muted: t.muted, solo: t.solo }))
         : [...(mixesRef.current.get(song.id) ?? [])].map(([fileName, m]) => ({ fileName, ...m }));
       const extras = live ? currentExtras() : extrasRef.current.get(song.id);
       out.push({
-        ...song.ref,
+        ...(song.ref ?? { id: `${LOCAL_ID_PREFIX}${local?.songKey ?? ""}`, key: "", title: song.name }),
+        ...(local ? { local } : {}),
         tone: song.tone ?? null,
         bpm: song.bpm ?? null,
         config: { tracks: mix, markers: snapshotMarkers(song, loadMarkers, songKeyOf), click: extras?.click, pad: extras?.pad },
@@ -1519,10 +1573,10 @@ export default function App() {
   // ni antes de que haya algo de la nube en el setlist (así la tarjeta "Continuar" sigue intacta al abrir la app).
   useEffect(() => {
     if (queueBusy) return;
-    if (playlist.some((song) => song.ref)) sessionDirtyRef.current = true;
+    if (playlist.some((song) => song.ref || song.files.length > 0 || song.local)) sessionDirtyRef.current = true;
     if (!sessionDirtyRef.current) return;
     // Nunca se borra solo: vaciar el setlist no destruye lo guardado.
-    const write = () => { if (playlistRef.current.some((song) => song.ref)) void saveSession(userId, snapshotRef.current()); };
+    const write = () => { if (playlistRef.current.some((song) => song.ref || song.files.length > 0 || song.local)) void saveSession(userId, snapshotRef.current()); };
     const timer = window.setTimeout(write, 700);
     const onHide = () => { if (document.visibilityState === "hidden") { window.clearTimeout(timer); write(); } };
     document.addEventListener("visibilitychange", onHide);
@@ -1619,8 +1673,9 @@ export default function App() {
   const padInline = wide && padOpen;
   const padDrawer = !wide && padOpen;
 
-  const songState = (song: Song): { state: "ready" | "downloading" | "queued" | "retrying" | "failed"; percent: number | null; message?: string } =>
-    song.files.length > 0 || !song.ref ? { state: "ready", percent: null }
+  const songState = (song: Song): { state: "ready" | "downloading" | "queued" | "retrying" | "failed" | "missing"; percent: number | null; message?: string } =>
+    isWaitingFile(song) ? { state: "missing", percent: null }
+      : song.files.length > 0 || !song.ref ? { state: "ready", percent: null }
       : loadInfo?.id === song.id ? { state: "downloading", percent: loadInfo.percent }
       : failedRef.current.has(song.id) ? { state: "failed", percent: null, message: failedRef.current.get(song.id) }
       : retryRef.current.has(song.id) ? { state: "retrying", percent: null }
@@ -1635,7 +1690,7 @@ export default function App() {
         <article className={`deck-card ${song.id === activeSongId ? "active" : ""}`} key={song.id}>
           <DeckMain guarded={switchNeedsHold(playing, activeSongId, song.id)} onSelect={() => selectSong(song)} onShortTap={() => setStatusMessage(SHORT_TAP_SWITCH)} title={song.name} label={`Seleccionar ${song.name}`}>
             <Artwork index={index} />
-            <span><strong>{song.name}</strong><small>{(() => { const s = songState(song); return s.state === "ready" ? pistas(song.files.length) : s.state === "downloading" ? `Descargando ${s.percent ?? 0}%` : s.state === "failed" ? "No se pudo cargar · toca para reintentar" : s.state === "retrying" ? "Reintentando…" : "En cola"; })()}</small></span>
+            <span><strong>{song.name}</strong><small>{(() => { const s = songState(song); return s.state === "missing" ? "Elige el archivo" : s.state === "ready" ? pistas(song.files.length) : s.state === "downloading" ? `Descargando ${s.percent ?? 0}%` : s.state === "failed" ? "No se pudo cargar · toca para reintentar" : s.state === "retrying" ? "Reintentando…" : "En cola"; })()}</small></span>
           </DeckMain>
           <button className="deck-remove" onClick={() => removeSong(song.id)} aria-label={`Quitar ${song.name}`}>×</button>
         </article>
@@ -1772,13 +1827,14 @@ export default function App() {
           extra={
             <SavedSetlists
               userId={userId}
-              current={playlist.map((song) => ({ name: song.name, ref: song.ref }))}
+              current={playlist.map((song) => ({ name: song.name, ref: song.ref, local: !song.ref }))}
               sessionName={sessionName}
               onSessionName={setSessionName}
               getSnapshot={() => ({ songs: snapshotSongs(), master: masterVolumeRef.current })}
               onBusyChange={setQueueBusy}
               onClear={clearSetlist}
               onAddRef={addSongRef}
+              onAddLocal={addLocalPlaceholder}
             />
           }
         />

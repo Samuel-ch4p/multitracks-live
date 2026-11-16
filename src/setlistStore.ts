@@ -2,9 +2,11 @@ import { cloudStorage } from "./cloud/storage.ts";
 import type { ClickSettings } from "./metronome";
 import type { Marker } from "./markers";
 import type { PadSettings } from "./padEngine";
+import { sanitizeLocalRef, type LocalRef } from "./localSongs.ts";
 
 /**
- * Cultos (setlists guardados) y sesión actual: SOLO referencias a canciones de la nube (id, ruta, título), el orden y la
+ * Cultos (setlists guardados) y sesión actual: SOLO referencias a canciones (de la nube: id, ruta, título; de «Este dispositivo»:
+ * nombres y tamaños de sus archivos), el orden y la
  * configuración del mezclador de cada canción. Nunca se guarda audio. Todo va por CloudStorage (Preferences en Android)
  * y SEPARADO POR user_id: dos cuentas en el mismo teléfono no ven los cultos de la otra. Cerrar sesión no borra nada.
  */
@@ -18,7 +20,12 @@ export type SongConfig = {
   click?: Partial<ClickSettings>;
   pad?: Partial<PadSettings>;
 };
-export type SavedSong = SongRef & { tone?: string | null; bpm?: number | null; config?: SongConfig };
+/**
+ * Canción guardada. Las de la nube: id/key del catálogo. Las de «Este dispositivo» (1.1.0): `local` con la referencia a sus archivos
+ * (nunca el audio), id "local:<clave>" y key vacía; al cargar el culto hay que volver a elegir el archivo. Los guardados anteriores
+ * (sin `local`) se leen igual que siempre.
+ */
+export type SavedSong = SongRef & { tone?: string | null; bpm?: number | null; config?: SongConfig; local?: LocalRef };
 
 export type SavedSetlist = { id: string; name: string; createdAt: number; updatedAt: number; master?: number; songs: SavedSong[] };
 /** La sesión actual (autoguardado). Mismo contenido que un culto guardado, sin id propio. */
@@ -64,6 +71,11 @@ function sanitizeSongs(raw: unknown): SavedSong[] {
     if (isNum(s.bpm)) song.bpm = s.bpm;
     const config = sanitizeConfig(s.config);
     if (config) song.config = config;
+    if (s.local !== undefined) {
+      const local = sanitizeLocalRef(s.local);
+      if (!local) return []; // referencia local dañada: no se puede restaurar
+      song.local = local;
+    }
     return [song];
   });
 }

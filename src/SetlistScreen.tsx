@@ -5,7 +5,7 @@ import { parseSongTags } from "./songTags";
 export type SetlistItem = {
   id: number; name: string; tracks: number; tone?: string | null; bpm?: number | null;
   /** Estado en memoria: Lista (cargada), Descargando n % o En cola (referencia aún sin cargar). */
-  state?: "ready" | "downloading" | "queued" | "retrying" | "failed"; percent?: number | null; message?: string;
+  state?: "ready" | "downloading" | "queued" | "retrying" | "failed" | "missing"; percent?: number | null; message?: string;
 };
 
 type Props = {
@@ -68,7 +68,7 @@ export default function SetlistScreen({ songs, activeId, playing, onOpen, onMove
                 <span className="setlist-number">{String(index + 1).padStart(2, "0")}</span>
                 <span className="song-copy">
                   <strong>{song.name}</strong>
-                  <small>{active && playing ? "Reproduciendo · " : ""}{song.state === "downloading" ? `Descargando ${song.percent ?? 0}%` : song.state === "queued" ? "En cola" : song.state === "retrying" ? "Reintentando…" : song.state === "failed" ? "No se pudo cargar" : `${pistas(song.tracks)} · Lista`}</small>
+                  <small>{active && playing ? "Reproduciendo · " : ""}{song.state === "downloading" ? `Descargando ${song.percent ?? 0}%` : song.state === "queued" ? "En cola" : song.state === "retrying" ? "Reintentando…" : song.state === "failed" ? "No se pudo cargar" : song.state === "missing" ? "Elige el archivo en Este dispositivo" : `${pistas(song.tracks)} · Lista`}</small>
                 </span>
                 {(tone || bpm) && (
                   <span className="song-chips">

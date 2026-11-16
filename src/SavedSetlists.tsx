@@ -6,12 +6,12 @@ import { signOut } from "./cloud/auth";
 type Props = {
   /** Dueño de los datos guardados (user_id de la cuenta). */
   userId: string;
-  /** Canciones del setlist actual; `ref` solo existe en las que vienen de la nube. */
-  current: { name: string; ref?: SongRef }[];
+  /** Canciones del setlist actual; `ref` solo existe en las que vienen de la nube; `local` = de «Este dispositivo». */
+  current: { name: string; ref?: SongRef; local?: boolean }[];
   /** Nombre del culto en curso (sugerido al guardar). */
   sessionName: string;
   onSessionName: (name: string) => void;
-  /** Canciones de la nube del setlist actual con la configuración del mezclador de cada una. */
+  /** Canciones del setlist actual (nube y «Este dispositivo») con la configuración del mezclador de cada una. */
   getSnapshot: () => { songs: SavedSong[]; master: number };
   /** Avisa mientras se carga un culto (el autoguardado espera). */
   onBusyChange: (busy: boolean) => void;
@@ -19,6 +19,8 @@ type Props = {
   onClear: () => boolean;
   /** Añade una canción de la nube al setlist como referencia (no descarga: la ventana de memoria de la app decide cuándo). */
   onAddRef: (item: { id: string; key: string; title: string; size: number; tone: string | null; bpm: number | null }, options: { config?: SongConfig; master?: number }) => boolean;
+  /** Añade una canción de «Este dispositivo» guardada como «Elige el archivo» (con su mezcla). */
+  onAddLocal: (saved: SavedSong) => boolean;
 };
 
 /** Lo mínimo que hace falta para cargar: un culto guardado o la sesión autoguardada. */
@@ -33,7 +35,7 @@ const svg: Record<"edit" | "copy" | "trash" | "save", ReactNode> = {
 const Glyph = ({ name }: { name: keyof typeof svg }) => <svg viewBox="0 0 24 24" aria-hidden="true">{svg[name]}</svg>;
 
 type Dialog =
-  | { kind: "save"; name: string; skipped: number }
+  | { kind: "save"; name: string; localCount: number }
   | { kind: "rename"; list: SavedSetlist; name: string }
   | { kind: "delete"; list: SavedSetlist }
   | { kind: "replace"; list: Loadable };
@@ -54,10 +56,10 @@ const count = (n: number) => `${n} ${n === 1 ? "canción" : "canciones"}`;
 
 /**
  * "Mis cultos": la sesión autoguardada ("Continuar") y los cultos guardados con nombre. Se guardan como referencias a canciones
- * de la nube más la configuración del mezclador de cada una, y se vuelven a cargar en cola. Nunca se guarda audio; las
- * canciones de "Este dispositivo" no se pueden restaurar y se omiten.
+ * (de la nube, y desde la 1.1.0 también de "Este dispositivo") más la configuración del mezclador de cada una, y se vuelven a cargar
+ * en cola. Nunca se guarda audio: las de "Este dispositivo" quedan como «Elige el archivo» hasta que se vuelve a elegir.
  */
-export default function SavedSetlists({ userId, current, sessionName, onSessionName, getSnapshot, onBusyChange, onClear, onAddRef }: Props) {
+export default function SavedSetlists({ userId, current, sessionName, onSessionName, getSnapshot, onBusyChange, onClear, onAddRef, onAddLocal }: Props) {
   const [lists, setLists] = useState<SavedSetlist[]>([]);
   const [pending, setPending] = useState<SavedSession | null>(null);
   const [ready, setReady] = useState(false);
@@ -67,6 +69,8 @@ export default function SavedSetlists({ userId, current, sessionName, onSessionN
   const abortRef = useRef<AbortController | null>(null);
   const addRef = useRef(onAddRef);
   useEffect(() => { addRef.current = onAddRef; });
+  const addLocalRef = useRef(onAddLocal);
+  useEffect(() => { addLocalRef.current = onAddLocal; });
 
   useEffect(() => {
     let alive = true;
@@ -81,16 +85,15 @@ export default function SavedSetlists({ userId, current, sessionName, onSessionN
     if (!(await persistSetlists(userId, next))) setNote("No se pudo guardar en este dispositivo.");
   }, [userId]);
 
-  const cloudCount = current.filter((song) => song.ref).length;
-  const skipped = current.length - cloudCount;
+  const localCount = current.filter((song) => !song.ref).length;
 
   function askSave() {
     setNote("");
-    if (cloudCount === 0) {
-      setNote(current.length === 0 ? "Tu setlist está vacío: añade canciones de la nube para guardarlo." : "Solo se pueden guardar canciones de la nube. Las de «Este dispositivo» no se guardan.");
+    if (current.length === 0) {
+      setNote("Tu setlist está vacío: añade canciones para guardarlo.");
       return;
     }
-    setDialog({ kind: "save", name: sessionName, skipped });
+    setDialog({ kind: "save", name: sessionName, localCount });
   }
 
   function confirmDialog() {
@@ -102,7 +105,7 @@ export default function SavedSetlists({ userId, current, sessionName, onSessionN
       const { songs, master } = getSnapshot();
       void store([{ id: newId(), name, createdAt: now, updatedAt: now, master, songs }, ...lists]);
       onSessionName(name);
-      setNote(`Guardado «${name}» con ${count(songs.length)} de la nube y su configuración del mezclador.${dialog.skipped > 0 ? ` ${dialog.skipped} de «Este dispositivo» no se guardan (no se pueden restaurar).` : ""}`);
+      setNote(`Guardado «${name}» con ${count(songs.length)} y su configuración del mezclador.${dialog.localCount > 0 ? ` ${dialog.localCount} de «Este dispositivo»: al cargarlo, vuelve a elegir su archivo y se restaura con su mezcla.` : ""}`);
     } else if (dialog.kind === "rename") {
       if (!name) return;
       void store(lists.map((l) => (l.id === dialog.list.id ? { ...l, name, updatedAt: Date.now() } : l)));
@@ -137,6 +140,7 @@ export default function SavedSetlists({ userId, current, sessionName, onSessionN
     setQueue({ list, index: 0, total: list.songs.length, title: list.songs[0]?.title ?? "", percent: null, detail: "", done: null });
     const outcome = await runSetlistQueue(list.songs, {
       addRef: (item, options) => addRef.current(item, options),
+      addLocal: (saved) => addLocalRef.current(saved),
       onStart: (index, total, title) => setQueue((q) => (q ? { ...q, index, total, title, percent: null, detail: "Armando la lista" } : q)),
       signal: controller.signal,
       master: list.master,
@@ -170,7 +174,7 @@ export default function SavedSetlists({ userId, current, sessionName, onSessionN
         <button className="settings-action compact" onClick={askSave}><Glyph name="save" />Guardar el actual</button>
       </div>
       {note && <p className="status-message saved-note" role="status">{note}</p>}
-      {ready && lists.length === 0 && <p className="saved-empty">Aún no guardaste ningún culto. Arma uno con canciones de la nube y toca «Guardar el actual»: se guardan los nombres, el orden y tu mezcla de cada canción, nunca el audio.</p>}
+      {ready && lists.length === 0 && <p className="saved-empty">Aún no guardaste ningún culto. Arma uno (de la nube o de «Este dispositivo») y toca «Guardar el actual»: se guardan los nombres, el orden y tu mezcla de cada canción, nunca el audio.</p>}
       <div className="saved-list">
         {lists.map((list) => (
           <article className="saved-card" key={list.id}>
@@ -200,7 +204,7 @@ export default function SavedSetlists({ userId, current, sessionName, onSessionN
                   <span>Nombre</span>
                   <input autoFocus maxLength={60} value={dialog.name} onChange={(event) => setDialog({ ...dialog, name: event.target.value })} />
                 </label>
-                {dialog.kind === "save" && dialog.skipped > 0 && <p className="sheet-note">{dialog.skipped} {dialog.skipped === 1 ? "canción de «Este dispositivo» no se guardará" : "canciones de «Este dispositivo» no se guardarán"}: no se pueden restaurar desde la nube.</p>}
+                {dialog.kind === "save" && dialog.localCount > 0 && <p className="sheet-note">{dialog.localCount} {dialog.localCount === 1 ? "canción es" : "canciones son"} de «Este dispositivo»: se guarda su mezcla, no el audio. Al cargar el culto, vuelve a elegir su archivo.</p>}
               </>
             )}
             {dialog.kind === "delete" && (<><h2>Borrar culto</h2><p>¿Borrar «{dialog.list.name}»? Esto no se puede deshacer.</p></>)}
