@@ -840,8 +840,9 @@ export default function App() {
     setPlaylist(next);
   }
 
-  /** Esperas de los reintentos automáticos (máximo 3), solo para fallos de red o del servidor. */
-  const RETRY_MS = [2000, 5000, 10000];
+  /** Reintentos de la canción entera (retroceso exponencial), solo para fallos de red o del servidor. Dentro de cada intento la descarga
+   *  ya se reanuda sola con Range desde lo recibido (resumable.ts: hasta 6 fallos seguidos sin avanzar, 1→30 s). */
+  const RETRY_MS = [2000, 4000, 8000, 16000];
 
   async function runDownload(song: Song, foreground: boolean) {
     const controller = new AbortController();
