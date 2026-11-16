@@ -51,6 +51,7 @@ import type { TrackStats } from "./analysis.ts";
 import { limiterCurve, planNormalization } from "./normalizer.ts";
 import { DEFAULT_NORM_MODE, NORM_MODES, NORM_MODE_LABEL, NORM_RAMP_SECONDS, type NormMode } from "./normConfig.ts";
 import { applyPan, buildTrackGraph, disposeTrackGraph, type TrackGraph } from "./trackGraph.ts";
+import { LIVE_GUARD, SHORT_TAP_SWITCH, switchNeedsHold } from "./liveGuard.ts";
 
 type Track = {
   id: number;
@@ -238,7 +239,7 @@ function useMediaQuery(query: string) {
   );
 }
 
-const HOLD_MS = 450;
+const HOLD_MS = LIVE_GUARD.holdMs; // ver liveGuard.ts para ajustar la fricción
 /** Tiempo para deshacer al quitar una pista con la ×. */
 const UNDO_MS = 5000;
 /**
@@ -270,6 +271,18 @@ function useHoldToConfirm(action: () => void, guarded: boolean, onShortTap: () =
     onContextMenu: (event: { preventDefault: () => void }) => { if (guarded) event.preventDefault(); },
     onClick: (event: { detail: number }) => { if (!guarded || event.detail === 0) actionRef.current(); },
   };
+}
+
+type DeckMainProps = { guarded: boolean; onSelect: () => void; onShortTap: () => void; title: string; label: string; children: React.ReactNode };
+
+/** Tarjeta del repertorio: con la canción sonando, cambiar a otra exige mantener pulsado (liveGuard.ts); detenida, un toque basta. */
+function DeckMain({ guarded, onSelect, onShortTap, title, label, children }: DeckMainProps) {
+  const hold = useHoldToConfirm(onSelect, guarded, onShortTap);
+  return (
+    <button {...hold} className={`deck-main ${hold.className}`} title={guarded ? `${title} · mantén pulsado para cambiar` : title} aria-label={label}>
+      {children}
+    </button>
+  );
 }
 
 /** Mantiene la pantalla encendida mientras `active` (en vivo el celular no debe dormirse). */
@@ -1279,6 +1292,10 @@ export default function App() {
   // Detener y Reiniciar cortan el canto: con la canción sonando piden mantener pulsado (ver useHoldToConfirm).
   const holdStop = useHoldToConfirm(() => void stopAll(), playing, () => setStatusMessage("Mantén pulsado para detener"));
   const holdRestart = useHoldToConfirm(() => void playAll(), playing, () => setStatusMessage("Mantén pulsado para reiniciar"));
+  // Anterior / Siguiente: con la canción sonando hay que mantener pulsado (liveGuard.ts); detenida, cambio inmediato.
+  const switchGuarded = LIVE_GUARD.switchSong && playing;
+  const holdPrev = useHoldToConfirm(() => stepSong(-1), switchGuarded, () => setStatusMessage(SHORT_TAP_SWITCH));
+  const holdNext = useHoldToConfirm(() => stepSong(1), switchGuarded, () => setStatusMessage(SHORT_TAP_SWITCH));
 
   // Solo en desarrollo: inspección de las ganancias reales del grafo (para comprobar la normalización).
   useEffect(() => {
@@ -1562,10 +1579,10 @@ export default function App() {
       )}
       {playlist.map((song, index) => (
         <article className={`deck-card ${song.id === activeSongId ? "active" : ""}`} key={song.id}>
-          <button className="deck-main" onClick={() => selectSong(song)} title={song.name} aria-label={`Seleccionar ${song.name}`}>
+          <DeckMain guarded={switchNeedsHold(playing, activeSongId, song.id)} onSelect={() => selectSong(song)} onShortTap={() => setStatusMessage(SHORT_TAP_SWITCH)} title={song.name} label={`Seleccionar ${song.name}`}>
             <Artwork index={index} />
             <span><strong>{song.name}</strong><small>{(() => { const s = songState(song); return s.state === "ready" ? pistas(song.files.length) : s.state === "downloading" ? `Descargando ${s.percent ?? 0}%` : s.state === "failed" ? "No se pudo cargar · toca para reintentar" : s.state === "retrying" ? "Reintentando…" : "En cola"; })()}</small></span>
-          </button>
+          </DeckMain>
           <button className="deck-remove" onClick={() => removeSong(song.id)} aria-label={`Quitar ${song.name}`}>×</button>
         </article>
       ))}
@@ -1644,7 +1661,7 @@ export default function App() {
         </div>
 
         <div className="transport">
-          <button className="icon-btn" onClick={() => stepSong(-1)} disabled={resetting || activeIndex <= 0} aria-label="Canción anterior">
+          <button {...holdPrev} className={`icon-btn ${holdPrev.className}`} disabled={resetting || activeIndex <= 0} aria-label="Canción anterior">
             <svg viewBox="0 0 24 24"><path d="M6 5h2v14H6zM20 5v14L9 12z" /></svg>
           </button>
           <button
@@ -1660,7 +1677,7 @@ export default function App() {
           <button {...holdStop} className={`icon-btn ${holdStop.className}`} disabled={resetting || tracks.length === 0} aria-label="Detener" title={playing ? "Mantén pulsado para detener" : "Detener"}>
             <svg viewBox="0 0 24 24"><path d="M6 6h12v12H6z" /></svg>
           </button>
-          <button className="icon-btn" onClick={() => stepSong(1)} disabled={resetting || activeIndex < 0 || activeIndex >= playlist.length - 1} aria-label="Canción siguiente">
+          <button {...holdNext} className={`icon-btn ${holdNext.className}`} disabled={resetting || activeIndex < 0 || activeIndex >= playlist.length - 1} aria-label="Canción siguiente">
             <svg viewBox="0 0 24 24"><path d="M16 5h2v14h-2zM4 5v14l11-7z" /></svg>
           </button>
         </div>
@@ -1687,7 +1704,13 @@ export default function App() {
           songs={playlist.map((song) => ({ id: song.id, name: song.name, tracks: song.files.length, tone: song.tone, bpm: song.bpm, ...songState(song) }))}
           activeId={activeSongId}
           playing={playing}
-          onOpen={(id) => { const song = playlist.find((item) => item.id === id); if (song) selectSong(song); setTab("mixer"); }}
+          onOpen={(id) => {
+            const song = playlist.find((item) => item.id === id);
+            // Con otra canción sonando, desde el Setlist no se cambia (un toque cortaría el canto): se abre el mezclador y se explica cómo.
+            if (song && switchNeedsHold(playing, activeSongId, song.id)) setStatusMessage("Suena otra canción: mantén pulsada su tarjeta en el repertorio para cambiar.");
+            else if (song) selectSong(song);
+            setTab("mixer");
+          }}
           onMove={moveSong}
           onRemove={removeSong}
           onRetry={retrySong}
@@ -1852,13 +1875,13 @@ export default function App() {
               <div className="player-times"><ElapsedText /><RemainingText /></div>
             </div>
             <div className="player-controls">
-              <button className="icon-btn" onClick={() => stepSong(-1)} disabled={resetting || activeIndex <= 0} aria-label="Canción anterior"><svg viewBox="0 0 24 24"><path d="M6 5h2v14H6zM20 5v14L9 12z" /></svg></button>
+              <button {...holdPrev} className={`icon-btn ${holdPrev.className}`} disabled={resetting || activeIndex <= 0} aria-label="Canción anterior"><svg viewBox="0 0 24 24"><path d="M6 5h2v14H6zM20 5v14L9 12z" /></svg></button>
               <button className={`play-btn big ${playing ? "is-playing" : ""}`} onClick={togglePlay} disabled={resetting || tracks.length === 0} aria-label={playing ? "Pausar" : "Reproducir"}>
                 {resetting || preparing ? <span className="spinner" /> : playing
                   ? <svg viewBox="0 0 24 24"><path d="M7 5h4v14H7zM13 5h4v14h-4z" /></svg>
                   : <svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z" /></svg>}
               </button>
-              <button className="icon-btn" onClick={() => stepSong(1)} disabled={resetting || activeIndex < 0 || activeIndex >= playlist.length - 1} aria-label="Canción siguiente"><svg viewBox="0 0 24 24"><path d="M16 5h2v14h-2zM4 5v14l11-7z" /></svg></button>
+              <button {...holdNext} className={`icon-btn ${holdNext.className}`} disabled={resetting || activeIndex < 0 || activeIndex >= playlist.length - 1} aria-label="Canción siguiente"><svg viewBox="0 0 24 24"><path d="M16 5h2v14h-2zM4 5v14l11-7z" /></svg></button>
             </div>
             <button className="glass-btn open-mixer" onClick={() => { setExpanded(false); setTab("mixer"); }}><Icon name="mixer" />ABRIR MEZCLADOR</button>
           </div>
