@@ -57,11 +57,24 @@ export type Plan = {
  * Una anterior solo se conserva si ya está cargada; una siguiente por encima de `precargaMaxMB` no se adelanta.
  * Con `preload` apagado solo se conservan la activa y la anterior (la siguiente se carga al elegirla).
  */
-export function planWindow(songs: PlanSong[], activeIndex: number, budget: number, config: Pick<MemoryConfig, "anteriores" | "siguientes" | "factorPico" | "precargaMaxMB">, preload: boolean): Plan {
+export function planWindow(
+  songs: PlanSong[],
+  activeIndex: number,
+  budget: number,
+  config: Pick<MemoryConfig, "anteriores" | "siguientes" | "factorPico" | "precargaMaxMB">,
+  preload: boolean,
+  /** Canción que SIGUE MONTADA mientras se descarga la pedida (songSwitch.ts): se conserva y su tamaño cuenta antes que nada. */
+  pinnedIndex?: number,
+): Plan {
   const plan: Plan = { keep: [], load: [], release: [], waiting: null, used: 0 };
   if (activeIndex < 0 || activeIndex >= songs.length) {
     plan.release = songs.filter((song) => song.cloud && song.loaded).map((song) => song.id);
     return plan;
+  }
+  const pinned = pinnedIndex !== undefined && pinnedIndex !== activeIndex ? songs[pinnedIndex] : undefined;
+  if (pinned && pinned.cloud && pinned.loaded) {
+    plan.keep.push(pinned.id);
+    plan.used += pinned.bytes;
   }
   const order: number[] = [activeIndex];
   const next = preload ? config.siguientes : 0;
@@ -72,6 +85,7 @@ export function planWindow(songs: PlanSong[], activeIndex: number, budget: numbe
   for (const index of order) {
     const song = songs[index];
     if (!song.cloud) continue;
+    if (pinned && song.id === pinned.id) continue; // ya contada arriba
     const isActive = index === activeIndex;
     // Nunca se descarga algo por adelantado que no sea la siguiente: una anterior ya liberada no se vuelve a bajar (cada descarga cuenta para el límite diario),
     // y una canción muy pesada espera a ser la activa.

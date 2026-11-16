@@ -472,3 +472,7 @@
 /* Modo fino: el número del arrastre lo indica. */
 .fader.is-fine .fader-value::before { content: "FINO "; font-size: 10px; font-weight: 700; letter-spacing: .06em; opacity: .8; }
 .fader.is-fine .fader-cap { box-shadow: 0 0 0 2px var(--c-accent); }
+
+/* Canción PEDIDA (se descarga mientras la actual sigue sonando; songSwitch.ts): borde de acento discontinuo. */
+.deck-card.is-requested { border-style: dashed; border-color: var(--accent-line); }
+.deck-card.is-requested small { color: var(--c-accent-strong); }

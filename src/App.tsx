@@ -54,6 +54,7 @@ import { DEFAULT_NORM_MODE, NORM_MODES, NORM_MODE_LABEL, NORM_RAMP_SECONDS, type
 import { applyPan, buildTrackGraph, disposeTrackGraph, type TrackGraph } from "./trackGraph.ts";
 import { LIVE_GUARD, SHORT_TAP_SWITCH, switchNeedsHold } from "./liveGuard.ts";
 import { indexAfterRemoval } from "./playlistNav.ts";
+import { decideSwitch, fitsAlongside, onRequestedLoaded, requestedCanStart } from "./songSwitch.ts";
 import { LOCAL_ID_PREFIX, localRefOf, matchLocalPlaceholder, type LocalRef } from "./localSongs.ts";
 import { EXTERNAL_PAUSE_MESSAGE, EXTERNAL_PAUSE_SETTLE_MS, contextInterrupted, isExternalPause } from "./externalPause.ts";
 
@@ -506,6 +507,7 @@ export default function App() {
   const mediaReadyRef = useRef<Set<number>>(new Set());
   const loadTokenRef = useRef(0);
   const watchedRef = useRef(new WeakSet<HTMLAudioElement>());
+  const pausedRef = useRef(false);
   const songKeyRef = useRef<string | null>(null);
   const peaksCacheRef = useRef<Map<number, Float32Array>>(new Map());
   const normModeRef = useRef(normMode);
@@ -657,6 +659,7 @@ export default function App() {
 
   function setPlayState(isPlaying: boolean, isPaused: boolean) {
     playingRef.current = isPlaying;
+    pausedRef.current = isPaused;
     setPlaying(isPlaying);
     setPaused(isPaused);
   }
@@ -711,10 +714,23 @@ export default function App() {
 
   function activateSong(song: Song) {
     if (busyRef.current) return;
-    // Una canción de la nube que ya no está cargada (o aún no): queda activa y la ventana la descarga (con aviso de progreso).
-    if (song.files.length === 0 && song.ref) { setActiveUnloaded(song); return; }
-    loadSong(song);
-    setStatusMessage(`${song.name} · ${pistas(song.files.length)}`);
+    const decision = decideSwitch({ targetLoaded: song.files.length > 0, targetCloud: !!song.ref, mounted: tracksRef.current.length > 0 });
+    if (decision === "load-now") {
+      setRequested(null);
+      loadSong(song);
+      setStatusMessage(`${song.name} · ${pistas(song.files.length)}`);
+      return;
+    }
+    // Sin nada montado: queda activa y la ventana la descarga (con aviso de progreso), como antes.
+    if (decision === "replace") { setRequested(null); setActiveUnloaded(song); return; }
+    // Hay una canción montada: SIGUE montada (y sonando) mientras se descarga la elegida (songSwitch.ts). Nunca se corta sola.
+    cancelledRef.current.delete(song.id);
+    retryRef.current.delete(song.id);
+    failedRef.current.delete(song.id);
+    blockedRef.current = null;
+    setRequested(song.id);
+    setStatusMessage(playingRef.current ? `Preparando «${song.name}»… «${activeName()}» sigue sonando.` : `Preparando «${song.name}»…`);
+    setLoaderTick((tick) => tick + 1);
   }
 
   // ---- Ventana de canciones cargadas (memoryPlan.ts): el setlist son referencias; solo algunas están cargadas en RAM ----
@@ -723,6 +739,13 @@ export default function App() {
   const [loaderTick, setLoaderTick] = useState(0);
   const preloadOn = useSyncExternalStore(subscribePreload, getPreload);
   const loaderRef = useRef<{ id: number; controller: AbortController; foreground: boolean } | null>(null);
+  /** Canción PEDIDA que aún no está montada (se descarga mientras la activa sigue sonando). Ver songSwitch.ts. */
+  const requestedIdRef = useRef<number | null>(null);
+  const [requestedId, setRequestedId] = useState<number | null>(null);
+  const setRequested = (id: number | null) => { requestedIdRef.current = id; setRequestedId(id); };
+  const waitNoticeRef = useRef<number | null>(null);
+  /** Nombre de la canción montada (para los avisos). */
+  const activeName = () => playlistRef.current.find((item) => item.id === activeSongIdRef.current)?.name ?? "";
   /** Canciones que el usuario canceló o cerró con error: no se reintentan solas hasta que las toque o pulse REINTENTAR. */
   const cancelledRef = useRef<Set<number>>(new Set());
   const retryRef = useRef<Map<number, { tries: number; until: number }>>(new Map());
@@ -871,6 +894,15 @@ export default function App() {
     playlistRef.current = next;
     setPlaylist(next);
     if (activeSongIdRef.current === id && tracksRef.current.length === 0) loadSong(song);
+    else if (requestedIdRef.current === id) {
+      if (onRequestedLoaded({ playing: playingRef.current, paused: pausedRef.current }) === "mount") {
+        setRequested(null);
+        loadSong(song);
+        setStatusMessage(`${song.name} · ${pistas(files.length)}`);
+      } else {
+        setStatusMessage(`«${song.name}» lista: mantén pulsada su tarjeta para cambiar, o se cambia sola al detener.`);
+      }
+    }
     setLoaderTick((tick) => tick + 1);
   }
 
@@ -894,9 +926,11 @@ export default function App() {
   async function runDownload(song: Song, foreground: boolean) {
     const controller = new AbortController();
     loaderRef.current = { id: song.id, controller, foreground };
+    // La tarjeta grande de carga solo aparece si no hay nada montado; con una canción sonando, el progreso va en su tarjeta del repertorio.
+    const overlay = foreground && song.id === activeSongIdRef.current;
     if (foreground) blockedRef.current = null;
     setLoadInfo({ id: song.id, percent: null });
-    if (foreground) setFg({ id: song.id, stage: "download", percent: null, detail: "", fileName: song.name, error: null });
+    if (overlay) setFg({ id: song.id, stage: "download", percent: null, detail: "", fileName: song.name, error: null });
     const started = performance.now();
     let lastShown = 0;
     const onProgress = (p: SongProgress) => {
@@ -906,7 +940,7 @@ export default function App() {
       inflightBytesRef.current = p.stage === "download" ? p.received : song.sizeBytes;
       const percent = p.stage === "download" ? (p.total ? Math.min(100, Math.round((p.received / p.total) * 100)) : null) : (p.total ? Math.round((p.done / p.total) * 100) : null);
       setLoadInfo({ id: song.id, percent: p.stage === "download" ? percent : 100 });
-      if (foreground) {
+      if (overlay) {
         const speed = p.stage === "download" ? p.received / 1048576 / Math.max((now - started) / 1000, 0.1) : 0;
         const detail = p.stage === "download" ? `${(p.received / 1048576).toFixed(0)} de ${(p.total / 1048576).toFixed(0)} MB · ${speed.toFixed(1)} MB/s` : `Pista ${p.done} de ${p.total}`;
         setFg((current) => (current && current.id === song.id ? { ...current, stage: p.stage, percent, detail } : current));
@@ -920,7 +954,7 @@ export default function App() {
       retryRef.current.delete(song.id);
       failedRef.current.delete(song.id);
       setLoadInfo(null);
-      if (foreground) setFg(null);
+      if (overlay) setFg(null);
       commitLoaded(song.id, files);
     } catch (error) {
       loaderRef.current = null;
@@ -936,7 +970,8 @@ export default function App() {
       if (error instanceof CloudError && error.kind === "no_session") {
         blockedRef.current = friendlyCloudMessage(error);
         failedRef.current.set(song.id, blockedRef.current);
-        if (foreground) setFg(null);
+        if (overlay) setFg(null);
+        if (requestedIdRef.current === song.id) setRequested(null);
         setStatusMessage(blockedRef.current);
         void signOut();
         return;
@@ -948,7 +983,7 @@ export default function App() {
       if (retriable && retries < RETRY_MS.length) {
         const delay = RETRY_MS[retries];
         retryRef.current.set(song.id, { tries: retries + 1, until: Date.now() + delay });
-        if (foreground) setFg((current) => ({ ...(current ?? { id: song.id, stage: "download" as const, percent: null, detail: "", fileName: song.name }), stage: "download", percent: null, error: null, detail: `Sin conexión · reintentando en ${Math.round(delay / 1000)} s (${retries + 1} de ${RETRY_MS.length})` }));
+        if (overlay) setFg((current) => ({ ...(current ?? { id: song.id, stage: "download" as const, percent: null, detail: "", fileName: song.name }), stage: "download", percent: null, error: null, detail: `Sin conexión · reintentando en ${Math.round(delay / 1000)} s (${retries + 1} de ${RETRY_MS.length})` }));
         window.setTimeout(() => setLoaderTick((tick) => tick + 1), delay + 50);
         return;
       }
@@ -956,9 +991,13 @@ export default function App() {
       retryRef.current.delete(song.id);
       failedRef.current.set(song.id, message);
       if (error instanceof CloudError && error.blocksAll) blockedRef.current = message;
-      if (foreground) {
+      if (overlay) {
         cancelledRef.current.add(song.id);
         setFg((current) => ({ ...(current ?? { id: song.id, stage: "download" as const, percent: null, detail: "", fileName: song.name }), error: message, supportReason: error instanceof CloudError && error.showsSupport ? "me salió un error al descargar una canción" : undefined }));
+      } else if (requestedIdRef.current === song.id) {
+        // La pedida falló: se queda la que suena, y la pedida queda marcada «No se pudo cargar» con Reintentar.
+        setRequested(null);
+        setStatusMessage(`No se pudo cargar ${song.name}. ${message} Sigue «${activeName()}».`);
       } else {
         setStatusMessage(`No se pudo cargar ${song.name}. ${message}`);
       }
@@ -971,16 +1010,23 @@ export default function App() {
     const list = playlistRef.current;
     const activeId = activeSongIdRef.current;
     const activeIndex = list.findIndex((song) => song.id === activeId);
+    // Si hay una pedida, la ventana se calcula alrededor de ELLA (la que va a sonar) y la montada queda fijada hasta el cambio.
+    let requested = requestedIdRef.current;
+    if (requested !== null && !list.some((song) => song.id === requested)) { setRequested(null); requested = null; }
+    const targetId = requested ?? activeId;
     // Las que fallaron del todo quedan fuera de la ventana: la precarga sigue con la siguiente que sí se puede cargar.
-    const visible = list.filter((song) => song.id === activeId || !failedRef.current.has(song.id));
-    const plan = planWindow(visible.map(toPlanSong), visible.findIndex((song) => song.id === activeId), memoryBudget(), MEMORIA, getPreload());
+    const visible = list.filter((song) => song.id === targetId || song.id === activeId || !failedRef.current.has(song.id));
+    const pinned = requested !== null ? visible.findIndex((song) => song.id === activeId) : -1;
+    const budget = memoryBudget();
+    const plan = planWindow(visible.map(toPlanSong), visible.findIndex((song) => song.id === targetId), budget, MEMORIA, getPreload(), pinned >= 0 ? pinned : undefined);
     // 1) Soltar lo que sale de la ventana ANTES de empezar nada nuevo: la memoria nunca pasa del presupuesto.
     for (const id of plan.release) releaseSong(id);
     // 2) Una descarga en curso que ya no hace falta (o que estorba a la de la activa) se corta.
     const current = loaderRef.current;
     const activeSong = list[activeIndex];
-    const activeNeedsLoad = !!activeSong && !!activeSong.ref && activeSong.files.length === 0 && !cancelledRef.current.has(activeSong.id);
-    if (current && (!plan.keep.includes(current.id) || (activeNeedsLoad && !current.foreground && current.id !== activeId))) current.controller.abort();
+    const targetSong = list.find((song) => song.id === targetId);
+    const targetNeedsLoad = !!targetSong && !!targetSong.ref && targetSong.files.length === 0 && !cancelledRef.current.has(targetSong.id);
+    if (current && (!plan.keep.includes(current.id) || (targetNeedsLoad && !current.foreground && current.id !== targetId))) current.controller.abort();
     // Aviso discreto si la siguiente no cabe junto a la actual
     if (plan.waiting !== null && activeSong && activeSong.files.length > 0 && waitingNoticeRef.current !== plan.waiting) {
       waitingNoticeRef.current = plan.waiting;
@@ -993,7 +1039,18 @@ export default function App() {
       if (!song || cancelledRef.current.has(id) || failedRef.current.has(id)) continue;
       const retry = retryRef.current.get(id);
       if (retry && retry.until > Date.now()) continue;
-      const foreground = id === activeId;
+      const foreground = id === targetId;
+      if (foreground && id === requested) {
+        // La pedida solo empieza si cabe junto a la que suena; si no, espera a que se detenga (nunca se corta audio por memoria).
+        const mounted = activeSong ? toPlanSong(activeSong) : null;
+        const fits = fitsAlongside(mounted && mounted.cloud && mounted.loaded ? mounted.bytes : 0, song.sizeBytes, budget, MEMORIA.factorPico);
+        const can = requestedCanStart({ fits, playing: playingRef.current, paused: pausedRef.current });
+        if (can === "wait") {
+          if (waitNoticeRef.current !== id) { waitNoticeRef.current = id; setStatusMessage(`«${song.name}» no cabe en memoria junto a la que suena: se descargará al detenerla.`); }
+          continue;
+        }
+        if (can === "replace") { setRequested(null); setActiveUnloaded(song); return; }
+      }
       // Las precargas esperan a que la activa termine de prepararse, y no se hacen si algo las detuvo (límite de uso).
       if (!foreground && (blockedRef.current || !preparedRef.current)) continue;
       void runDownload(song, foreground);
@@ -1037,6 +1094,7 @@ export default function App() {
       return;
     }
     if (song.id === activeSongIdRef.current) {
+      if (requestedIdRef.current !== null) { setRequested(null); setStatusMessage(`Sigues con «${song.name}».`); setLoaderTick((tick) => tick + 1); return; }
       if (song.files.length === 0 && song.ref) { cancelledRef.current.delete(song.id); retryRef.current.delete(song.id); failedRef.current.delete(song.id); blockedRef.current = null; setLoaderTick((tick) => tick + 1); }
       return;
     }
@@ -1046,7 +1104,7 @@ export default function App() {
   function stepSong(direction: -1 | 1) {
     const list = playlistRef.current;
     if (busyRef.current || list.length === 0) return;
-    const index = list.findIndex((song) => song.id === activeSongIdRef.current);
+    const index = list.findIndex((song) => song.id === (requestedIdRef.current ?? activeSongIdRef.current));
     // Salta las canciones que no se pudieron cargar: la cola sigue con la siguiente.
     let target = list[index + direction];
     while (target && (failedRef.current.has(target.id) || isWaitingFile(target))) target = list[list.indexOf(target) + direction];
@@ -1057,6 +1115,7 @@ export default function App() {
   function clearSetlist(): boolean {
     if (busyRef.current) return false;
     loaderRef.current?.controller.abort();
+    setRequested(null);
     cancelledRef.current.clear();
     retryRef.current.clear();
     failedRef.current.clear();
@@ -1100,9 +1159,13 @@ export default function App() {
     mixesRef.current.delete(songId);
     extrasRef.current.delete(songId);
     peaksCacheRef.current.delete(songId);
+    if (songId === requestedIdRef.current) setRequested(null);
     if (songId !== activeSongIdRef.current) return;
-    // Quitar la activa pasa a la SIGUIENTE (o a la anterior si era la última), no a la primera del setlist.
-    const target = indexAfterRemoval(next, removedIndex, (song) => failedRef.current.has(song.id) || isWaitingFile(song));
+    // Quitar la activa: se suelta y pasa a la pedida si la había; si no, a la SIGUIENTE (o a la anterior si era la última).
+    disposeActiveTracks();
+    const requestedSong = next.find((song) => song.id === requestedIdRef.current);
+    setRequested(null);
+    const target = requestedSong ? next.indexOf(requestedSong) : indexAfterRemoval(next, removedIndex, (song) => failedRef.current.has(song.id) || isWaitingFile(song));
     if (target >= 0) activateSong(next[target]);
     else {
       disposeActiveTracks();
@@ -1611,7 +1674,17 @@ export default function App() {
     schedule();
     // schedule solo usa refs y setters estables.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [playlist, activeSongId, preloadOn, preparing, loaderTick]);
+  }, [playlist, activeSongId, requestedId, playing, paused, resetting, preloadOn, preparing, loaderTick]);
+
+  // La pedida ya descargada se monta sola cuando la que suena se detiene (no en pausa: se respetaría la posición).
+  useEffect(() => {
+    const id = requestedIdRef.current;
+    if (id === null || playing || paused || resetting || busyRef.current) return;
+    const song = playlistRef.current.find((item) => item.id === id);
+    if (song && song.files.length > 0) { setRequested(null); loadSong(song); setStatusMessage(`${song.name} · ${pistas(song.files.length)}`); }
+    // loadSong solo usa refs y setters estables.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [playing, paused, resetting, requestedId, playlist]);
 
   // «Siguiente en preparación»: si la actual está por terminar y la siguiente aún no está lista, se avisa una vez (el audio no se toca).
   useEffect(() => {
@@ -1687,10 +1760,10 @@ export default function App() {
         <button className="deck-empty" onClick={openLibrary}>Tu repertorio está vacío · toca aquí para añadir canciones</button>
       )}
       {playlist.map((song, index) => (
-        <article className={`deck-card ${song.id === activeSongId ? "active" : ""}`} key={song.id}>
+        <article className={`deck-card ${song.id === activeSongId ? "active" : ""} ${song.id === requestedId ? "is-requested" : ""}`} key={song.id}>
           <DeckMain guarded={switchNeedsHold(playing, activeSongId, song.id)} onSelect={() => selectSong(song)} onShortTap={() => setStatusMessage(SHORT_TAP_SWITCH)} title={song.name} label={`Seleccionar ${song.name}`}>
             <Artwork index={index} />
-            <span><strong>{song.name}</strong><small>{(() => { const s = songState(song); return s.state === "missing" ? "Elige el archivo" : s.state === "ready" ? pistas(song.files.length) : s.state === "downloading" ? `Descargando ${s.percent ?? 0}%` : s.state === "failed" ? "No se pudo cargar · toca para reintentar" : s.state === "retrying" ? "Reintentando…" : "En cola"; })()}</small></span>
+            <span><strong>{song.name}</strong><small>{(() => { const s = songState(song); return s.state === "missing" ? "Elige el archivo" : song.id === requestedId && s.state === "ready" ? "Lista · mantén pulsado" : song.id === requestedId && s.state === "queued" ? "Pedida · espera memoria" : s.state === "ready" ? pistas(song.files.length) : s.state === "downloading" ? `Descargando ${s.percent ?? 0}%` : s.state === "failed" ? "No se pudo cargar · toca para reintentar" : s.state === "retrying" ? "Reintentando…" : "En cola"; })()}</small></span>
           </DeckMain>
           <button className="deck-remove" onClick={() => removeSong(song.id)} aria-label={`Quitar ${song.name}`}>×</button>
         </article>
