@@ -181,3 +181,6 @@
   .auth-screen p.auth-brand-lead { display: none; }
   .auth-screen p.auth-lead { display: block; }
 }
+
+/* Aviso discreto cuando la sesión terminó con audio sonando (la app sigue hasta detener la canción) */
+.session-ended-notice { position: fixed; z-index: 90; left: 50%; bottom: max(12px, env(safe-area-inset-bottom)); max-width: min(92vw, 520px); margin: 0; padding: 10px 14px; transform: translateX(-50%); border: 1px solid var(--accent-line); border-radius: 12px; background: var(--c-card-2); color: var(--c-text); font-size: var(--fs-sm); text-align: center; pointer-events: none; }

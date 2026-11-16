@@ -837,7 +837,16 @@ export default function App() {
         setLoaderTick((tick) => tick + 1);
         return;
       }
-      if (error instanceof CloudError && error.kind === "no_session") { void signOut(); return; }
+      // Solo llega aquí un rechazo DEFINITIVO de la sesión (un fallo de red al renovar es "network" y se reintenta).
+      // Se detienen las precargas y se cierra la sesión; con audio sonando, AuthGate no desmonta la app hasta que se detenga.
+      if (error instanceof CloudError && error.kind === "no_session") {
+        blockedRef.current = friendlyCloudMessage(error);
+        failedRef.current.set(song.id, blockedRef.current);
+        if (foreground) setFg(null);
+        setStatusMessage(blockedRef.current);
+        void signOut();
+        return;
+      }
       const message = friendlyCloudMessage(error);
       // Solo los fallos de red o del servidor se reintentan solos (2, 5 y 10 s). Límite de uso, cuenta, no encontrada, etc.: se muestran una vez.
       const retriable = error instanceof CloudError && (error.kind === "network" || error.kind === "server");

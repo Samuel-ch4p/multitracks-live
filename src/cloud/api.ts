@@ -1,16 +1,13 @@
 import { API_URL, cloudConfigured } from "./config";
-import { getAccessToken, supabase } from "./auth";
+import { getAccessToken } from "./auth";
 import { getDeviceId, getDeviceLabel } from "./device";
 import { CloudError, errorFromResponse } from "./errors";
 
 /** Cabeceras que exige cada ruta de la API (sesión + dispositivo). */
 export async function authHeaders(forceRefresh = false): Promise<Record<string, string>> {
   if (!cloudConfigured) throw new CloudError("config");
-  if (forceRefresh) {
-    const { data, error } = await supabase().auth.refreshSession();
-    if (error || !data.session) throw new CloudError("no_session");
-  }
-  const [token, id, label] = await Promise.all([getAccessToken(), getDeviceId(), getDeviceLabel()]);
+  // forceRefresh: el servidor rechazó el token (401); se renueva. Un fallo de red al renovar es "network", no "no_session".
+  const [token, id, label] = await Promise.all([getAccessToken(forceRefresh), getDeviceId(), getDeviceLabel()]);
   return { Authorization: `Bearer ${token}`, "X-Device-Id": id, "X-Device-Label": label };
 }
 

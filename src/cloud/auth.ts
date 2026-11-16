@@ -1,6 +1,7 @@
 import { createClient, type Session, type SupabaseClient } from "@supabase/supabase-js";
 import { SUPABASE_PUBLISHABLE_KEY, SUPABASE_URL, cloudConfigured } from "./config";
 import { CloudError } from "./errors";
+import { obtainAccessToken, type AuthLike } from "./tokenRefresh";
 import { cloudStorage } from "./storage";
 
 let client: SupabaseClient | null = null;
@@ -68,15 +69,10 @@ export async function sendPasswordReset(email: string) {
   if (error) throw error;
 }
 
-/** Token listo para usar: si faltan menos de 5 minutos para expirar, lo refresca antes. */
-export async function getAccessToken(): Promise<string> {
-  const session = await currentSession();
-  if (!session) throw new CloudError("no_session");
-  const left = (session.expires_at ?? 0) - Date.now() / 1000;
-  if (left < 300) {
-    const { data, error } = await supabase().auth.refreshSession();
-    if (error || !data.session) throw new CloudError("no_session");
-    return data.session.access_token;
-  }
-  return session.access_token;
+/**
+ * Token listo para usar (renueva si faltan menos de 5 minutos). Un fallo de red al renovar lanza CloudError("network"),
+ * nunca "no_session": solo un rechazo definitivo de Supabase cierra la sesión. Ver tokenRefresh.ts.
+ */
+export async function getAccessToken(force = false): Promise<string> {
+  return obtainAccessToken(supabase().auth as unknown as AuthLike, {}, force);
 }

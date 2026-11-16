@@ -9,7 +9,8 @@ import { SupportEmail } from "./CloudParts";
 import { LegalScreen } from "./LegalView";
 import type { LegalKind } from "./legal";
 import { legalSignUpMetadata, saveAcceptance } from "./legalAcceptance";
-import { expiredOnStart, startInactivityWatch } from "./inactivity";
+import { signedOutAction } from "./cloud/tokenRefresh";
+import { expiredOnStart, isAudioActive, startInactivityWatch } from "./inactivity";
 import { CloudError, friendlyCloudMessage } from "./cloud/errors";
 import "./styles/auth.css";
 
@@ -55,6 +56,8 @@ function AuthGateInner({ children }: { children: ReactNode }) {
   const [phase, setPhase] = useState<Phase>(() => (DEV_BYPASS ? { name: "ok" } : { name: "boot" }));
   // Aviso en la pantalla de acceso tras un cierre por ausencia o inactividad.
   const [inactivityNotice, setInactivityNotice] = useState(false);
+  /** La sesión terminó (rechazo definitivo) mientras sonaba audio: la app sigue montada hasta que se detenga. */
+  const [pendingOut, setPendingOut] = useState(false);
 
   /** Cierre local (esta app en este teléfono; no cierra otros dispositivos). No borra cultos ni configuración guardados. */
   const expire = useCallback(async () => {
@@ -90,7 +93,11 @@ function AuthGateInner({ children }: { children: ReactNode }) {
     }).catch(() => alive && setPhase({ name: "out" }));
     const { data } = supabase().auth.onAuthStateChange((event, s) => {
       if (!alive) return;
-      if (event === "SIGNED_OUT") { setSession(null); setPhase({ name: "out" }); }
+      // Con audio sonando no se desmonta la app (cortaría la canción): se espera a que se detenga. Sin token válido ya no hay descargas.
+      if (event === "SIGNED_OUT") {
+        if (signedOutAction(isAudioActive()) === "wait") setPendingOut(true);
+        else { setSession(null); setPhase({ name: "out" }); }
+      }
       else if (event === "TOKEN_REFRESHED" || event === "USER_UPDATED") setSession(s);
     });
     return () => { alive = false; data.subscription.unsubscribe(); };
@@ -102,6 +109,17 @@ function AuthGateInner({ children }: { children: ReactNode }) {
     if (!signedIn) return;
     return startInactivityWatch(() => void expire());
   }, [signedIn, expire]);
+
+  useEffect(() => {
+    if (!pendingOut) return;
+    const timer = window.setInterval(() => {
+      if (signedOutAction(isAudioActive()) === "wait") return;
+      setPendingOut(false);
+      setSession(null);
+      setPhase({ name: "out" });
+    }, 1000);
+    return () => window.clearInterval(timer);
+  }, [pendingOut]);
 
   const account = useMemo<Account | null>(
     () => (session ? { email: session.user.email ?? "", userId: session.user.id, signOut: () => { void signOut().then(() => { setSession(null); setPhase({ name: "out" }); }); } } : null),
@@ -119,7 +137,12 @@ function AuthGateInner({ children }: { children: ReactNode }) {
   if (phase.name === "problem") {
     return <ProblemScreen error={phase.error} email={session?.user.email ?? ""} onRetry={() => void check()} onSignOut={() => account?.signOut()} />;
   }
-  return <AccountContext.Provider value={account}>{children}</AccountContext.Provider>;
+  return (
+    <AccountContext.Provider value={account}>
+      {children}
+      {pendingOut && <p className="session-ended-notice" role="status">Tu sesión terminó. Puedes terminar esta canción; al detenerla se pedirá iniciar sesión.</p>}
+    </AccountContext.Provider>
+  );
 }
 
 function Screen({ title, chip, children, busy }: { title: string; chip?: string; children: ReactNode; busy?: boolean }) {

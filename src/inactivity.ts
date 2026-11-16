@@ -22,6 +22,9 @@ export function setAudioActive(active: boolean) {
   if (active) lastActivity = Date.now();
 }
 
+/** ¿Suena algo ahora (pistas, click o pad)? Lo usa AuthGate para no desmontar la app con audio sonando. */
+export const isAudioActive = () => audioActive;
+
 const busy = () => audioActive || isDownloading();
 
 async function readRecord(): Promise<LeaveRecord | null> {
