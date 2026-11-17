@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
+import { formatScreenInfo, readScreenData } from "./screenInfo";
 import { APP_VERSION } from "./appVersion";
 import { setFx, useFx, type FxMode } from "./effects";
 import { setRespectSystemMotion, useMotion } from "./motion";
@@ -221,7 +222,7 @@ function Diagnostics({ getDiagnostics }: { getDiagnostics: () => DiagnosticsInfo
     ["Memoria del dispositivo", nav.deviceMemory ? `${nav.deviceMemory} GB (aprox.)` : "No disponible"],
     ["Memoria de la app", heap ? mb(heap) : "No disponible"],
     ["Procesador", `${navigator.hardwareConcurrency ?? "?"} núcleos`],
-    ["Pantalla", `${window.innerWidth}×${window.innerHeight} · ×${window.devicePixelRatio}`],
+    ...formatScreenInfo(readScreenData()), // pantalla, área visible, densidad, orientación, márgenes, letra y factor --t
   ];
   const text = [...rows.map(([name, value]) => `${name}: ${value}`), ...timings.map((row) => `${row.phase} · ${row.stage}: ${Math.round(row.ms)} ms`)].join("\n");
 
