@@ -13,7 +13,7 @@ const read = (path: string) => readFileSync(new URL(`../${path}`, import.meta.ur
 const gradle = read("android/app/build.gradle");
 const code = Number(gradle.match(/versionCode\s+(\d+)/)?.[1]);
 const name = gradle.match(/versionName\s+"([^"]+)"/)?.[1];
-check("versionCode mayor que el publicado (1)", code >= 2, `versionCode ${code}`);
+check("versionCode mayor que el último compilado (2)", code >= 3, `versionCode ${code}`);
 check("versionName = versión en Ajustes", name === APP_VERSION, `${name} / ${APP_VERSION}`);
 
 const workflow = read(".github/workflows/android.yml");

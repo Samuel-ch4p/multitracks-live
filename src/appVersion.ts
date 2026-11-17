@@ -1,2 +1,2 @@
 /** Versión que se muestra en Ajustes. Mantenerla igual a versionName de android/app/build.gradle. */
-export const APP_VERSION = "1.1.0";
+export const APP_VERSION = "1.1.1";

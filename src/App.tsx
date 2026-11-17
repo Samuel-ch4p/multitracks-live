@@ -19,7 +19,8 @@ import "./styles/pads.css";
 import "./styles/setlists.css";
 import "./styles/click.css";
 import "./styles/dialogs.css";
-import "./styles/touch.css"; // P9: zonas táctiles ≥ 44 px (va la última)
+import "./styles/touch.css"; // P9: zonas táctiles ≥ 44 px
+import "./styles/fit.css"; // 1.1.1: compresión continua por altura (va la última)
 import { startModalGuard } from "./modalGuard";
 import ChannelScroll from "./ChannelScroll";
 import SetlistScreen from "./SetlistScreen";

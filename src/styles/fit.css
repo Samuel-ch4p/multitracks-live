@@ -1,0 +1,64 @@
+/* =====================================================================
+   1.1.1 · COMPRESIÓN CONTINUA POR ALTURA (celular en horizontal).
+   Regla: ningún elemento desaparece por falta de altura. La fila de canciones, la onda, los canales, MASTER y la barra inferior
+   se ven SIEMPRE, desde 320 dp de alto útil; todo se encoge en proporción, sin escalones.
+
+   --t es el «factor de altura»: 0 px con 320 dp de alto útil y 1 px a partir de 480 dp (lineal entre medias).
+   Cada medida es  mínimo + --t × diferencia  →  p. ej. calc(30px + var(--t) * 6) va de 30 px (320 dp) a 36 px (480 dp).
+   100dvh es el alto útil del WebView: en Android la app ya descuenta barra de estado y navegación (MainActivity, márgenes del sistema).
+   Orden de reducción: primero rellenos y huecos, luego alto de la onda y del fader, y al final (poco) el tamaño de letra.
+   Las filas con texto usan min-height (no height): con la letra grande del sistema crecen y los canales (fader) ceden el sitio.
+   Se carga la última (App.tsx) para mandar sobre las reglas en escalones de app.css, nav.css y mixer.css.
+   La prueba tools/verify-layout.mjs (en npm run verify) falla si la fila de canciones no se ve o si algo queda bajo la barra inferior.
+   ===================================================================== */
+@media (orientation: landscape) and (max-height: 520px) {
+  .app { --t: clamp(0px, (100dvh - 320px) / 160, 1px); }
+
+  /* ---------- Cabecera ---------- */
+  .topbar { padding-top: calc(2px + var(--t) * 2); padding-bottom: calc(2px + var(--t) * 2); row-gap: 0; }
+  .topbar .tempo, .topbar .click-btn, .topbar .pad-btn, .topbar .glass-btn, .topbar .icon-btn, .topbar .restart-btn {
+    height: calc(30px + var(--t) * 6); min-height: calc(30px + var(--t) * 6);
+  }
+  .topbar .play-btn { height: calc(32px + var(--t) * 8); min-height: calc(32px + var(--t) * 8); }
+  .topbar .icon-btn { width: calc(36px + var(--t) * 4); }
+  .topbar .brand-logo { width: calc(28px + var(--t) * 6); height: calc(28px + var(--t) * 6); }
+  .tempo strong, .clock strong { font-size: calc(15px + var(--t) * 2); }
+  /* Zonas táctiles de 44 px aunque el botón se vea más bajo (touch.css amplía con ::after/::before solo lo que falta). */
+
+  /* ---------- Pantalla ---------- */
+  .screen { padding-top: calc(3px + var(--t) * 3); padding-bottom: calc(2px + var(--t) * 2); gap: calc(3px + var(--t) * 3); }
+
+  /* ---------- Fila de canciones: SIEMPRE visible; una línea de nombre y otra más pequeña de pistas, compactas ---------- */
+  .song-deck { --deck-h: calc(30px + var(--t) * 14); --deck-pad: max(0px, (44px - var(--deck-h)) / 2); flex: 0 0 auto; }
+  .song-deck .deck-card, .song-deck .deck-add, .song-deck .deck-main { min-height: var(--deck-h); }
+  .song-deck .deck-card { padding-top: 0; padding-bottom: 0; }
+  .deck-main > span:last-child { gap: 0; }
+  .deck-main strong { font-size: calc(12px + var(--t) * 1); line-height: 1.15; }
+  .deck-main small { font-size: 11px; line-height: 1.1; }
+  /* Zona táctil de 44 px aunque la tarjeta se vea más baja. El carril (desplazamiento horizontal) recorta lo que sobresale, así que gana
+     un relleno vertical que lo que falta (compensado con margen negativo: el diseño no se mueve) y la tarjeta ya no recorta (contain). */
+  .song-deck { padding-block: var(--deck-pad); margin-block: calc(var(--deck-pad) * -1); }
+  .song-deck .deck-card { contain: none; }
+  .song-deck .deck-main { position: relative; }
+  .song-deck .deck-main::after, .song-deck .deck-remove::after { content: ""; position: absolute; inset: calc(var(--deck-pad) * -1) 0; }
+
+  /* ---------- Onda: se encoge antes que la letra ---------- */
+  .wave-panel .waveform { height: calc(22px + var(--t) * 18); }
+  .wave-panel .wave-marks { height: calc(22px + var(--t) * 18); }
+  .wave-meta { height: auto; min-height: calc(16px + var(--t) * 4); }
+
+  /* ---------- Canales: el fader cede primero; las filas con texto crecen si la letra es grande ---------- */
+  .channels-box { --mx-head: calc(25px + var(--t) * 7); --mx-pan: calc(28px + var(--t) * 6); --mx-name: calc(14px + var(--t) * 2); --mx-pad: calc(3px + var(--t) * 1); }
+  .channel { gap: calc(1px + var(--t) * 2); padding: calc(3px + var(--t) * 2) 3px calc(2px + var(--t) * 2);
+    grid-template-rows: var(--mx-head) minmax(0, 1fr) auto auto; }
+  /* Paneo y nombre: alto mínimo en px; si la letra del sistema es grande, crecen con el texto y el fader cede el sitio. */
+  .channel > .pan { min-height: var(--mx-pan); }
+  .channel > .channel-name { min-height: var(--mx-name); }
+  .fader-wrap { --rail-m: calc(8px + var(--t) * 4); }
+  .fader-rail { margin: calc(8px + var(--t) * 4) 0; }
+  .channel-meter { top: calc(8px + var(--t) * 4); bottom: calc(8px + var(--t) * 4); }
+  .fader-cap { height: calc(16px + var(--t) * 2); }
+
+  /* ---------- Barra inferior: nunca por debajo de 44 px (zona táctil completa) ---------- */
+  .tab-bar { height: auto; min-height: calc(45px + var(--t) * 3); } /* 1 px de borde superior: el botón conserva 44 px */
+}

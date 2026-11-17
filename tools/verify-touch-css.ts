@@ -15,7 +15,8 @@ const app = read("src/App.tsx");
 const styleImports = [...app.matchAll(/import "\.\/styles\/([\w-]+)\.css"/g)].map((m) => m[1]);
 
 check("touch.css se importa en App.tsx", styleImports.includes("touch"));
-check("…y es la última hoja de estilos de App.tsx", styleImports[styleImports.length - 1] === "touch", styleImports.join(", "));
+// Va detrás de todas las demás; solo fit.css (compresión por altura, 1.1.1) puede ir después.
+check("…y va detrás de todas las demás (solo fit.css después)", styleImports.slice(styleImports.indexOf("touch") + 1).every((name) => name === "fit"), styleImports.join(", "));
 check("mínimo de 44 px", /--hit:\s*44px/.test(css));
 check("cada lado crece solo lo que falta (sin pisar vecinos)", css.includes("min(0px, calc((100% - var(--hit)) / 2))"));
 for (const selector of [".icon-btn::after", ".glass-btn::after", ".tempo::after", ".chip::after", ".play-btn::before", ".deck-remove", ".setlist-actions button", ".source-switch button::before", ".song-deck .deck-card", ".pan-readout::after"]) {
